@@ -4,11 +4,8 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-import apscheduler.events as events
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
-from apscheduler.jobstores.redis import RedisJobStore
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from log_manager.logger_manager import LoggerManager
