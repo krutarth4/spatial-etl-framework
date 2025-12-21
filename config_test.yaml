@@ -1,0 +1,34 @@
+data_folder: ./data_source_configs/
+#SQLALCHEMY_DATABASE_URL = 'postgresql://postgres:Bright#1270@localhost/fastapi'
+db:
+  driver: &db "postgresql+psycopg"  # for sqlalchemy
+  url: localhost
+  port: 5433
+  database_name: osm2pgsql #postgres
+  database_schema: "" # not a must
+  credential:
+    username: postgres
+    password: admin123
+
+osm_region: Berlin
+
+tool:
+  name: osm2pgsql
+  cmd: ${db.url}
+  connection: *db
+
+
+#
+#cost_function_param:
+#  - length:
+#      column: length_m
+#      factor: 1
+#  - wind_direction:
+#      column: cost_wind
+#      factor: 0.5 # proiority for tailwind cost
+#      cacluation: abs(((direction_deg - (wind_dir_deg + 180)) + 360) % 360)
+##      include wind_speed in the cost for better penalizing
+##      cost = cost * (
+##  1 + (wind_speed / 10.0) * (1 - COS(RADIANS(rel_angle)))
+
+cost_adjustment: cost * (1 + k * (1 - COS(RADIANS(cost_wind))))

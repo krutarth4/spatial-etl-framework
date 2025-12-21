@@ -1,0 +1,149 @@
+metadata:
+  version: 1
+  name: osm
+  description: "Provides the OSM file for the selected target region"
+  target:
+    localStorage: True
+    findBy: "Berlin"
+#  schedule: 24hrs # how much to schedule everytime
+#    - source:
+#        name:
+# ETL (Extract -> transform -> Load )
+extract:
+  - source:
+      name: fetch_osm_url  # name of the source
+      description: "get the url for a particular region"
+      kind: http            # http | file | s3 | gcs
+      #      url: https://download.geofabrik.de/index-v1.json   # or local path
+      format: json          # json | geojson | yaml
+      headers: { }           # optional
+      save_raw:
+        enabled: False
+        format: json
+        path: ./_raw/source.json
+      input:
+        url: https://download.geofabrik.de/index-v1.json
+        headers: { }  # optional
+        expect: json                 # validates the response content-type
+      output:
+        name: pbf_urls
+        format: json
+        save_raw:
+          enabled: False
+          format: json
+          path: ./_raw/source.json
+        db:
+          save: False
+
+  - source:
+      name: get_pbf_url_berlin
+      description: "Get the pbf url for the berlin region"
+      kind: operation
+      input:
+        format: json
+        data: pbf_urls
+        expect: json
+      output:
+        name: pbf_url
+        format: str
+        convert: "query_result[0]" # HOW TO CONVERT TH RESULT INTO Desired FORMAT //no need to mention like a variable just normal
+        #TODO: maybe convert all the variable type like this with jsempath
+      operation:
+        name: query_result
+        operator: query # what to do with the first yaml source config
+        format: list[str]
+        when: "[query]=Berlin"
+        data: ${ fetch_osm_url.pbf_urls }
+        query: '$.features[?(@.properties.name=="Berlin")].properties.urls.pbf'
+
+  - source:
+      name: get_z_osm  # name of the source
+      description: "get the url for a particular region"
+      kind: http            # http | file | s3 | gcs
+      #      url: https://download.geofabrik.de/index-v1.json   # or local path # https://werkzeug.dcaiti.tu-berlin.de/fairqberlin/
+      format: file          # json | geojson | yaml
+      headers: { }           # optional
+      save_raw:
+        enabled: False
+        format: json
+        path: ./raw/source.json
+      input:
+        url: ${get_pbf_url_berlin.pbf_url}
+        headers: { }  # optional
+        expect: osm.pbf                 # validates the response content-type
+      output:
+        name: osm
+        format: file
+        save_raw:
+          enabled: True
+          format: pbf
+          path: ./raw/berlin.osm.pbf
+        db:
+          save: False
+    # Option B: keep entire parsed object (handy for archiving)
+#    keep_entire_object: true
+transform:
+#  - tool:
+#      - osm2pgsql:
+#
+#    map:
+#      - when: pbf_urls
+#        op: unique      # remove duplicates
+#      - when: pbf_urls
+#        op: sort
+
+
+#
+#  - name: clean_osm_data
+#    description: "Basic cleaning of OSM features"
+#    input: ${fetch_osm_url.pbf_urls}
+#    steps:
+#      - op: filter
+#        condition: "$.features[?(@.properties.highway)]"
+#      - op: unique
+#        key: "properties.name"
+#      - op: sort
+#        key: "properties.name"
+#      - op: map
+#        rename:
+#          properties.name: "road_name"
+#          properties.surface: "road_surface"
+#      - op: convert
+#        to: "geojson"
+#    output:
+#      name: cleaned_osm
+#      format: geojson
+
+
+
+# Optional light transforms
+# - rename keys, filter, map, add constants, etc.
+
+load:
+  - tool:
+      name: osm_import
+      description: "Import processed OSM data into PostGIS"
+      kind: cli
+      tool: osm2pgsql
+      input: ${get_z_osm.osm}
+      command:
+        executable: "osm2pgsql"
+        args: #write each command in new line TODO: change it with mapping , error when passed in same line as considered string
+          - osm2pgsql
+          - -c
+          - -d
+          - osm_berlin
+          - -H
+          - localhost
+          - -P
+          - "5433"
+          - -U
+          - postgres
+          - -r
+          - 'pbf'
+          - ../raw/berlin.osm.pbf
+          - -S
+          - ../default.style
+          - -v
+        env:
+          PGPASSWORD: "admin123"

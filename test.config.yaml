@@ -1,0 +1,642 @@
+server:
+  app_type: core.main:app
+  enable: false
+  name: fastAPI
+  description: "this is a API server used for debugging purpose to see the data call for faster development"
+  host: 0.0.0.0
+  port: 8000
+  reload: True
+
+scheduler:
+  name: APSScheduler
+  enable: false
+  description: "This is a scheduler which helps to orchestrate the background task on either thread or process level"
+  timezone: "Europe/Berlin"
+  scheduler_type: BackgroundScheduler   #https://apscheduler.readthedocs.io/en/3.x/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+  wait_before_shutdown: false # should executor wait before shutdown to let jobs finish execution
+
+#SQLALCHEMY_DATABASE_URL = 'postgresql://postgres:Bright#1270@localhost/fastapi'
+
+database:
+  description: "Database used for APSScheduler + data storage"
+  enable: false
+  driver: "postgresql+psycopg" # for sqlalchemy
+  url: localhost
+  port: &port 5432
+  database_name: &db_name test #postgres from osrm-postgis
+  database_schema: &db_schema "test" # not a must
+  credential:
+    username: &username "postgres"
+    password: &pass "admin123"
+
+metadata-datasource:
+  description: "this will contain all the data realted to data sources to store particular information"
+base:
+  enable: false
+  table_name: &base_table_name ways_base
+  table_schema: *db_schema
+  force_generate: false # To generate brand new table the other base tabkle will be backed up
+
+
+graph:
+  enable: false # TODO prepare main graph tables for nodes and links
+  tool: terminal # local tool either use osm2pgrouting with config.xml to create the initial tables or custom osmosis class with the help of handler
+  cmd: [ "osm2pgrouting",
+         "-f","./raw/ernst_extract.osm" ,"-d", *db_name,
+         "-p", *port,
+         "-U", *username,
+         "-W", *pass,
+         "-c", "mapconfig.xml",
+         "--schema", *db_schema ]
+  schema: *db_schema  # table schema
+  table_name: ways
+  check_before_update: false
+  env:
+    pass: test
+  datasource:
+    - name: "graphs_osm"
+      description: "get geofabric API file and can filter for berlin from here "
+      enable: true # to use the data source or not
+      class_name: graphsOSM
+      table_name: ""
+      data_type: static # static / Dynamic
+      check_before_update: true
+      source:
+        input: none
+        url: https://api.brightsky.dev/sources
+        file_path: ""
+        fetch: http #http \ local
+        run_once: True
+        frequency: ""
+        stream: True
+        save_local: True
+        destination: "tmp/weatherapi/weatherStation.json" # path where to save the response
+        response_type: json # the response type
+        header:
+          Accept: "application/json"
+        params:
+          dwd_station_id:
+            - "00399"
+            - "00403"
+            - "00400"
+            - "00410"
+            - "00420"
+            - "00424"
+            - "00427"
+            - "00430"
+            - "00433"
+      job:
+        name: weatherJob
+        id: weatherJob
+        trigger:
+          # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+          type:
+            name: interval # interval , cron, date
+            config: # should be same key value pair to for job
+              seconds: 15
+
+        replace_existing: true
+        coalesce: true
+        max_instances: 1
+        next_run_time: none
+      mapping:
+        enable: false
+        joins_on: dwd_station_id # link id column to join the table to
+        base_table:
+          column_name: "dwd_station_id"
+          column_type: String
+
+      storage:
+        table_name: "" #-> optional but must when persistent is true
+        table_class: "" # create class file to be liknked to the table
+        persistent: false # true | false -> to store the values or not
+        expires_after: 6h # how long to keep the data before again running the new process for persistency
+
+datasources:
+  - name: "single+http"
+    description: "test config for file reading local single "
+    enable: false # to use the data source or not
+    check_before_update: false # check with database if needs to be updated by default it checks for the length
+    class_name: test
+    table_name: &testtable test
+    data_type: static
+    source:
+      fetch: http #http \ local
+      mode: single
+      check_metadata:
+        enable: true
+        keys: [ "last_modified" ]
+      url: https://dummyjson.com/products # https://dummyjson.com/products
+      file_path: test/test.xyz
+      stream: True
+      save_local: true
+      destination: "tmp/test_single_http/dummy.json" # must to add the file name with extension path where to save the response for multi add base directory here  for reading multiple file
+      response_type: json #zip # json # the response type
+      header:
+        Accept: "application/json"
+      params:
+
+    job:
+      name: weatherForecastJob
+      id: weatherForecastJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: interval # interval , cron, date
+          config: # should be same key value pair to for job
+            seconds: 15
+
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: false
+      joins_on: dwd_station_id # link id column to join the table to
+      base_table:
+        table_name: ana
+        table_schema: ana
+        column_name: "wind_forecast"
+        column_type: Integer
+    #      maps_on:
+    storage: # this information will be used to for metadata storage
+      table_name: *testtable
+      table_schema: *db_schema
+      table_class: WeatherTable # create class file to be liknked to the table
+      persistent: false # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+
+  - name: "single+local"
+    description: "test config for http single link "
+    enable: false # to use the data source or not
+    check_before_update: false # check with database if needs to be updated by default it checks for the length
+    class_name: test
+    table_name: &testtable2 test
+    data_type: static
+    source:
+      fetch: local #http \ local
+      mode: single
+      check_metadata:
+        enable: false
+        keys: [ "last_modified" ]
+      url: https://api.brightsky.dev/weather # https://dummyjson.com/products
+      multi_fetch:
+        enable: true
+        strategy: url_template #explicit_url_list #url_template #expand_params # could be expand_params for different params, url_template, EXPLICIT_URL_LIST contains a lot of urls
+        params:
+
+        expand:
+          dwd_station_id: ["00399", "00403", "00400", "00410", "00420", "00427", "00430", "00433"]
+        url_template: https://dummyjson.com/products/{productId} #tmp/test{id}.xyz #"https://dummyjson.com/products/{productId}"
+        template_params:
+          id: ["","2"]
+#          station: ["A","B"]
+          productId: ["1", "2","3"]
+        urls:
+#          - tmp/test.xyz
+#          - tmp/test2.xyz
+          input: data/data.json
+          type: ""
+#        urls:
+#          - "https://dummyjson.com/products/1"
+#          - "https://dummyjson.com/products/2"
+
+      file_path: tmp/test-data.json
+      stream: True
+      save_local: true
+      destination: "tmp/dummy/dummy" # path where to save the response for multi add base directory here  for reading multiple file
+      response_type: json #zip # json # the response type
+      header:
+        Accept: "application/json"
+      params:
+    #        date: {date}
+    job:
+      name: weatherForecastJob
+      id: weatherForecastJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: interval # interval , cron, date
+          config: # should be same key value pair to for job
+            seconds: 15
+
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: false
+      joins_on: dwd_station_id # link id column to join the table to
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "wind_forecast"
+        column_type: Integer
+    #      maps_on:
+    storage: # this information will be used to for metadata storage
+      table_name: *testtable2
+      table_schema: *db_schema
+      table_class: WeatherTable # create class file to be liknked to the table
+      persistent: false # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+
+  - name: "multi+local_template_url"
+    description: "test config for http single link "
+    enable: false # to use the data source or not
+    check_before_update: false # check with database if needs to be updated by default it checks for the length
+    class_name: test
+    table_name: &testtable3 test
+    data_type: static
+    source:
+      fetch: local #http \ local
+      mode: multi
+      check_metadata:
+        enable: false
+        keys: [ "last_modified" ]
+      url: https://api.brightsky.dev/weather # https://dummyjson.com/products
+      multi_fetch:
+        enable: true
+        strategy: url_template #explicit_url_list #url_template #expand_params # could be expand_params for different params, url_template, EXPLICIT_URL_LIST contains a lot of urls
+        params:
+
+        expand:
+          dwd_station_id: ["00399", "00403", "00400", "00410", "00420", "00427", "00430", "00433"]
+        url_template: tmp/test-data_{id}.json #tmp/test{id}.xyz #"https://dummyjson.com/products/{productId}"
+        template_params:
+          id: ["1","2"]
+#          station: ["A","B"]
+          productId: ["1", "2","3"]
+        urls:
+#          - tmp/test.xyz
+#          - tmp/test2.xyz
+          input: data/data.json
+          type: ""
+#        urls:
+#          - "https://dummyjson.com/products/1"
+#          - "https://dummyjson.com/products/2"
+
+      file_path: tmp/test-data.json
+      stream: True
+      save_local: true
+      destination: "tmp/dummy/dummy" # path where to save the response for multi add base directory here  for reading multiple file
+      response_type: json #zip # json # the response type
+      header:
+        Accept: "application/json"
+      params:
+    #        date: {date}
+    job:
+      name: weatherForecastJob
+      id: weatherForecastJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: interval # interval , cron, date
+          config: # should be same key value pair to for job
+            seconds: 15
+
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: false
+      joins_on: dwd_station_id # link id column to join the table to
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "wind_forecast"
+        column_type: Integer
+    #      maps_on:
+    storage: # this information will be used to for metadata storage
+      table_name: *testtable3
+      table_schema: *db_schema
+      table_class: WeatherTable # create class file to be liknked to the table
+      persistent: false # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+  - name: "multi+local_explicit_url_list"
+    description: "test config for http single link "
+    enable: false # to use the data source or not
+    check_before_update: false # check with database if needs to be updated by default it checks for the length
+    class_name: test
+    table_name: &testtable4 test
+    data_type: static
+    source:
+      fetch: local #http \ local
+      mode: multi
+      check_metadata:
+        enable: false
+        keys: [ "last_modified" ]
+      url: https://api.brightsky.dev/weather # https://dummyjson.com/products
+      multi_fetch:
+        enable: true
+        strategy: explicit_url_list #explicit_url_list #url_template #expand_params # could be expand_params for different params, url_template, EXPLICIT_URL_LIST contains a lot of urls
+        urls:
+          - tmp/test-data_1.json
+          - tmp/test-data_2.json
+#          input: data/data.json
+#          type: ""
+#        urls:
+#          - "https://dummyjson.com/products/1"
+#          - "https://dummyjson.com/products/2"
+
+      file_path: tmp/test-data.json
+      stream: True
+      save_local: true
+      destination: "tmp/dummy/dummy" # path where to save the response for multi add base directory here  for reading multiple file
+      response_type: json #zip # json # the response type
+      header:
+        Accept: "application/json"
+      params:
+    #        date: {date}
+    job:
+      name: weatherForecastJob
+      id: weatherForecastJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: interval # interval , cron, date
+          config: # should be same key value pair to for job
+            seconds: 15
+
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: false
+      joins_on: dwd_station_id # link id column to join the table to
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "wind_forecast"
+        column_type: Integer
+    #      maps_on:
+    storage: # this information will be used to for metadata storage
+      table_name: *testtable4
+      table_schema: *db_schema
+      table_class: WeatherTable # create class file to be liknked to the table
+      persistent: false # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+
+
+  - name: "multi+http_expand_params"
+    description: "test config for http single link "
+    enable: false # to use the data source or not
+    check_before_update: false # check with database if needs to be updated by default it checks for the length
+    class_name: test
+    table_name: &testtable6 test
+    data_type: static
+    source:
+      fetch: http #http \ local
+      mode: multi
+      check_metadata:
+        enable: false
+        keys: [ "last_modified" ]
+      url: https://dummyjson.com/products # https://dummyjson.com/products
+      multi_fetch:
+        enable: true
+        strategy: expand_params #explicit_url_list #url_template #expand_params # could be expand_params for different params, url_template, EXPLICIT_URL_LIST contains a lot of urls
+        params:
+          date: today
+        expand:
+          dta : ["1"]
+#          input: data/data.json
+#          type: ""
+#        urls:
+#          - "https://dummyjson.com/products/1"
+#          - "https://dummyjson.com/products/2"
+
+#      file_path: tmp/test-data.json
+      stream: True
+      save_local: true
+      destination: tmp/multi_expand/dummy_multi_expand.json # path where to save the response for multi add base directory here  for reading multiple file
+      response_type: json #zip # json # the response type
+      header:
+        Accept: "application/json"
+      params:
+    #        date: {date}
+    job:
+      name: weatherForecastJob
+      id: weatherForecastJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: interval # interval , cron, date
+          config: # should be same key value pair to for job
+            seconds: 15
+
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: false
+      joins_on: dwd_station_id # link id column to join the table to
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "wind_forecast"
+        column_type: Integer
+    #      maps_on:
+    storage: # this information will be used to for metadata storage
+      table_name: *testtable4
+      table_schema: *db_schema
+      table_class: WeatherTable # create class file to be liknked to the table
+      persistent: false # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+
+  - name: "multi+http_url_template"
+    description: "test config for http single link "
+    enable: false # to use the data source or not
+    check_before_update: false # check with database if needs to be updated by default it checks for the length
+    class_name: test
+    table_name: &testtable7 test
+    data_type: static
+    source:
+      fetch: http #http \ local
+      mode: multi
+      check_metadata:
+        enable: true
+        keys: [ "last_modified" ]
+      url: https://dummyjson.com/products # https://dummyjson.com/products
+      multi_fetch:
+        enable: true
+        strategy: url_template #explicit_url_list #url_template #expand_params # could be expand_params for different params, url_template, EXPLICIT_URL_LIST contains a lot of urls
+        url_template: https://dummyjson.com/products/{productId}
+        template_params:
+          productId: [4,5]
+#          input: data/data.json
+#          type: ""
+#        urls:
+#          - "https://dummyjson.com/products/1"
+#          - "https://dummyjson.com/products/2"
+
+#      file_path: tmp/test-data.json
+      stream: True
+      save_local: true
+      destination: tmp/multi_url_template/multi_url_template.json # path where to save the response for multi add base directory here  for reading multiple file
+      response_type: json #zip # json # the response type
+      header:
+        Accept: "application/json"
+      params:
+    #        date: {date}
+    job:
+      name: weatherForecastJob
+      id: weatherForecastJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: interval # interval , cron, date
+          config: # should be same key value pair to for job
+            seconds: 15
+
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: false
+      joins_on: dwd_station_id # link id column to join the table to
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "wind_forecast"
+        column_type: Integer
+    #      maps_on:
+    storage: # this information will be used to for metadata storage
+      table_name: *testtable7
+      table_schema: *db_schema
+      table_class: WeatherTable # create class file to be liknked to the table
+      persistent: false # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+
+  - name: "multi+http_explicit_url_list"
+    description: "test config for http single link "
+    enable: false # to use the data source or not
+    check_before_update: false # check with database if needs to be updated by default it checks for the length
+    class_name: test
+    table_name: &testtable8 test
+    data_type: static
+    source:
+      fetch: http #http \ local
+      mode: multi
+      check_metadata:
+        enable: true
+        keys: [ "last_modified" ]
+      url: https://dummyjson.com/products # https://dummyjson.com/products
+      multi_fetch:
+        enable: true
+        strategy: explicit_url_list #explicit_url_list #url_template #expand_params # could be expand_params for different params, url_template, EXPLICIT_URL_LIST contains a lot of urls
+        url_template: https://dummyjson.com/products/{productId}
+        template_params:
+          productId: [4,5]
+#          input: data/data.json
+#          type: ""
+        urls:
+          - "https://dummyjson.com/products/10"
+          - "https://dummyjson.com/products/12"
+
+#      file_path: tmp/test-data.json
+      stream: True
+      save_local: true
+      destination: tmp/multi_explicit_url_list/multi_explicit_url_list.json # path where to save the response for multi add base directory here  for reading multiple file
+      response_type: json #zip # json # the response type
+      header:
+        Accept: "application/json"
+      params:
+    #        date: {date}
+    job:
+      name: weatherForecastJob
+      id: weatherForecastJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: interval # interval , cron, date
+          config: # should be same key value pair to for job
+            seconds: 15
+
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: false
+      joins_on: dwd_station_id # link id column to join the table to
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "wind_forecast"
+        column_type: Integer
+    #      maps_on:
+    storage: # this information will be used to for metadata storage
+      table_name: *testtable8
+      table_schema: *db_schema
+      table_class: WeatherTable # create class file to be liknked to the table
+      persistent: false # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+
+
+  - name: "multi+local_url_template"
+    description: "test config for http single link "
+    enable: true # to use the data source or not
+    check_before_update: false # check with database if needs to be updated by default it checks for the length
+    class_name: test
+    table_name: &testtable9 test
+    data_type: static
+    source:
+      fetch: local #http \ local
+      mode: multi
+      check_metadata:
+        enable: true
+        keys: [ "last_modified" ]
+      url: https://dummyjson.com/products # https://dummyjson.com/products
+      multi_fetch:
+        enable: true
+        strategy: explicit_url_list #explicit_url_list #url_template #expand_params # could be expand_params for different params, url_template, EXPLICIT_URL_LIST contains a lot of urls
+        url_template: tmp/test-data_{productId}.json
+        template_params:
+          productId: [1,2]
+#          input: data/data.json
+#          type: ""
+        urls:
+          - tmp/test-data_1.json
+          - tmp/test-data_2.json
+
+#      file_path: tmp/test-data.json
+      stream: True
+      save_local: true
+      destination: tmp/multi_explicit_url_list/multi_explicit_url_list.json # path where to save the response for multi add base directory here  for reading multiple file
+      response_type: json #zip # json # the response type
+      header:
+        Accept: "application/json"
+      params:
+    #        date: {date}
+    job:
+      name: weatherForecastJob
+      id: weatherForecastJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: interval # interval , cron, date
+          config: # should be same key value pair to for job
+            seconds: 15
+
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: false
+      joins_on: dwd_station_id # link id column to join the table to
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "wind_forecast"
+        column_type: Integer
+    #      maps_on:
+    storage: # this information will be used to for metadata storage
+      table_name: *testtable9
+      table_schema: *db_schema
+      table_class: WeatherTable # create class file to be liknked to the table
+      persistent: false # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
