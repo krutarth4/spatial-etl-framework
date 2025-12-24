@@ -1,3 +1,4 @@
+celery
 ijson
 pyproj
 pygments
