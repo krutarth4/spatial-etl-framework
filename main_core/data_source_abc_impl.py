@@ -66,9 +66,7 @@ class DataSourceABCImpl(DataSourceABC):
         self.logger.info(f"Creating table")
         self.db.create_table(self.data_source_config.table_name)
 
-    def get_db_session(self):
 
-        pass
 
     def check_before_update(self, old_data: Any, new_data: Any) -> bool:
         """
@@ -456,6 +454,7 @@ class DataSourceABCImpl(DataSourceABC):
         if sec > 0:
             return f"{sec}s {ms}ms"
         return f"{ms}ms"
+
     def store(self):
         pass
 

@@ -26,9 +26,7 @@ class DataSourceABC(ABC):
         pass
 
     # ------------------
-    @abstractmethod
-    def load(self):
-        pass
+
 
     @abstractmethod
     def map_to_links(self):
@@ -46,18 +44,12 @@ class DataSourceABC(ABC):
     def enabled_for(self):
         pass
 
-    @abstractmethod
-    def get_db_session(self):
-        pass
+
 
     # -------------------------------------
 
     @abstractmethod
     def create_job(self):
-        pass
-
-    @abstractmethod
-    def get_job(self):
         pass
 
     # TODO: Not the best idea for the run as it can be different for each class
