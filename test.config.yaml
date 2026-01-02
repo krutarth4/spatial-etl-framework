@@ -19,11 +19,11 @@ scheduler:
 
 database:
   description: "Database used for APSScheduler + data storage"
-  enable: false
+  enable: true
   driver: "postgresql+psycopg" # for sqlalchemy
   url: localhost
   port: &port 5432
-  database_name: &db_name test #postgres from osrm-postgis
+  database_name: &db_name test_db #postgres from osrm-postgis
   database_schema: &db_schema "test" # not a must
   credential:
     username: &username "postgres"
@@ -115,7 +115,7 @@ graph:
 datasources:
   - name: "single+http"
     description: "test config for file reading local single "
-    enable: false # to use the data source or not
+    enable: true # to use the data source or not
     check_before_update: false # check with database if needs to be updated by default it checks for the length
     class_name: test
     table_name: &testtable test
@@ -127,7 +127,7 @@ datasources:
         enable: true
         keys: [ "last_modified" ]
       url: https://dummyjson.com/products # https://dummyjson.com/products
-      file_path: test/test.xyz
+      file_path: ""
       stream: True
       save_local: true
       destination: "tmp/test_single_http/dummy.json" # must to add the file name with extension path where to save the response for multi add base directory here  for reading multiple file
@@ -137,8 +137,8 @@ datasources:
       params:
 
     job:
-      name: weatherForecastJob
-      id: weatherForecastJob
+      name: testAjob
+      id: testAjob
       trigger:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
@@ -156,15 +156,15 @@ datasources:
       base_table:
         table_name: ana
         table_schema: ana
-        column_name: "wind_forecast"
+        column_name: "testing_a"
         column_type: Integer
     #      maps_on:
     storage: # this information will be used to for metadata storage
       table_name: *testtable
       table_schema: *db_schema
-      table_class: WeatherTable # create class file to be liknked to the table
-      persistent: false # true | false -> to store the values or not
-      expires_after: 6h # how long to keep the data before again running the new process for persistency
+      table_class: TestTable # create class file to be liknked to the table
+      persistent: true # true | false -> to store the values or not
+      expires_after: 12h # how long to keep the data before again running the new process for persistency
 
   - name: "single+local"
     description: "test config for http single link "
@@ -578,7 +578,7 @@ datasources:
 
   - name: "multi+local_url_template"
     description: "test config for http single link "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
     check_before_update: false # check with database if needs to be updated by default it checks for the length
     class_name: test
     table_name: &testtable9 test

@@ -1,6 +1,7 @@
 import json
 import zipfile
 
+from geoalchemy2 import Geometry
 from sqlalchemy import Column, Integer, Float
 
 from database.base import Base
@@ -15,6 +16,7 @@ class ElevationTable(Base):
     lat = Column(Float)
     lon = Column(Float)
     altitude = Column(Float)
+    # geom = Geometry(geometry_type="POINT", srid=4326)
 
 
 class ElevationMapper(DataSourceABCImpl):
@@ -30,6 +32,8 @@ class ElevationMapper(DataSourceABCImpl):
                             if not line:
                                 continue
                             lat, lon, altitude = map(float, line.split())
+                            # create geom into this also
+
                             rows.append({"lat": lat, "lon": lon, "altitude": altitude})
         # print("content is ", content)
         return rows

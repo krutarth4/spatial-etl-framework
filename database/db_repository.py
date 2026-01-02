@@ -123,6 +123,7 @@ class DBRepository(DbConfiguration):
 
     def bulk_upsert(self, table_name: str, data_list: list[dict], conflict_column: str = "uid", do_update: bool = False,
                     do_skip: bool = True):
+        #TODO: Check if the table exist before doing upsert
         """Efficiently insert or update multiple rows using ON CONFLICT (PostgreSQL)."""
         self.logger.info(f"bulk upsert in {table_name} # no of rows: {len(data_list)}")
         if not data_list and not isinstance(data_list, list):
@@ -418,10 +419,8 @@ class DBRepository(DbConfiguration):
         full_name = f"{schema_name}.{table_name}"
 
         # Check existence first
-        if check_exist:
-            exists = self.inspector.has_table(table_name, schema=schema_name)
-            if not exists:
-                self.logger.warning(f"Table '{full_name}' does not exist — skipping drop.")
+        if check_exist and not self.inspector.has_table(table_name, schema=schema_name):
+            self.logger.warning(f"Table '{full_name}' does not exist — skipping drop.")
 
         # ---- DROP INDEXES FIRST ----
         self.drop_indexes_for_table(table_name, schema_name)
@@ -432,13 +431,13 @@ class DBRepository(DbConfiguration):
             self.logger.warning(f"Renaming table '{full_name}' → '{schema_name}.{backup_name}'")
 
             sql = text(
-                f'ALTER TABLE "{schema_name}"."{table_name}" '
-                f'RENAME TO "{backup_name}"'
+                f'CREATE TABLE "{schema_name}"."{backup_name}" '
+                f'SELECT * FROM "{schema_name}"."{table_name}"'
             )
 
             with self.engine.begin() as conn:
                 conn.execute(sql)
-            return
+
 
         # NORMAL DROP
         self.logger.warning(f"Dropping table '{full_name}' ...")

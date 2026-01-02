@@ -63,8 +63,7 @@ class DataSourceABCImpl(DataSourceABC):
             self.run()
 
     def create_data_tables(self):
-        self.logger.info(f"Creating tables")
-        # self.db.base.metadata.create_all(self.db.engine). # working example for this use case
+        self.logger.info(f"Creating table")
         self.db.create_table(self.data_source_config.table_name)
 
     def get_db_session(self):
@@ -91,20 +90,21 @@ class DataSourceABCImpl(DataSourceABC):
         source = self.data_source_config.source
         paths: list[str] = []
         if source.fetch in (FetchTypeEnum.HTTP.value, FetchTypeEnum.HTTPS.value):
-            http_handler = HttpHandler()
-            path = http_handler.call(uri=source.url, destination_path=source.destination, stream=source.stream,
-                                     headers=source.headers, params=source.params,
-                                     file_extension=source.response_type)
-            paths.append(path)
+            # check the metadata here if same then no call just file path otherwise new http request
+            check = self.is_metadata_for_single_fetch_changed()
+            if check:
+                http_handler = HttpHandler()
+                path = http_handler.call(uri=source.url, destination_path=source.destination, stream=source.stream,
+                                         headers=source.headers, params=source.params,
+                                         file_extension=source.response_type)
+                paths.append(path)
+            else:
+                # path = Path(source.destination)
+                paths.append(source.destination)
 
         elif source.fetch in FetchTypeEnum.LOCAL.value:
             path = Path(source.file_path)
             paths.append(path)
-            # path = source.file_path
-            # file_handler = FileHandler(path)
-            # file_name = path.split("/")[-1]
-            # result = file_handler.read_local_file(file_name)
-            # return result
         else:
             self.logger.error(f"Invalid fetch type: {source.fetch}")
             return None
@@ -290,11 +290,7 @@ class DataSourceABCImpl(DataSourceABC):
         else:
             if source.mode == SourceFetchModeEnum.SINGLE.value:
                 if source.check_metadata.enable:
-                    res = self.is_metadata_for_single_fetch_changed()
-                    # No fetch call needed
-                    if not res:
-                        return None
-                return self.fetch()
+                    return self.fetch()
             elif source.mode == SourceFetchModeEnum.MULTI.value:
                 return self.multi_fetch()
 

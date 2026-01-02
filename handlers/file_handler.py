@@ -17,7 +17,6 @@ class FileHandler:
     _DATA = "data"
     _BASE_DIR = "../"
     data_folders = ("tmp", "data")
-    _project_name = "fastapiproject"
 
     def __init__(self, base_dir: str | Path = _BASE_DIR):
         self.logger = LoggerManager(type(self).__name__).get_logger()
@@ -236,10 +235,10 @@ class FileHandler:
     def read_local_file(self, file_name_with_extension: str, read_handler: Callable[[str], Any] = None):
         path = self.get_local_file(file_name_with_extension)
         extension = file_name_with_extension.split(".")[-1]
-        if read_handler is NotImplemented or read_handler is None:
-            content = self._read(path, extension) if path else None
-        else:
+        if read_handler is not None:
             content = read_handler(path) if path else None
+        if content is NotImplemented or read_handler is None:
+            content = self._read(path, extension) if path else None
 
         return content
 

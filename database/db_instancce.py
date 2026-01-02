@@ -57,5 +57,8 @@ if __name__ == "__main__":
     graph = conf.get_value("graph")
     db = DbInstance(db_conf, base, graph)
 
-    db.add_column("ways_base", "test_column",
-                  "String", "test_runner")
+    #
+    # db.add_column("ways_base", "test_column",
+    #               "String", "test_runner")
+
+    db.drop_indexes_for_table()
