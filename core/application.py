@@ -27,7 +27,7 @@ class Application:
         self.db_instance: DbInstance | None = None
         self.db_url = None
         self.logger = LoggerManager(type(self).__name__)
-        self.core_conf = CoreConfig("../test.config.yaml")
+        self.core_conf = CoreConfig()
 
     def initialize_fast_api_uvicorn_server(self, server_conf):
         self.logger.info("Initializing debug FastAPI server ....")

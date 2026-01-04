@@ -259,9 +259,6 @@ class DataSourceABCImpl(DataSourceABC):
 
         return result
 
-    def process_read_operation(self):
-        pass
-
     def is_new_data_available_in_multi_fetch(self, source, url, path, headers, params) -> bool:
         return (not source.check_metadata.enable) and self.check_multi_metadata_before_fetch(url=url,
                                                                                              headers=headers,
@@ -355,7 +352,7 @@ class DataSourceABCImpl(DataSourceABC):
                 # 1.1 filter from the results in case needs to be filtered
                 self.source_result = self.source_filter(self.source_result)
 
-                # 1.2 post processingb filter
+                # 1.2 post processing filter
                 if self.data_source_config.post_filter_processing is not None and self.data_source_config.post_filter_processing.save:
                     self.post_filter_processing()
 
@@ -365,7 +362,7 @@ class DataSourceABCImpl(DataSourceABC):
                     if self.db is not None and self.data_source_config.storage.persistent:
                         self.logger.info(f"Checking for changes before update {self.data_source_config.name} ......")
                         old_data = self.db.fetch_columns_with_limits(self.data_source_config.table_name)
-                        found_new_data = self.check_before_update(old_data, self.source_result)
+                        # found_new_data = self.check_before_update(old_data, self.source_result)
                 else:
                     self.logger.warning(f"Check on the file disabled  {self.data_source_config.name}")
                 # save the source items in database based on a schema

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any, List
 
 from zoneinfo import ZoneInfo
 
@@ -16,6 +17,7 @@ class WeatherTable(Base):
     uid = Column(Integer, primary_key=True, autoincrement=True, index=True) # make sure to create indexing for the table for better query and fast computation
     source_id = Column(Integer, nullable=False)
     station_id = Column(Integer)
+    dwd_station_id = Column(String)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     temperature = Column(Float, nullable=False)
     relative_humidity = Column(Float)
@@ -52,10 +54,23 @@ class WeatherMapper(DataSourceABCImpl):
     #         # print(result)
     #     return self.data_mapper
 
+    def source_filter(self, data: list[Any]) -> List[dict]:
+        result: List[dict] = []
 
+        for content in data:
+            sources = content.get("sources", [])
+            if not sources:
+                continue  # or raise, depending on strictness
 
+            dwd_station_id = sources[0].get("dwd_station_id")
 
+            for weather in content.get("weather", []):
+                # copy to avoid mutating original payload
+                enriched = dict(weather)
+                enriched["dwd_station_id"] = dwd_station_id
+                result.append(enriched)
 
+        return result
 
 
 
