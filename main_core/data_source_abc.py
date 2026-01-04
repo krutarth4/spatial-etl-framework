@@ -21,12 +21,6 @@ class DataSourceABC(ABC):
     def read_file_content(self, path):
         pass
 
-    @abstractmethod
-    def source_database_handler(self):
-        pass
-
-    # ------------------
-
 
     @abstractmethod
     def map_to_links(self):
@@ -40,9 +34,6 @@ class DataSourceABC(ABC):
     def check_before_update(self, old_data, new_data):
         pass
 
-    @abstractmethod
-    def enabled_for(self):
-        pass
 
 
 

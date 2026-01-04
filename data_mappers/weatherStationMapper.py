@@ -26,7 +26,7 @@ class WeatherStationMapper(DataSourceABCImpl):
     def source_filter(self, data: list[dict]) -> list[dict]:
         """Custom filter for DWD stations."""
 
-        data = data["sources"]
+        data = data[0]["sources"]
         # filter only historical observation type
         filtered = [
             row for row in data

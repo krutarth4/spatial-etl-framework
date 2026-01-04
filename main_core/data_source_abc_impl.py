@@ -53,7 +53,6 @@ class DataSourceABCImpl(DataSourceABC):
         self.data_source_name = data_source_conf.name
         self.db = db_instance
         self.job_configuration = data_source_conf.job
-        # self.enabled_for() # to check the implementation of different methods
 
         if scheduler_core is not None:
             self.scheduler = scheduler_core
@@ -82,7 +81,6 @@ class DataSourceABCImpl(DataSourceABC):
         else:
             return False
 
-        # didnt find new data
 
     def fetch(self):
         source = self.data_source_config.source
@@ -328,12 +326,7 @@ class DataSourceABCImpl(DataSourceABC):
         print("calling filter from the datasource ABC impl")
         return data
 
-    def source_database_handler(self):
-        """
-        How should we store the source data in the database?
-        have enabled option if we want to save or not
-        """
-        pass
+
 
     def run(self):
         start_timer = time.perf_counter()
@@ -455,8 +448,7 @@ class DataSourceABCImpl(DataSourceABC):
             return f"{sec}s {ms}ms"
         return f"{ms}ms"
 
-    def store(self):
-        pass
+
 
     def load(self):
         print("this is ABC load")
@@ -514,27 +506,3 @@ class DataSourceABCImpl(DataSourceABC):
         }
         self.scheduler.add_job(job_conf, self.job_configuration.id or self.data_source_name)
 
-    def get_job(self):
-        pass
-
-    def enabled_for(self):
-        """
-        find all the methods implemented by the parent class
-        which needs to be overridden
-        """
-        # print(f"Enabled for {self.__class__.__name__}")
-        overridden = []
-        for name, method in inspect.getmembers(DataSourceABCImpl, predicate=inspect.isfunction):
-            # print(f"{name} = {method}: {inspect.signature(method)}")
-            if hasattr(self.__class__, name):
-                sub_method = getattr(self.__class__, name)
-                if sub_method.__code__ is not method.__code__:
-                    overridden.append(name)
-        # print(f"Overridden methods: {overridden}")
-
-    def check_data_type(self, data, data_type):
-        # if data in data_type.va
-        pass
-
-    def get_fetch(self):
-        return self.data_source_config.source.fetch
