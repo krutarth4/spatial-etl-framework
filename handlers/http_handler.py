@@ -11,7 +11,7 @@ from log_manager.logger_manager import LoggerManager
 from main_core.safe_class import safe_class
 
 
-@safe_class
+
 class HttpHandler:
     _BASE_DIR = "../"
 

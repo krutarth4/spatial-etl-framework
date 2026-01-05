@@ -9,8 +9,6 @@ class StepDTO:
     callable: Callable | None
 
 
-
-
 class ProcessingSteps:
     _steps: List[StepDTO] = []
 
@@ -18,7 +16,7 @@ class ProcessingSteps:
     def __init__(self):
         pass
 
-    def _add_step(self, step: StepDTO) -> None:
+    def add_step(self, step: StepDTO) -> None:
         if not isinstance(step, StepDTO):
             raise TypeError("Step must be of type StepDTO")
         self._steps.append(step)
@@ -26,5 +24,8 @@ class ProcessingSteps:
 
     def _get_steps(self):
         return list(self._steps)
+
+    def get_steps_redy(self):
+        pass
 
 

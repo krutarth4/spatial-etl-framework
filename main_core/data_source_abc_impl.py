@@ -20,6 +20,7 @@ from log_manager.logger_manager import LoggerManager
 from main_core.data_source_abc import DataSourceABC
 from main_core.data_source_mapper import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, SourceInptuDTO
 from main_core.safe_class import safe_class
+from main_core.processing_steps import ProcessingSteps, StepDTO
 
 
 class FetchTypeEnum(Enum):
@@ -53,6 +54,7 @@ class DataSourceABCImpl(DataSourceABC):
         self.data_source_name = data_source_conf.name
         self.db = db_instance
         self.job_configuration = data_source_conf.job
+        self.processing_steps = ProcessingSteps()
 
         if scheduler_core is not None:
             self.scheduler = scheduler_core
@@ -327,6 +329,13 @@ class DataSourceABCImpl(DataSourceABC):
 
     def run(self):
         start_timer = time.perf_counter()
+        #
+        #
+        # self.processing_steps.add_step(StepDTO(
+        #     priority=1,
+        #     description="get the source data",
+        #     callable=self.source()
+        # ))
 
         # //step 1
         try:
