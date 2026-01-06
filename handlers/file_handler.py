@@ -237,13 +237,17 @@ class FileHandler:
                     self.logger.warning(f"Failed to delete {f.name}: {e}")
 
     def read_local_file(self, file_name_with_extension: str, read_handler: Callable[[str], Any] = None):
-        path = self.get_local_file(file_name_with_extension)
-        extension = file_name_with_extension.split(".")[-1]
-        if read_handler is not None:
-            content = read_handler(path) if path else None
-        if content is NotImplemented or read_handler is None:
-            content = self._read(path, extension) if path else None
-
+        try:
+            content = NotImplemented
+            path = self.get_local_file(file_name_with_extension)
+            extension = file_name_with_extension.split(".")[-1]
+            if read_handler is not None:
+                content = read_handler(path) if path else None
+            if content is NotImplemented or read_handler is None:
+                content = self._read(path, extension) if path else None
+        except Exception as e:
+            self.logger.error(f"Failed to read local file: {e}")
+            return None
         return content
 
     def get_local_file(self, file_name_with_extension) -> Optional[Path]:

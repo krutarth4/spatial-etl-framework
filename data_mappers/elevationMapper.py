@@ -43,5 +43,6 @@ class ElevationMapper(DataSourceABCImpl):
                                          "altitude": altitude,
                                          "geom": point
                                          })
+                            # print(rows[-1])
         # print("content is ", content)
         return rows
