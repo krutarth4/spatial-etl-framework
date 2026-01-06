@@ -33,9 +33,22 @@ class DataSourceABC(ABC):
         pass
 
     @abstractmethod
+    def map_to_base(self):
+        pass
+
+    @abstractmethod
     def check_before_update(self, old_data, new_data):
         pass
 
+    @abstractmethod
+    def load(self):
+        pass
+    @abstractmethod
+    def transform(self):
+        pass
+    @abstractmethod
+    def extract(self):
+        pass
 
 
 

@@ -336,49 +336,59 @@ class DataSourceABCImpl(DataSourceABC):
         paths = self.source(self.data_source_config.source)
         self.logger.info(f"Total number of paths found {len(paths)}")
 
-        if self.is_file_available(paths):
-            return self.run_job_response()
-
-
-
-        return self.run_job_response()
+        return paths
 
     @staticmethod
     def is_file_available( path: list) -> bool:
         if path is None or len(path) == 0:
             return False
         return True
-    def transform(self):
-        pass
+    def transform(self, path):
+        result = self.read_files(path)
+        self.logger.info(f"result contains currently {len(result)}")
+
+        self.source_result = result
+        # print(self.source_result)
+        # 1.1 filter from the results in case needs to be filtered
+        self.source_result = self.source_filter(self.source_result)
+
+        # 1.2 post processing filter
+        self.post_filter_processing()
+
+
     def load(self):
-        pass
+        try:
+            if not self.data_source_config.storage.persistent:
+                self.logger.warning(
+                    f"data source {self.data_source_name} persistent is set to false. Hence it won't be saved to the database ")
+
+            else:
+                if self.db is not None:
+                    self.logger.warning("found new data hence continuing with db upsert")
+                    self.create_data_tables()
+                    # print(self.source_result[0]) # to check the data type for the bulk_insert
+                    self.db.bulk_upsert(self.data_source_config.table_name, self.source_result, do_skip=True)
+
+
+        except Exception as e:
+            self.logger.error(f"Error occurred while loading the file into Database: {e}")
+
 
     def run(self):
         try:
             # 1 Extract
-            paths = self.source(self.data_source_config.source)
-            self.logger.info(f"Total number of paths found {len(paths)}")
+
+            paths = self.extract()
 
             if self.is_file_available(paths):
-                return self.run_job_response()
+                return self.run_job_response("No files available")
 
-            # read the files and convert them into one single list
             for i, path in enumerate(paths):
                 self.logger.info(f"Reading file {i+1} -> {path}")
-                result = self.read_files(path)
-                self.logger.info(f"result contains currently {len(result)}")
-
-
-                self.source_result = result
-                # print(self.source_result)
-                # 1.1 filter from the results in case needs to be filtered
-                self.source_result = self.source_filter(self.source_result)
-
-                # 1.2 post processing filter
-                if self.data_source_config.post_filter_processing is not None and self.data_source_config.post_filter_processing.save:
-                    self.post_filter_processing()
+                self.transform(path)
 
                 # implement checking the file before updating the main file
+                # TODO: needs to be rething the BL for the new data set / found_new_data after data transformation
                 found_new_data = True
                 if self.data_source_config.check_before_update:
                     if self.db is not None and self.data_source_config.storage.persistent:
@@ -390,56 +400,28 @@ class DataSourceABCImpl(DataSourceABC):
 
                 if not found_new_data:
                     self.logger.warning(f"No new data available for {self.data_source_config.name}")
-                    return self.run_job_response()
+                    return self.run_job_response(f"No new data available for {self.data_source_config.name}")
 
                 else:
-                    try:
-
-                        if not self.data_source_config.storage.persistent:
-                            self.logger.warning(
-                                f"data source {self.data_source_name} persistent is set to false. Hence it won't be saved to the database ")
-
-                        else:
-                            if self.db is not None:
-                                self.logger.warning("found new data hence continuing with db upsert")
-                                self.create_data_tables()
-                                # print(self.source_result[0]) # to check the data type for the bulk_insert
-                                self.db.bulk_upsert(self.data_source_config.table_name, self.source_result, do_skip=True)
-
-                            # TODO:Check if make sense to delete all the information for the source variable here
-                    except Exception as e:
-                        self.logger.error(f"Error occurred during database update {e}", e)
-                # create a new column in base table to make it ready for the map link to data
-                # TODO : fix the issue with only dynamic datasets allowed to map
-                if self.data_source_config.data_type != "static" and found_new_data and self.data_source_config.mapping.enable:
-                    try:
-                        if self.db is not None:
-                            self.logger.info(f"Starting operation on base table")
-                            self.db.add_column_to_base(self.data_source_config.mapping.base_table.column_name
-                                                       , self.data_source_config.mapping.base_table.column_type)
-                            # TODO: add indexation for the elements
-
-                            self.map_to_links()
-
-                    except Exception as e:
-                        self.logger.error(f"Error occurred during base table update {e}", e)
-
+                    self.load()
+                    self.map_to_base()
 
         except Exception as e:
             self.logger.error(f"Error occurred in run {e}")
 
-        return self.run_job_response()
+        return self.run_job_response("Job finished Successfully !!!")
 
     def post_filter_processing_save_data(self, conf):
         file_handler = FileHandler(conf.destination)
         file_handler.save_data(conf.destination, self.source_result, conf.type, True)
 
     def post_filter_processing(self):
-        conf = self.data_source_config.post_filter_processing
-        if conf is not None and conf.save:
-            self.post_filter_processing_save_data(conf)
+        if self.data_source_config.post_filter_processing is not None and self.data_source_config.post_filter_processing.save:
+            conf = self.data_source_config.post_filter_processing
+            if conf is not None and conf.save:
+                self.post_filter_processing_save_data(conf)
 
-    def run_job_response(self):
+    def run_job_response(self, message: str):
         end_timer = time.perf_counter()
         duration = end_timer - self.start_timer
         formatted_duration = DataSourceABCImpl.format_duration(duration)
@@ -447,7 +429,7 @@ class DataSourceABCImpl(DataSourceABC):
         self.logger.info(
             f"Finished run for {self.data_source_config.name} in {formatted_duration} seconds"
         )
-        return {"message": "Successfully finished job !!!", "duration": formatted_duration}
+        return {"message": message, "duration": formatted_duration}
 
     @staticmethod
     def format_duration(seconds: float) -> str:
@@ -466,10 +448,6 @@ class DataSourceABCImpl(DataSourceABC):
         return f"{ms}ms"
 
 
-
-    def load(self):
-        print("this is ABC load")
-
     def map_to_links(self):
         print("this is ABC map to links")
         query = self.map_to_link_db_query()
@@ -482,6 +460,25 @@ class DataSourceABCImpl(DataSourceABC):
     def map_to_link_db_query(self) -> None | str:
         sql_query = None
         return sql_query
+
+    '''
+    Method to map data to the base table 
+    @goal create a new column in base table to make it ready for the map link to data
+
+    '''
+    def map_to_base(self):
+        if self.data_source_config.data_type != "static" and self.data_source_config.mapping.enable:
+            try:
+                if self.db is not None:
+                    self.logger.info(f"Starting operation on base table")
+                    self.db.add_column_to_base(self.data_source_config.mapping.base_table.column_name
+                                               , self.data_source_config.mapping.base_table.column_type)
+                    # TODO: add indexation for the elements
+
+                    self.map_to_links()
+
+            except Exception as e:
+                self.logger.error(f"Error occurred during base table update {e}", e)
 
     def create_job(self):
         self.logger.info(f"Job creation started for {self.job_configuration.name}")
