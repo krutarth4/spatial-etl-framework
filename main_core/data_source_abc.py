@@ -23,7 +23,6 @@ class DataSourceABC(ABC):
     def read_file_content(self, path):
         pass
 
-
     @abstractmethod
     def map_to_links(self):
         pass
@@ -43,14 +42,14 @@ class DataSourceABC(ABC):
     @abstractmethod
     def load(self):
         pass
+
     @abstractmethod
     def transform(self):
         pass
+
     @abstractmethod
     def extract(self):
         pass
-
-
 
     # -------------------------------------
 
