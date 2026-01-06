@@ -70,8 +70,6 @@ class DataSourceABCImpl(DataSourceABC):
         self.logger.info(f"Creating table")
         self.db.create_table(self.data_source_config.table_name)
 
-
-
     def check_before_update(self, old_data: Any, new_data: Any) -> bool:
         """
         After the fetch define some criteria to check if the new data is available or not , if not then return otherwise continue with the run method as usual
@@ -85,7 +83,6 @@ class DataSourceABCImpl(DataSourceABC):
             return True
         else:
             return False
-
 
     def fetch(self):
         source = self.data_source_config.source
@@ -143,9 +140,9 @@ class DataSourceABCImpl(DataSourceABC):
             self.logger.info(f" count {i + 1}")
             if self.check_multi_metadata_before_fetch(url=url, headers=source.headers,
                                                       params=source.params, path=path):
-                path =http_handler.call(uri=url, destination_path=path, stream=source.stream,
-                                  headers=source.headers, params=source.params,
-                                  file_extension=source.response_type)
+                path = http_handler.call(uri=url, destination_path=path, stream=source.stream,
+                                         headers=source.headers, params=source.params,
+                                         file_extension=source.response_type)
             paths.append(path)
         return paths
 
@@ -209,7 +206,6 @@ class DataSourceABCImpl(DataSourceABC):
 
                         elif isinstance(multi_fetch.urls, SourceInptuDTO):
 
-
                             file_handler = FileHandler(multi_fetch.urls.input)
                             print(f"{multi_fetch.urls.input.split("/")[-1]}")
                             urls = file_handler.read_local_file(f"{multi_fetch.urls.input.split("/")[-1]}")
@@ -244,10 +240,11 @@ class DataSourceABCImpl(DataSourceABC):
         else:
             self.logger.error(f"Not valid multi fetch type strategy: {multi_fetch.strategy}")
         return paths
+
     def read_file_content(self, path):
         return NotImplemented
 
-    def read_files(self, path: Path|str) -> list[dict]:
+    def read_files(self, path: Path | str) -> list[dict]:
         result = []
         try:
             path = Path(path)
@@ -258,7 +255,8 @@ class DataSourceABCImpl(DataSourceABC):
             elif isinstance(res, dict):
                 result.append(res)
             else:
-                self.logger.error(f"File {res.name} not readable or the format specifies by read_file_content not correct")
+                self.logger.error(
+                    f"File {res.name} not readable or the format specifies by read_file_content not correct")
         except Exception as e:
             self.logger.error(f"Error occurred while reading the files", e)
 
@@ -270,7 +268,7 @@ class DataSourceABCImpl(DataSourceABC):
                                                                                              params=params,
                                                                                              path=path)
 
-    def source(self, source : SourceDTO) -> List[Any] | None:
+    def source(self, source: SourceDTO) -> List[Any] | None:
         source = self.data_source_config.source
         if source is None:
             return None
@@ -339,10 +337,11 @@ class DataSourceABCImpl(DataSourceABC):
         return paths
 
     @staticmethod
-    def is_file_available( path: list) -> bool:
+    def is_file_available(path: list) -> bool:
         if path is None or len(path) == 0:
             return False
         return True
+
     def transform(self, path):
         result = self.read_files(path)
         self.logger.info(f"result contains currently {len(result)}")
@@ -354,7 +353,6 @@ class DataSourceABCImpl(DataSourceABC):
 
         # 1.2 post processing filter
         self.post_filter_processing()
-
 
     def load(self):
         try:
@@ -373,18 +371,19 @@ class DataSourceABCImpl(DataSourceABC):
         except Exception as e:
             self.logger.error(f"Error occurred while loading the file into Database: {e}")
 
-
     def run(self):
+        self.start_execution()
+
         try:
             # 1 Extract
 
             paths = self.extract()
 
-            if self.is_file_available(paths):
+            if DataSourceABCImpl.is_file_available(paths):
                 return self.run_job_response("No files available")
 
             for i, path in enumerate(paths):
-                self.logger.info(f"Reading file {i+1} -> {path}")
+                self.logger.info(f"Reading file {i + 1} -> {path}")
                 self.transform(path)
 
                 # implement checking the file before updating the main file
@@ -447,7 +446,6 @@ class DataSourceABCImpl(DataSourceABC):
             return f"{sec}s {ms}ms"
         return f"{ms}ms"
 
-
     def map_to_links(self):
         print("this is ABC map to links")
         query = self.map_to_link_db_query()
@@ -466,6 +464,7 @@ class DataSourceABCImpl(DataSourceABC):
     @goal create a new column in base table to make it ready for the map link to data
 
     '''
+
     def map_to_base(self):
         if self.data_source_config.data_type != "static" and self.data_source_config.mapping.enable:
             try:
@@ -490,7 +489,6 @@ class DataSourceABCImpl(DataSourceABC):
         #     pass
         trigger_conf = self.job_configuration.trigger.type
 
-
         TRIGGER_MAP = {
             "interval": IntervalTrigger,
             "date": DateTrigger,
@@ -507,7 +505,7 @@ class DataSourceABCImpl(DataSourceABC):
                 if trigger_conf.name != "date":
                     trigger = trigger_cls(**trigger_conf.config, start_date=trigger_conf.start_date)
                 else:
-                    trigger = trigger_cls( run_date=trigger_conf.start_date)
+                    trigger = trigger_cls(run_date=trigger_conf.start_date)
             else:
                 trigger = trigger_cls(**trigger_conf.config)
 
@@ -519,4 +517,3 @@ class DataSourceABCImpl(DataSourceABC):
             "executor": "process" if self.job_configuration.executor is not None else "default"
         }
         self.scheduler.add_job(job_conf, self.job_configuration.id or self.data_source_name)
-

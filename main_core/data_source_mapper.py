@@ -89,6 +89,8 @@ class CheckMetadataDTO:
 class SourceInputDTO:
     path: Optional[Union[str, Path]]
     data: Optional[list[Any]]
+
+
 @dataclass
 class SourceInptuDTO:
     input: Union[str, Path]
@@ -98,9 +100,9 @@ class SourceInptuDTO:
 @dataclass
 class SourceMultiFetchDTO:
     enable: bool
-    strategy: Union[SourceMultiFetchStrategy , str]
+    strategy: Union[SourceMultiFetchStrategy, str]
     params: Optional[Mapping[str, Any]]
-    expand: Optional[Mapping[str, Any]] # for looping over the params
+    expand: Optional[Mapping[str, Any]]  # for looping over the params
     url_template: Optional[str]
     template_params: Optional[Mapping[str, Any]]
     urls: Optional[Union[list[str]]] | Optional[SourceInptuDTO]
@@ -121,6 +123,8 @@ class SourceDTO:
     params: Optional[Mapping[str, Any]]
     mode: str | SourceFetchModeEnum
     multi_fetch: Optional[SourceMultiFetchDTO]
+
+
 #     ----------for multi fetch
 #      expand:
 #       dwd_station_id: ["00399", "00403", "00410"]
@@ -175,7 +179,6 @@ class DataSourceMapper:
         self.data_sources = self.check_enable_data_sources()
         self.logger.info(f"Enable Found {len(self.data_sources)} data sources")
         self.run_data_source_mapper()
-
 
     def check_enable_data_sources(self):
         try:
