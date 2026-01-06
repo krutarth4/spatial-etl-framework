@@ -24,7 +24,7 @@ class WeatherTable(Base):
     pressure_msl = Column(Float, nullable=False)
     dew_point = Column(Float, nullable=False)
     cloud_cover = Column(Float, nullable=False)
-    visibility = Column(Float )
+    visibility = Column(Float)
     conditions = Column(String)
     wind_speed = Column(Float)
     wind_direction = Column(Float, nullable=False)

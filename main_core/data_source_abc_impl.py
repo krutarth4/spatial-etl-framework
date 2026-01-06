@@ -18,7 +18,8 @@ from handlers.file_handler import FileHandler
 from handlers.http_handler import HttpHandler
 from log_manager.logger_manager import LoggerManager
 from main_core.data_source_abc import DataSourceABC
-from main_core.data_source_mapper import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, SourceInptuDTO
+from main_core.data_source_mapper import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, SourceInptuDTO, \
+    SourceDTO
 from main_core.safe_class import safe_class
 from main_core.processing_steps import ProcessingSteps, StepDTO
 
@@ -55,6 +56,8 @@ class DataSourceABCImpl(DataSourceABC):
         self.db = db_instance
         self.job_configuration = data_source_conf.job
         self.processing_steps = ProcessingSteps()
+        self.start_timer = None
+        self.end_timer = None
 
         if scheduler_core is not None:
             self.scheduler = scheduler_core
@@ -267,7 +270,7 @@ class DataSourceABCImpl(DataSourceABC):
                                                                                              params=params,
                                                                                              path=path)
 
-    def source(self) -> List[Any] | None:
+    def source(self, source : SourceDTO) -> List[Any] | None:
         source = self.data_source_config.source
         if source is None:
             return None
@@ -325,31 +328,41 @@ class DataSourceABCImpl(DataSourceABC):
         print("calling filter from the datasource ABC impl")
         return data
 
+    def start_execution(self):
+        self.logger.info(f"Executing starting for datasource {self.data_source_config.name}")
+        self.start_timer = time.perf_counter()
 
+    def extract(self):
+        paths = self.source(self.data_source_config.source)
+        self.logger.info(f"Total number of paths found {len(paths)}")
+
+        if self.is_file_available(paths):
+            return self.run_job_response()
+
+
+
+        return self.run_job_response()
+
+    @staticmethod
+    def is_file_available( path: list) -> bool:
+        if path is None or len(path) == 0:
+            return False
+        return True
+    def transform(self):
+        pass
+    def load(self):
+        pass
 
     def run(self):
-        start_timer = time.perf_counter()
-        #
-        #
-        # self.processing_steps.add_step(StepDTO(
-        #     priority=1,
-        #     description="get the source data",
-        #     callable=self.source()
-        # ))
-
-        # //step 1
         try:
-            if not self.data_source_config.enable:
-                self.logger.warning(f"data_source_config.enable is false {self.data_source_config.name}")
-                return self.run_job_response(start_timer)
-
-            self.logger.info(f"Executing run for the data source {self.data_source_config.name}")
             # 1 Extract
-            paths = self.source()
-            if paths is None or len(paths) == 0:
-                return self.run_job_response(start_timer)
-            # read the files and convert them into one single list
+            paths = self.source(self.data_source_config.source)
             self.logger.info(f"Total number of paths found {len(paths)}")
+
+            if self.is_file_available(paths):
+                return self.run_job_response()
+
+            # read the files and convert them into one single list
             for i, path in enumerate(paths):
                 self.logger.info(f"Reading file {i+1} -> {path}")
                 result = self.read_files(path)
@@ -374,14 +387,11 @@ class DataSourceABCImpl(DataSourceABC):
                         # found_new_data = self.check_before_update(old_data, self.source_result)
                 else:
                     self.logger.warning(f"Check on the file disabled  {self.data_source_config.name}")
-                # save the source items in database based on a schema
-                # create table
 
                 if not found_new_data:
                     self.logger.warning(f"No new data available for {self.data_source_config.name}")
-                    return self.run_job_response(start_timer)
+                    return self.run_job_response()
 
-                    # return "Didn't find new data. Hence skipping the job. Job finished"
                 else:
                     try:
 
@@ -418,7 +428,7 @@ class DataSourceABCImpl(DataSourceABC):
         except Exception as e:
             self.logger.error(f"Error occurred in run {e}")
 
-        return self.run_job_response(start_timer)
+        return self.run_job_response()
 
     def post_filter_processing_save_data(self, conf):
         file_handler = FileHandler(conf.destination)
@@ -429,15 +439,16 @@ class DataSourceABCImpl(DataSourceABC):
         if conf is not None and conf.save:
             self.post_filter_processing_save_data(conf)
 
-    def run_job_response(self, start_timer):
+    def run_job_response(self):
         end_timer = time.perf_counter()
-        duration = end_timer - start_timer
+        duration = end_timer - self.start_timer
         formatted_duration = DataSourceABCImpl.format_duration(duration)
 
         self.logger.info(
             f"Finished run for {self.data_source_config.name} in {formatted_duration} seconds"
         )
         return {"message": "Successfully finished job !!!", "duration": formatted_duration}
+
     @staticmethod
     def format_duration(seconds: float) -> str:
         ms = int((seconds - int(seconds)) * 1000)

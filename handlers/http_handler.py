@@ -81,23 +81,13 @@ class HttpHandler:
                     raise ValueError("destination_path must be provided when save=True")
 
                 data_path, meta_path = self.save_to_file(content,headers, destination_path, file_extension)
-                # Detect JSON
                 content_type = response.headers.get("Content-Type", "")
-                # self.logger.info(f"Response Content-Type: {response.headers}")
                 result = {
                     "metadata": response.headers,
                     "content": {},
                     "path": data_path,
                 }
 
-                # if "application/json" in content_type:
-                #     try:
-                #         result["content"] = json.loads(content.decode("utf-8"))
-                #
-                #     except Exception as e:
-                #         self.logger.warning(f"JSON parse failed: {e}")
-                #         result["content"] = content.decode("utf-8")
-                #
                 self.logger.info(f"Saving metadata to {result["path"]}")
                 return result["path"]
 

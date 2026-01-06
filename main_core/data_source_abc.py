@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 
+from main_core.data_source_mapper import SourceDTO
+
 
 class DataSourceABC(ABC):
     # -------------SOURCE METHODS ------------------------
 
     @abstractmethod
-    def source(self):
+    def source(self, source: SourceDTO):
         pass
 
     @staticmethod
