@@ -99,10 +99,14 @@ class FileHandler:
             self,
             path: str,
             data: Any,
-            extension: str,
             normalize: bool = False
     ):
+        #TODO change the path to Path Instance
         path = path.split("/")[-1]
+        name  = path.split(".")
+        path = ".".join(name[:-1])
+        extension = name[-1]
+
         data_path = ""
         if normalize:
             data_path = self._normalized_file_path(path, extension)

@@ -140,11 +140,10 @@ class SourceDTO:
 #       - "https://example.com/page/2"
 
 
-@dataclass()
+@dataclass
 class PostFilterDTO:
     save: bool
     destination: Union[str, Path]
-    # type: str
 
 
 @dataclass

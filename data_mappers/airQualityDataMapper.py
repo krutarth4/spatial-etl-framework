@@ -80,7 +80,7 @@ class AirQualityDataMapper(DataSourceABCImpl):
                     x, y = geom["coordinates"]
                     lon, lat = self.transformer.transform(x, y)
 
-                    point = WKTElement(f"POINT({x} {y})", srid=25833)
+                    point = WKTElement(f"POINT({x} {y})", srid=4326)
                     row = {
                         "id": props["id"],
                         "forecast_time": props["date_time_forecast_iso8601"],

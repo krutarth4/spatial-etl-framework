@@ -1,7 +1,8 @@
 import json
 import zipfile
 
-from geoalchemy2 import Geometry
+from geoalchemy2 import Geometry, WKTElement
+from pyproj import Transformer
 from sqlalchemy import Column, Integer, Float
 
 from database.base import Base
@@ -16,10 +17,11 @@ class ElevationTable(Base):
     lat = Column(Float)
     lon = Column(Float)
     altitude = Column(Float)
-    # geom = Geometry(geometry_type="POINT", srid=4326)
+    geom = Geometry(geometry_type="POINT", srid=4326)
 
 
 class ElevationMapper(DataSourceABCImpl):
+    transformer = Transformer.from_crs(25833, 4326, always_xy=True)
 
     def read_file_content(self, path):
         rows =[]
@@ -32,8 +34,14 @@ class ElevationMapper(DataSourceABCImpl):
                             if not line:
                                 continue
                             lat, lon, altitude = map(float, line.split())
+                            lat, lon = self.transformer.transform(lat, lon)
+                            point = WKTElement(f"POINT({lon} {lat})", srid=4326)
                             # create geom into this also
 
-                            rows.append({"lat": lat, "lon": lon, "altitude": altitude})
+                            rows.append({"lat": lat,
+                                         "lon": lon,
+                                         "altitude": altitude,
+                                         "geom": point
+                                         })
         # print("content is ", content)
         return rows

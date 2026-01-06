@@ -254,6 +254,8 @@ class DataSourceABCImpl(DataSourceABC):
                 result.extend(res)
             elif isinstance(res, dict):
                 result.append(res)
+            elif isinstance(res, str):
+                result.append(res)
             else:
                 self.logger.error(
                     f"File {res.name} not readable or the format specifies by read_file_content not correct")
@@ -412,7 +414,7 @@ class DataSourceABCImpl(DataSourceABC):
 
     def post_filter_processing_save_data(self, conf):
         file_handler = FileHandler(conf.destination)
-        file_handler.save_data(conf.destination, self.source_result, conf.type, True)
+        file_handler.save_data(conf.destination, self.source_result, True)
 
     def post_filter_processing(self):
         if self.data_source_config.post_filter_processing is not None and self.data_source_config.post_filter_processing.save:
