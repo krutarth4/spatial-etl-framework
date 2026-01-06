@@ -379,7 +379,7 @@ class DataSourceABCImpl(DataSourceABC):
 
             paths = self.extract()
 
-            if DataSourceABCImpl.is_file_available(paths):
+            if not DataSourceABCImpl.is_file_available(paths):
                 return self.run_job_response("No files available")
 
             for i, path in enumerate(paths):
@@ -426,8 +426,9 @@ class DataSourceABCImpl(DataSourceABC):
         formatted_duration = DataSourceABCImpl.format_duration(duration)
 
         self.logger.info(
-            f"Finished run for {self.data_source_config.name} in {formatted_duration} seconds"
+            f"Finished run for {self.data_source_config.name} in {formatted_duration} seconds -> message: {message}"
         )
+
         return {"message": message, "duration": formatted_duration}
 
     @staticmethod

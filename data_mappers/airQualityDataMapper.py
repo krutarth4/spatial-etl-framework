@@ -65,6 +65,9 @@ class AirQualityDataMapper(DataSourceABCImpl):
 #
 #         return data_mapper
 
+    def read_file_content(self, path):
+        return self.load_and_store_gz_json(path)
+
     def load_and_store_gz_json(self, gz_path):
         print(f"📖 Reading and inserting data from {gz_path}")
         row_to_insert = []
