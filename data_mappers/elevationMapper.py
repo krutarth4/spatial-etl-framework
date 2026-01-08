@@ -10,7 +10,7 @@ from main_core.data_source_abc_impl import DataSourceABCImpl
 
 
 class ElevationTable(Base):
-    __tablename__ = "elevation"
+    __tablename__ = "elevation_upsert"
 
     id = Column(Integer, primary_key=True, autoincrement=True,
                  index=True)  # make sure to create indexing for the table for better query and fast computation

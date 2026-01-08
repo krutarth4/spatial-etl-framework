@@ -195,6 +195,7 @@ class DBRepository(DbConfiguration):
         except Exception as e:
             self.logger.error(f"Bulk insert failed for '{table_name}': {e}")
             raise
+    @measure_time(label="bulk upsert")
     def bulk_upsert(self, table_name: str, data_list: list[dict], conflict_column: str = "uid", do_update: bool = False,
                     do_skip: bool = True):
         #TODO: Check if the table exist before doing upsert

@@ -366,8 +366,9 @@ class DataSourceABCImpl(DataSourceABC):
                     self.logger.warning("found new data hence continuing with db upsert")
                     self.create_data_tables()
                     # print(self.source_result[0]) # to check the data type for the bulk_insert
-                    self.db.bulk_upsert(self.data_source_config.storage.table_name, self.source_result, do_skip=True)
 
+                    # self.db.bulk_upsert(self.data_source_config.storage.table_name, self.source_result, do_skip=True)
+                    self.db.bulk_insert(self.data_source_config.storage.table_name, self.source_result)
 
         except Exception as e:
             self.logger.error(f"Error occurred while loading the file into Database: {e}")

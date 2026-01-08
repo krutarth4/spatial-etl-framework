@@ -73,13 +73,5 @@ if __name__ == "__main__":
 
     db.bulk_insert("db_test",names)
 
+#  compare
 
-
-    # drop indexes and relationships
-
-
-
-
-
-
-#     create indexes and relationships again for the final table
