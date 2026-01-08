@@ -55,7 +55,6 @@ class DataSourceABCImpl(DataSourceABC):
         self.data_source_name = data_source_conf.name
         self.db = db_instance
         self.job_configuration = data_source_conf.job
-        self.processing_steps = ProcessingSteps()
         self.start_timer = None
         self.end_timer = None
 
@@ -68,7 +67,7 @@ class DataSourceABCImpl(DataSourceABC):
 
     def create_data_tables(self):
         self.logger.info(f"Creating table")
-        self.db.create_table(self.data_source_config.table_name)
+        self.db.create_table(self.data_source_config.storage.table_name)
 
     def check_before_update(self, old_data: Any, new_data: Any) -> bool:
         """
@@ -367,7 +366,7 @@ class DataSourceABCImpl(DataSourceABC):
                     self.logger.warning("found new data hence continuing with db upsert")
                     self.create_data_tables()
                     # print(self.source_result[0]) # to check the data type for the bulk_insert
-                    self.db.bulk_upsert(self.data_source_config.table_name, self.source_result, do_skip=True)
+                    self.db.bulk_upsert(self.data_source_config.storage.table_name, self.source_result, do_skip=True)
 
 
         except Exception as e:
@@ -394,7 +393,7 @@ class DataSourceABCImpl(DataSourceABC):
                 if self.data_source_config.check_before_update:
                     if self.db is not None and self.data_source_config.storage.persistent:
                         self.logger.info(f"Checking for changes before update {self.data_source_config.name} ......")
-                        old_data = self.db.fetch_columns_with_limits(self.data_source_config.table_name)
+                        old_data = self.db.fetch_columns_with_limits(self.data_source_config.storage.table_name)
                         # found_new_data = self.check_before_update(old_data, self.source_result)
                 else:
                     self.logger.warning(f"Check on the file disabled  {self.data_source_config.name}")

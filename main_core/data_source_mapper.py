@@ -151,7 +151,6 @@ class DataSourceDTO:
     name: str
     description: str
     enable: bool
-    table_name: str
     class_name: str
     data_type: str
     check_before_update: bool

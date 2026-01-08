@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 from main_core.data_source_mapper import SourceDTO
 
@@ -44,7 +45,7 @@ class DataSourceABC(ABC):
         pass
 
     @abstractmethod
-    def transform(self):
+    def transform(self, path: Path|str):
         pass
 
     @abstractmethod
