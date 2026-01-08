@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 
 from dacite import from_dict
-from sqlalchemy import String, Column
+from sqlalchemy import String, Column, Integer, Index
 
 from NotUsed import db_conf
+
+from database.base import Base
 from database.db_configuration import DbConfiguration, DBConfigDTO
 
 import threading
@@ -57,8 +59,27 @@ if __name__ == "__main__":
     graph = conf.get_value("graph")
     db = DbInstance(db_conf, base, graph)
 
-    #
-    # db.add_column("ways_base", "test_column",
-    #               "String", "test_runner")
 
-    db.drop_indexes_for_table()
+
+    #     create table
+
+    class DBTest(Base):
+        __tablename__ = "db_test"
+        id = Column(Integer, primary_key=True, index=True)
+        name = Column(String)
+
+    names = [{"name":"mica"}, {"name":"ana"}]
+    db.create_table("db_test")
+
+    db.bulk_upsert("db_test",names,"id",True, False)
+
+
+
+    # drop indexes and relationships
+
+
+
+
+
+
+#     create indexes and relationships again for the final table

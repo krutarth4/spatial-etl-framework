@@ -1,9 +1,11 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import Any
 
 import geopandas as gpd
 from dacite import from_dict
 from geoalchemy2.shape import to_shape
+from numpy.ma.core import max_filler
 from sqlalchemy import inspect, MetaData, create_engine, select, delete, update, insert, Column, Integer, BigInteger, \
     String, text, func, Row, RowMapping
 from sqlalchemy.exc import SQLAlchemyError
@@ -20,6 +22,7 @@ class CredentialDTO:
     username: str
     password: str
 
+
 @dataclass
 class DBConfigDTO:
     description: str
@@ -31,11 +34,13 @@ class DBConfigDTO:
     database_schema: str  # not required
     credential: CredentialDTO
 
+
 class DbConfiguration:
     """
     This class will take care of configuration level database instance
     """
-    base  = Base
+    base = Base
+
     def __init__(self, core_config, base_config):
         self.core_config = from_dict(DBConfigDTO, core_config)
         self.logger = LoggerManager(type(self).__name__)
@@ -53,6 +58,7 @@ class DbConfiguration:
 
         # create all the tables linked to the Base
         self.update_metadata()
+
     # Main engine based function of DDL functions
     def create_schema_if_not_exists(self):
         """Create the database schema if it does not exist."""
@@ -67,6 +73,7 @@ class DbConfiguration:
         except Exception as e:
             self.logger.error(f"Failed to create schema '{schema}': {e}")
             raise
+
     # this should be moved to the repository
 
     # -----------------------------
@@ -87,8 +94,7 @@ class DbConfiguration:
 
     def table_exists(self, table_name: str) -> bool:
         """Check if table already exists in database schema."""
-        # self.logger.info(f"Checking if table exist in inspector {self.inspector.get_table_names()}")
-        #Table names passed are with schema and inspector just gives out just names with <dbName>.*
+        # Table names passed are with schema and inspector just gives out just names with <dbName>.*
         try:
 
             exists = self.inspector.has_table(table_name.split(".")[-1], schema=self.schema)
@@ -97,7 +103,6 @@ class DbConfiguration:
         except Exception as e:
             self.logger.error(f"Table '{table_name}' does not exist in schema '{self.schema}'")
             self.logger.error(e)
-
 
     # -----------------------------
     # INSERT
@@ -119,12 +124,9 @@ class DbConfiguration:
             self.logger.error(f"Insert failed for '{table_name}': {e}")
             raise
 
-
-
     # -----------------------------
     # FETCH / QUERY
     # -----------------------------
-
 
     def create_scoped_session(self):
         return scoped_session(self.session_factory)
@@ -140,7 +142,6 @@ class DbConfiguration:
 
     def print_db_url(self):
         self.logger.info(f"Testing connection with url {self.db_url}")
-        # print(f"Testing connection with url {self.db_url}")
 
     def get_db_url(self):
         return self.db_url
@@ -149,7 +150,13 @@ class DbConfiguration:
         return create_engine(self.db_url, echo=False, plugins=["geoalchemy2"])
 
     def create_session_factory(self):
-        return sessionmaker(bind=self.engine, autocommit=False, autoflush=False)
+        return sessionmaker(bind=self.engine,
+                            autocommit=False,
+                            autoflush=False,
+                            pool_size=10,
+                            max_overflow = 20,
+                            pool_pre_ping=True
+                            )
 
     def get_new_session(self):
         return self.create_scoped_session()
@@ -169,8 +176,6 @@ class DbConfiguration:
             # self.logger.info("Table:", table_name) #-> leads to an error as it can return a dictionary
             print(table_name)
 
-
-
     @contextmanager
     def session_scope(self):
         """Provide a transactional scope around a series of operations."""
@@ -183,10 +188,9 @@ class DbConfiguration:
             raise
         finally:
             # session.remove()
-            #TODO: check if the session should be removed or just closed as we are creating new session each time
-            #TODO : Evaluate
+            # TODO: check if the session should be removed or just closed as we are creating new session each time
+            # TODO : Evaluate
             session.close()
-
 
     def get_table_row_count(self, table_name: str) -> int:
         """
@@ -198,7 +202,6 @@ class DbConfiguration:
 
         with self.session_scope() as session:
             return session.execute(stmt).scalar_one()
-
 
     def fetch_one_session(self, table_name: str, filters: dict):
         try:
@@ -222,11 +225,13 @@ class DbConfiguration:
         except Exception as e:
             self.logger.error(f"Failed to fetch table list: {e}")
             raise
+
     def has_base_tables(self):
         """Return a list of all table names in the configured schema. Based on inspector linked through DB itself """
         try:
 
-            return self.inspector.has_table(table_name=self.base_config.table_name, schema = self.base_config.table_schema)
+            return self.inspector.has_table(table_name=self.base_config.table_name,
+                                            schema=self.base_config.table_schema)
 
         except Exception as e:
             self.logger.error(f"Failed to check  table list: {e}")
@@ -258,26 +263,27 @@ class DbConfiguration:
                 # "type": str(col["type"]),  # DB type
                 "nullable": col["nullable"],  # nullable?
                 # "default": str(col.get("default")),  # default value
-                "autoincrement": col.get("autoincrement"),
+                # "autoincrement": col.get("autoincrement"),
+                "python_type": col["type"].python_type
             }
 
         return db_info
-    def normalize_table_name(self, table_name: str, with_schema_prefix : bool = False):
+
+    def normalize_table_name(self, table_name: str, with_schema_prefix: bool = False):
         # print(f"before table name normalization {table_name}")
         name = table_name.split(".")
         size = len(name)
         if with_schema_prefix:
-            res = table_name if size>1 else f"{self.schema}.{table_name}"
+            res = table_name if size > 1 else f"{self.schema}.{table_name}"
 
         else:
-            res =  table_name if size == 1 else name[-1]
+            res = table_name if size == 1 else name[-1]
             # print(f"result for normalization {res}")
         return res
 
-
     def get_orm_column_info(self, table_name: str):
         """Return ORM model metadata for columns."""
-        table_name= self.normalize_table_name(table_name, False)
+        table_name = self.normalize_table_name(table_name, False)
         table = Base.metadata.tables.get(table_name)
         # print(f"get orm column info ORM table {table}")
         if table is None:
@@ -295,10 +301,15 @@ class DbConfiguration:
                 "nullable": col.nullable,  # nullable?
                 # "default": str(col.default),  # default?
                 # DB inteprets the default value as false hence added a check
-                "autoincrement": False if col.autoincrement =="auto" else col.autoincrement,
+                # "autoincrement": False if col.autoincrement == "auto" else col.autoincrement,
+                # "all": col,
+                "python_type": col.type.python_type,
             }
         return orm_info
-
+    #TODO: implement to be used by both the factors
+    @staticmethod
+    def create_table_schema_comparator(key: str, value: Any):
+        return
     def table_schema_matches(self, table_name: str) -> bool | None:
         """Compare DB table structure vs ORM table structure (deep check)."""
         try:
@@ -334,15 +345,11 @@ class DbConfiguration:
 
             return True
         except Exception as e:
-            self.logger.error(f"Error occurred {e}",e)
+            self.logger.error(f"Error occurred {e}", e)
             return None
 
 
-
-
 if __name__ == "__main__":
-
-
     class TestDB(Base):
         __tablename__ = "test"
         __table_args__ = {"schema": "test"}
@@ -358,31 +365,28 @@ if __name__ == "__main__":
     # db.create_table("test")
     # db.create_all_tables()
 
-
-
-#     start with new execution
-#     res = db.fetch_one_session("test", {"source": 2})
-#     print(res)
+    #     start with new execution
+    #     res = db.fetch_one_session("test", {"source": 2})
+    #     print(res)
 
     tables = db.get_all_db_tables()
     print(f"table : {tables}")
 
-# check the db for adding colum
+    # check the db for adding colum
 
     # db.drop_table("test", True, True)
     # if r:
     #     print("dropped successfully")
 
-    r = db.fetch_columns_with_limits("dwd_station_locations","dwd_station_id" ,3)
+    r = db.fetch_columns_with_limits("dwd_station_locations", "dwd_station_id", 3)
     print(r)
 
     print("Cloning the tables .....")
     # clone_table = db.clone_table_schema_with_data("public","ways", "test", "ways", False )
     # print(clone_table)
 
-
     print("already cloned present now lets start with mapping")
-    res = db.fetch_columns_with_limits("ways    ",["id","osm_id", "geom"] ,3)
+    res = db.fetch_columns_with_limits("ways    ", ["id", "osm_id", "geom"], 3)
     print(res)
     print(type(res[0][1]))
     gdf = gpd.GeoDataFrame(
@@ -392,14 +396,3 @@ if __name__ == "__main__":
         crs="EPSG:4326")
 
     print(gdf)
-
-
-
-
-
-
-
-
-
-
-

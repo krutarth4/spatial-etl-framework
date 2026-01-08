@@ -63,7 +63,7 @@ SQLALCHEMY_TYPE_MAP = {
 }
 
 class DBRepository(DbConfiguration):
-    _UPSERT_THRESHOLD = 5000
+    _UPSERT_THRESHOLD = 5000 #Not the best upsert threshold makes it too slow
 
     def __init__(self, db_conf, base, graph):
 
