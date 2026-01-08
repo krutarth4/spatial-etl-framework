@@ -18,7 +18,7 @@ from handlers.file_handler import FileHandler
 from handlers.http_handler import HttpHandler
 from log_manager.logger_manager import LoggerManager
 from main_core.data_source_abc import DataSourceABC
-from main_core.data_source_mapper import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, SourceInptuDTO, \
+from main_core.data_source_mapper import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, SourceInputDTO, \
     SourceDTO
 from main_core.safe_class import safe_class
 from main_core.processing_steps import ProcessingSteps, StepDTO
@@ -203,7 +203,7 @@ class DataSourceABCImpl(DataSourceABC):
                         if isinstance(multi_fetch.urls, list):
                             paths = self.process_multi_fetch_expand_list(source, multi_fetch.urls)
 
-                        elif isinstance(multi_fetch.urls, SourceInptuDTO):
+                        elif isinstance(multi_fetch.urls, SourceInputDTO):
 
                             file_handler = FileHandler(multi_fetch.urls.input)
                             print(f"{multi_fetch.urls.input.split("/")[-1]}")

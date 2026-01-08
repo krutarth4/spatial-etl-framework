@@ -167,14 +167,6 @@ class DBRepository(DbConfiguration):
                 )
                 self.logger.debug(f"ON CONFLICT DO UPDATE on column '{conflict_column}'")
 
-            # # prepare update dict — exclude conflict column
-            # update_dict = {c.name: stmt.excluded[c.name] for c in table.columns if
-            #                c.name not in (conflict_column, "id")}
-            #
-            # stmt = stmt.on_conflict_do_update(
-            #     index_elements=[table.c[conflict_column]],
-            #     set_=update_dict
-            # )
 
             try:
                 with self.engine.begin() as conn:
@@ -183,8 +175,7 @@ class DBRepository(DbConfiguration):
             except SQLAlchemyError as e:
                 msg = getattr(e, "orig", e)
                 self.logger.error(f"Bulk upsert failed: {msg}")
-                # self.logger.error(f"Bulk upsert failed for '{table_name}': {e.orig}")
-                # raise
+
 
     def resolve_sqlalchemy_type(self, type_str: str):
         """

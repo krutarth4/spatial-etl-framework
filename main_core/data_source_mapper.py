@@ -92,7 +92,7 @@ class SourceInputDTO:
 
 
 @dataclass
-class SourceInptuDTO:
+class SourceInputDTO:
     input: Union[str, Path]
     type: Optional[str]
 
@@ -105,12 +105,11 @@ class SourceMultiFetchDTO:
     expand: Optional[Mapping[str, Any]]  # for looping over the params
     url_template: Optional[str]
     template_params: Optional[Mapping[str, Any]]
-    urls: Optional[Union[list[str]]] | Optional[SourceInptuDTO]
+    urls: Optional[Union[list[str]]] | Optional[SourceInputDTO]
 
 
 @dataclass
 class SourceDTO:
-    # input: Optional[str]
     check_metadata: CheckMetadataDTO
     url: Optional[str]
     file_path: Optional[Union[str, Path]]
@@ -125,19 +124,6 @@ class SourceDTO:
     multi_fetch: Optional[SourceMultiFetchDTO]
 
 
-#     ----------for multi fetch
-#      expand:
-#       dwd_station_id: ["00399", "00403", "00410"]
-#
-#     # Strategy 2: URL template (optional)
-#     url_template: "https://example.com/{station}/details"
-#     template_params:
-#       station: ["A", "B", "C"]
-#
-#     # Strategy 3: explicit URLs
-#     urls:
-#       - "https://example.com/page/1"
-#       - "https://example.com/page/2"
 
 
 @dataclass
