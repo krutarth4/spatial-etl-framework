@@ -1,5 +1,7 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from io import StringIO
 from typing import Union, List, Text
 
 from dacite import from_dict
@@ -18,6 +20,9 @@ from sqlalchemy import (
     Integer, Float, String, Boolean, Date, DateTime, JSON
 )
 import re
+
+from utils.execution_time import measure_time
+
 
 @dataclass
 class BaseTableConfDTO:
@@ -120,7 +125,76 @@ class DBRepository(DbConfiguration):
                 self.drop_table(table_name, True, True)
                 table.schema = self.schema
                 Base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=True)
+    @contextmanager
+    def raw_pg_connection(self):
+        conn = self.engine.raw_connection()
+        try:
+            yield conn
+            conn.commit()
+        except:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
+    @measure_time(label="bulk insert")
+    def bulk_insert(
+            self,
+            table_name: str,
+            data_list: list[dict],
+    ):
+        if not data_list:
+            self.logger.info("No data to insert.")
+            return
+
+        table = self.get_table(table_name)
+        if table is None:
+            raise ValueError(f"Table '{table_name}' does not exist")
+
+        # Determine allowed columns (exclude autoincrement PKs)
+        insert_columns = [
+            c.name
+            for c in table.columns
+            if not c.primary_key or not c.autoincrement
+        ]
+
+        if not insert_columns:
+            raise ValueError("No insertable columns found")
+
+        # Build CSV buffer
+        buffer = StringIO()
+
+        for row in data_list:
+            buffer.write(
+                ",".join(
+                    "" if row.get(col) is None else str(row[col])
+                    for col in insert_columns
+                )
+                + "\n"
+            )
+
+        buffer.seek(0)
+
+        # COPY into table
+        copy_sql = f"""
+            COPY {table.schema}.{table.name}
+            ({", ".join(insert_columns)})
+            FROM STDIN WITH CSV
+        """
+
+        try:
+            with self.raw_pg_connection() as conn:
+                with conn.cursor() as cur:
+                    with cur.copy(copy_sql) as copy:
+                        copy.write(buffer.getvalue())
+
+            self.logger.info(
+                f"Inserted {len(data_list)} rows into '{table_name}'"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Bulk insert failed for '{table_name}': {e}")
+            raise
     def bulk_upsert(self, table_name: str, data_list: list[dict], conflict_column: str = "uid", do_update: bool = False,
                     do_skip: bool = True):
         #TODO: Check if the table exist before doing upsert
@@ -149,7 +223,7 @@ class DBRepository(DbConfiguration):
                 stmt = stmt.on_conflict_do_nothing(
                     # index_elements=[table.c[conflict_column]]
                 )
-                self.logger.debug(f"ON CONFLICT DO NOTHING on column '{conflict_column}'")
+                self.logger.info(f"ON CONFLICT DO NOTHING on column '{conflict_column}'")
 
             # ------------------------------------
             # OPTION B → ON CONFLICT DO UPDATE

@@ -71,7 +71,7 @@ if __name__ == "__main__":
     names = [{"name":"mica"}, {"name":"ana"}]
     db.create_table("db_test")
 
-    db.bulk_upsert("db_test",names,"id",True, False)
+    db.bulk_insert("db_test",names)
 
 
 
