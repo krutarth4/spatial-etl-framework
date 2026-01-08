@@ -66,8 +66,9 @@ class DataSourceABCImpl(DataSourceABC):
             self.run()
 
     def create_data_tables(self):
-        self.logger.info(f"Creating table")
-        self.db.create_table(self.data_source_config.storage.table_name)
+        if self.data_source_config.storage.persistent and self.db is not None:
+            self.logger.info(f"Creating table")
+            self.db.create_table(self.data_source_config.storage.table_name)
 
     def check_before_update(self, old_data: Any, new_data: Any) -> bool:
         """
@@ -356,19 +357,19 @@ class DataSourceABCImpl(DataSourceABC):
         self.post_filter_processing()
 
     def load(self):
+        db_storage = self.data_source_config.storage
         try:
-            if not self.data_source_config.storage.persistent:
+            if not db_storage.persistent:
                 self.logger.warning(
                     f"data source {self.data_source_name} persistent is set to false. Hence it won't be saved to the database ")
 
             else:
                 if self.db is not None:
                     self.logger.warning("found new data hence continuing with db upsert")
-                    self.create_data_tables()
-                    # print(self.source_result[0]) # to check the data type for the bulk_insert
-
                     # self.db.bulk_upsert(self.data_source_config.storage.table_name, self.source_result, do_skip=True)
-                    self.db.bulk_insert(self.data_source_config.storage.table_name, self.source_result)
+                    self.db.bulk_insert(db_storage.table_name, self.source_result)
+
+
 
         except Exception as e:
             self.logger.error(f"Error occurred while loading the file into Database: {e}")
@@ -378,12 +379,14 @@ class DataSourceABCImpl(DataSourceABC):
 
         try:
             # 1 Extract
-
             paths = self.extract()
+            # Testing scalability with small dataset from elevation  # TODO: Remove later
+            # paths = ['tmp/elevation_zips/elevation_DGM1_368_5808.zip.zip',
+            #           'tmp/elevation_zips/elevation_DGM1_370_5806.zip.zip']
 
             if not DataSourceABCImpl.is_file_available(paths):
                 return self.run_job_response("No files available")
-
+            self.create_data_tables()
             for i, path in enumerate(paths):
                 self.logger.info(f"Reading file {i + 1} -> {path}")
                 self.transform(path)
@@ -406,11 +409,16 @@ class DataSourceABCImpl(DataSourceABC):
                 else:
                     self.load()
                     self.map_to_base()
-
+            # add indexes for the newly formed table
+            self.recreate_table_indexes()
         except Exception as e:
             self.logger.error(f"Error occurred in run {e}")
 
         return self.run_job_response("Job finished Successfully !!!")
+
+    def recreate_table_indexes(self):
+        if self.db is not None and self.data_source_config.storage.persistent:
+            self.db.create_indexes(self.data_source_config.storage.table_name)
 
     def post_filter_processing_save_data(self, conf):
         file_handler = FileHandler(conf.destination)

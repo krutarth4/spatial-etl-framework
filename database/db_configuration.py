@@ -264,7 +264,7 @@ class DbConfiguration:
                 "nullable": col["nullable"],  # nullable?
                 # "default": str(col.get("default")),  # default value
                 # "autoincrement": col.get("autoincrement"),
-                "python_type": col["type"].python_type
+                "python_type": col["type"].python_type or None,
             }
 
         return db_info
@@ -303,7 +303,7 @@ class DbConfiguration:
                 # DB inteprets the default value as false hence added a check
                 # "autoincrement": False if col.autoincrement == "auto" else col.autoincrement,
                 # "all": col,
-                "python_type": col.type.python_type,
+                "python_type": col.type.python_type or None,
             }
         return orm_info
     #TODO: implement to be used by both the factors

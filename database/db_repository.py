@@ -9,6 +9,7 @@ from geoalchemy2 import Geometry
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import inspect, MetaData, create_engine, select, delete, update, insert, Column, Integer, BigInteger, \
     String, text, func, Row, RowMapping, TIMESTAMP, Numeric
+from sqlalchemy.util import deprecated
 
 from database.base import Base
 from database.db_configuration import DbConfiguration
@@ -67,8 +68,9 @@ SQLALCHEMY_TYPE_MAP = {
     "array": ARRAY
 }
 
+
 class DBRepository(DbConfiguration):
-    _UPSERT_THRESHOLD = 5000 #Not the best upsert threshold makes it too slow
+    _UPSERT_THRESHOLD = 5000  # Not the best upsert threshold makes it too slow
 
     def __init__(self, db_conf, base, graph):
 
@@ -76,6 +78,7 @@ class DBRepository(DbConfiguration):
         self.graph = graph
         super().__init__(db_conf, self.base_table)
         self.logger = LoggerManager(__name__).logger
+        self.table_index_map = {}
 
     def create_base_table_force(self):
         if self.base_config.force_generate:
@@ -117,14 +120,43 @@ class DBRepository(DbConfiguration):
         self.logger.info(f"create table {table_name}")
         table = Base.metadata.tables[self.normalize_table_name(table_name, False)]
         if not self.table_exists(table_name):
-            self.drop_indexes_for_table(table_name, self.schema)
+            original_indexes = set(table.indexes)
+            self.table_index_map[table_name] = original_indexes
             table.schema = self.schema
+            table.indexes.clear()
             Base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=True)
         else:
             if not self.table_schema_matches(table_name):
                 self.drop_table(table_name, True, True)
                 table.schema = self.schema
                 Base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=True)
+
+    def index_exists(self, index_name: str, schema: str) -> bool:
+        sql = text("""
+                   SELECT 1
+                   FROM pg_indexes
+                   WHERE schemaname = :schema
+                     AND indexname = :index
+                   """)
+        with self.engine.connect() as conn:
+            return conn.execute(
+                sql, {"schema": schema, "index": index_name}
+            ).scalar() is not None
+
+    @measure_time(label="create indexes")
+    def create_indexes(self, table_name: str):
+        table = Base.metadata.tables[self.normalize_table_name(table_name, False)]
+        schema = self.schema
+        table.indexes.update(self.table_index_map[table_name])
+
+        for idx in table.indexes:
+            if self.index_exists(idx.name, schema):
+                self.logger.info(f"Index exists, skipping: {idx.name}")
+                continue
+
+            self.logger.info(f"Creating index: {idx.name}")
+            idx.create(bind=self.engine)
+
     @contextmanager
     def raw_pg_connection(self):
         conn = self.engine.raw_connection()
@@ -195,10 +227,12 @@ class DBRepository(DbConfiguration):
         except Exception as e:
             self.logger.error(f"Bulk insert failed for '{table_name}': {e}")
             raise
+
+    @deprecated
     @measure_time(label="bulk upsert")
     def bulk_upsert(self, table_name: str, data_list: list[dict], conflict_column: str = "uid", do_update: bool = False,
                     do_skip: bool = True):
-        #TODO: Check if the table exist before doing upsert
+        # TODO: Check if the table exist before doing upsert
         """Efficiently insert or update multiple rows using ON CONFLICT (PostgreSQL)."""
         self.logger.info(f"bulk upsert in {table_name} # no of rows: {len(data_list)}")
         if not data_list and not isinstance(data_list, list):
@@ -206,8 +240,8 @@ class DBRepository(DbConfiguration):
             return
         if do_update and do_skip:
             raise ValueError("on_update=True and on_skip=True cannot be used together")
-        for i in range(0,len(data_list),self._UPSERT_THRESHOLD):
-            batch_data = data_list[i:i+self._UPSERT_THRESHOLD]
+        for i in range(0, len(data_list), self._UPSERT_THRESHOLD):
+            batch_data = data_list[i:i + self._UPSERT_THRESHOLD]
             table = self.get_table(table_name)
             # FILTER INPUT DATA TO ALLOWED COLUMNS
             table_columns = {c.name for c in table.columns}
@@ -242,15 +276,14 @@ class DBRepository(DbConfiguration):
                 )
                 self.logger.debug(f"ON CONFLICT DO UPDATE on column '{conflict_column}'")
 
-
             try:
                 with self.engine.begin() as conn:
                     conn.execute(stmt)
-                self.logger.info(f"Bulk upserted {len(batch_data)} rows into '{table_name}. Remaining data {len(data_list)-(i+len(batch_data))}")
+                self.logger.info(
+                    f"Bulk upserted {len(batch_data)} rows into '{table_name}. Remaining data {len(data_list) - (i + len(batch_data))}")
             except SQLAlchemyError as e:
                 msg = getattr(e, "orig", e)
                 self.logger.error(f"Bulk upsert failed: {msg}")
-
 
     def resolve_sqlalchemy_type(self, type_str: str):
         """
@@ -407,12 +440,12 @@ class DBRepository(DbConfiguration):
             default_value,
             True
         )
+
     def update_column_data_in_db(self):
         """
         this function helps to update column data in the database.
         The update and processing takes place in the database side rather than local in pipeline
         """
-
 
     def update_column_data(self):
         """
@@ -504,7 +537,6 @@ class DBRepository(DbConfiguration):
             with self.engine.begin() as conn:
                 conn.execute(sql)
 
-
         # NORMAL DROP
         self.logger.warning(f"Dropping table '{full_name}' ...")
 
@@ -560,7 +592,6 @@ class DBRepository(DbConfiguration):
             self.logger.error(f"Update failed for '{table_name}': {e}")
             raise
 
-
     def clone_table_schema_with_data(self, source_schema: str, table_name: str, target_schema: str,
                                      target_table_name: str, copy_data: bool = False):
         """
@@ -612,6 +643,8 @@ class DBRepository(DbConfiguration):
         except Exception as e:
             self.logger.error(f"SQL execution failed: {e}")
             raise
+
+
 if __name__ == "__main__":
     # db = DBRepository()
     pass

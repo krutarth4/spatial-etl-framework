@@ -17,7 +17,7 @@ class ElevationTable(Base):
     lat = Column(Float)
     lon = Column(Float)
     altitude = Column(Float)
-    geom = Geometry(geometry_type="POINT", srid=4326)
+    geom = Column(Geometry(geometry_type="POINT", srid=4326))
 
 
 class ElevationMapper(DataSourceABCImpl):
