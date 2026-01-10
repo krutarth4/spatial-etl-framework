@@ -46,7 +46,7 @@ class HttpHandler:
 
     def call(self, uri: str, destination_path: Optional[Union[str, Path]] = "../", stream: bool = False,
              chunk_size: int = 8192, headers: Optional[dict] = None, params: Optional[Union[dict, list]] = None,
-             timeout: int = 30, file_extension: str = "json") -> str:
+             timeout: tuple[int,int] = (30,300), file_extension: str = "json") -> str:
         uri = uri.strip()
         destination_path = Path(destination_path.strip())
 
@@ -96,7 +96,7 @@ class HttpHandler:
             self.logger.error(f"HTTP request failed: {e}")
             raise
 
-    def get_metadata_from_call(self, uri: str, params, headers: dict | None = None, timeout=10):
+    def get_metadata_from_call(self, uri: str, params, headers: dict | None = None, timeout:tuple=(30,120)):
         try:
             with (requests.get(
                     uri,
