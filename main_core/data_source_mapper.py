@@ -53,6 +53,15 @@ class SourceMultiFetchStrategy(str, Enum):
     def has_value(cls, value):
         return value in cls._value2member_map_
 
+class MappingStrategyDTO(str, Enum):
+    EXPAND_PARAMS = "expand_params"
+    URL_TEMPLATE = "url_template"
+    EXPLICIT_URL_LIST = "explicit_url_list"
+
+    @classmethod
+    def has_value(cls, value):
+        return value in cls._value2member_map_
+
 
 @dataclass
 class StorageDTO:
@@ -74,9 +83,9 @@ class BaseDataMappingSourceDTO:
 @dataclass
 class MappingDTO:
     joins_on: str
+    strategy: Optional[MappingStrategyDTO]
     enable: bool
     base_table: BaseDataMappingSourceDTO
-    # mapping: Mapping[str, Any]
 
 
 @dataclass
