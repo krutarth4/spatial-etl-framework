@@ -49,7 +49,7 @@ class DataSourceABCImpl(DataSourceABC):
 
     def __init__(self, data_source_conf: DataSourceDTO, db_instance: DbInstance | None, scheduler_core: InitScheduler):
         self.metadata = None
-        self.source_result = None
+        self.source_result : List | None= None
         self.logger = LoggerManager(type(self).__name__)
         self.data_source_config = data_source_conf
         self.data_source_name = data_source_conf.name
@@ -349,6 +349,7 @@ class DataSourceABCImpl(DataSourceABC):
 
         self.source_result = result
         # print(self.source_result)
+        self.pre_filter_processing()
         # 1.1 filter from the results in case needs to be filtered
         self.source_result = self.source_filter(self.source_result)
 
@@ -365,6 +366,7 @@ class DataSourceABCImpl(DataSourceABC):
             else:
                 if self.db is not None:
                     self.logger.warning("found new data hence continuing with db upsert")
+                    self.pre_database_processing()
                     # self.db.bulk_upsert(self.data_source_config.storage.table_name, self.source_result, do_skip=True)
                     self.db.bulk_insert(db_storage.table_name, self.source_result)
 
@@ -410,6 +412,7 @@ class DataSourceABCImpl(DataSourceABC):
                     self.map_to_base()
             # add indexes for the newly formed table
             self.recreate_table_indexes()
+            self.post_database_processing()
         except Exception as e:
             self.logger.error(f"Error occurred in run {e}")
 
@@ -475,6 +478,17 @@ class DataSourceABCImpl(DataSourceABC):
 
     '''
 
+    def pre_filter_processing(self):
+        pass
+
+    def pre_database_processing(self):
+        pass
+
+    def post_database_processing(self):
+
+        self.source_result=[]
+
+
     def map_to_base(self):
         if self.data_source_config.data_type != "static" and self.data_source_config.mapping.enable:
             try:
@@ -491,12 +505,7 @@ class DataSourceABCImpl(DataSourceABC):
 
     def create_job(self):
         self.logger.info(f"Job creation started for {self.job_configuration.name}")
-        # if self.data_source_config.source.run_once:
-        #     pass
-        # elif self.data_source_config.source.frequency:
-        #     pass
-        # else:
-        #     pass
+
         trigger_conf = self.job_configuration.trigger.type
 
         TRIGGER_MAP = {

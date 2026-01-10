@@ -45,19 +45,57 @@ class DataSourceABC(ABC):
         pass
 
     @abstractmethod
-    def transform(self, path: Path|str):
+    def transform(self, path: Path | str):
         pass
 
     @abstractmethod
     def extract(self):
+        """
+        Extract method extracts the data eiother through the http call or local call and find the paths
+        , this is the top class containing source , fetch , and check_metadata functions
+        """
+        pass
+
+    @abstractmethod
+    def pre_filter_processing(self):
+        pass
+
+    @abstractmethod
+    def post_filter_processing(self):
+        pass
+
+    """
+    Execute any function which needs to be implemented before inserting data into the db 
+    """
+
+    @abstractmethod
+    def pre_database_processing(self):
+        """
+        Execute any function which needs to be implemented before inserting data into the db
+        """
+        pass
+
+
+
+    @abstractmethod
+    def post_database_processing(self):
+        """
+        Execute any functionality here after the db upload of data is done
+        """
         pass
 
     # -------------------------------------
 
     @abstractmethod
     def create_job(self):
+        """
+        Create job for the scheduler
+        """
         pass
 
     # TODO: Not the best idea for the run as it can be different for each class
     def run(self):
+        """
+        The main function which executes for all the datasources and contains the main logis of execution steps
+        """
         pass
