@@ -68,8 +68,8 @@ class LoggerManager:
     def warning(self, msg: str):
         self.logger.warning(msg)
 
-    def error(self, msg: str, exc: Exception| None = None, exc_info: bool = True):
-        self.logger.error(msg, exc, exc_info=exc_info)
+    def error(self, msg: str, exc_info: bool = True):
+        self.logger.error(msg, exc_info=exc_info)
 
     def _log(self, msg: str):
         self.logger.log(5, msg=msg)
