@@ -257,7 +257,7 @@ class DataSourceABCImpl(DataSourceABC):
                 result.append(res)
             else:
                 self.logger.error(
-                    f"File {res.name} not readable or the format specifies by read_file_content not correct")
+                    f"File {path} not readable or the format specifies by read_file_content not correct")
         except Exception as e:
             self.logger.error(f"Error occurred while reading the files {e}")
 
