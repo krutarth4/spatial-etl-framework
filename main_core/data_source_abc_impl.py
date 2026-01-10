@@ -97,7 +97,6 @@ class DataSourceABCImpl(DataSourceABC):
                                          file_extension=source.response_type)
                 paths.append(path)
             else:
-                # path = Path(source.destination)
                 paths.append(source.destination)
 
         elif source.fetch in FetchTypeEnum.LOCAL.value:
@@ -190,7 +189,7 @@ class DataSourceABCImpl(DataSourceABC):
                             try:
                                 url = multi_fetch.url_template.format(**params_dict)
                             except Exception as e:
-                                self.logger.error("URL template and template urls specified not correct ", e)
+                                self.logger.error(f"URL template and template urls specified not correct {e} ")
                             path = self.create_file_name_for_multi_fetch_expand_params(source, params_dict)
                             paths.append(path)
 
@@ -260,7 +259,7 @@ class DataSourceABCImpl(DataSourceABC):
                 self.logger.error(
                     f"File {res.name} not readable or the format specifies by read_file_content not correct")
         except Exception as e:
-            self.logger.error(f"Error occurred while reading the files", e)
+            self.logger.error(f"Error occurred while reading the files {e}")
 
         return result
 
@@ -488,7 +487,7 @@ class DataSourceABCImpl(DataSourceABC):
                     self.map_to_links()
 
             except Exception as e:
-                self.logger.error(f"Error occurred during base table update {e}", e)
+                self.logger.error(f"Error occurred during base table update {e}")
 
     def create_job(self):
         self.logger.info(f"Job creation started for {self.job_configuration.name}")
