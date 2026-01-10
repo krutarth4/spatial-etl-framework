@@ -39,8 +39,8 @@ class AirPollutionGrid(Base):
         UniqueConstraint("id", "forecast_time", name="uq_airgrid_forecast"),
     )
 class AirQualityDataMapper(DataSourceABCImpl):
-    skips = [0, 100000, 200000, 300000]
-    transformer = Transformer.from_crs(25833, 4326, always_xy=True)
+    # skips = [0, 100000, 200000, 300000]
+    # transformer = Transformer.from_crs(25833, 4326, always_xy=True)
 # f"https://werkzeug.dcaiti.tu-berlin.de/fairqberlin/inwt_fairq_cache_skip_{skip}_limit_100000.json.gz",f"./airw_{skip}.json.gz")
 #     def fetch(self):
 #         http_handler = HttpHandler()
