@@ -148,7 +148,6 @@ class DataSourceDTO:
     enable: bool
     class_name: str
     data_type: str
-    check_before_update: bool
     source: SourceDTO
     pre_filter_processing: Optional[PostFilterDTO]
     post_filter_processing: Optional[PostFilterDTO]

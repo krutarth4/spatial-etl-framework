@@ -49,7 +49,7 @@ class DataSourceABCImpl(DataSourceABC):
 
     def __init__(self, data_source_conf: DataSourceDTO, db_instance: DbInstance | None, scheduler_core: InitScheduler):
         self.metadata = None
-        self.source_result : List | None= None
+        self.source_result: List | None = None
         self.logger = LoggerManager(type(self).__name__)
         self.data_source_config = data_source_conf
         self.data_source_name = data_source_conf.name
@@ -78,7 +78,20 @@ class DataSourceABCImpl(DataSourceABC):
         # get the data from the raw file that we always save / or from the database metadata
 
         # if same metadta then let it be otherwise continue with the job
-        # TODO: have a hashing algorithm implemented to check the difference
+
+        # found_new_data = True
+        # if self.data_source_config.check_before_update:
+        #     if self.db is not None and self.data_source_config.storage.persistent:
+        #         self.logger.info(f"Checking for changes before update {self.data_source_config.name} ......")
+        #         old_data = self.db.fetch_columns_with_limits(self.data_source_config.storage.table_name)
+        #         found_new_data = DataSourceABCImpl.check_before_update_condition(old_data, self.source_result)
+        # else:
+        #     self.logger.warning(f"Check on the file disabled  {self.data_source_config.name}")
+        # return found_new_data
+        return True
+
+    @staticmethod
+    def check_before_update_condition(self, old_data: Any, new_data: Any):
         if old_data is None or new_data is None or (len(old_data) != len(new_data)):
             return True
         else:
@@ -392,24 +405,13 @@ class DataSourceABCImpl(DataSourceABC):
                 self.logger.info(f"Reading file {i + 1} -> {path}")
                 self.transform(path)
 
-                # implement checking the file before updating the main file
-                # TODO: needs to be rething the BL for the new data set / found_new_data after data transformation
-                found_new_data = True
-                if self.data_source_config.check_before_update:
-                    if self.db is not None and self.data_source_config.storage.persistent:
-                        self.logger.info(f"Checking for changes before update {self.data_source_config.name} ......")
-                        old_data = self.db.fetch_columns_with_limits(self.data_source_config.storage.table_name)
-                        # found_new_data = self.check_before_update(old_data, self.source_result)
-                else:
-                    self.logger.warning(f"Check on the file disabled  {self.data_source_config.name}")
-
-                if not found_new_data:
-                    self.logger.warning(f"No new data available for {self.data_source_config.name}")
-                    return self.run_job_response(f"No new data available for {self.data_source_config.name}")
-
-                else:
+                if self.check_before_update():
                     self.load()
                     self.map_to_base()
+
+                else:
+                    self.logger.warning(f"No new data available for {self.data_source_config.name}")
+                    return self.run_job_response(f"No new data available for {self.data_source_config.name}")
             # add indexes for the newly formed table
             self.recreate_table_indexes()
             self.post_database_processing()
@@ -486,8 +488,7 @@ class DataSourceABCImpl(DataSourceABC):
 
     def post_database_processing(self):
 
-        self.source_result=[]
-
+        self.source_result = []
 
     def map_to_base(self):
         if self.data_source_config.data_type != "static" and self.data_source_config.mapping.enable:
