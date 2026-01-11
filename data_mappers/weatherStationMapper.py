@@ -1,16 +1,17 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint
 
 from database.base import Base
 from main_core.data_source_abc_impl import DataSourceABCImpl
 
 
 class DwdStationsTable(Base):
+    # Make sure no indexing and constrains are added here other than a PK
     __tablename__ = "dwd_station_locations"
 
     uid = Column(Integer, primary_key=True, autoincrement=True,
                  index=True)  # make sure to create indexing for the table for better query and fast computation
     id = Column(Integer)
-    dwd_station_id = Column(Integer, unique=True, nullable=False, index=True)
+    dwd_station_id = Column(Integer, unique=True, nullable=False)
     station_name = Column(String)
     observation_type = Column(String)
     lat = Column(Float)
@@ -19,6 +20,32 @@ class DwdStationsTable(Base):
     wmo_station_id = Column(String)
     first_record = Column(DateTime(timezone=True))
     last_record = Column(String)
+
+
+class StationLocationLink(Base):
+    __tablename__ = "station_location_link"
+    uid = Column(Integer, primary_key=True, autoincrement=True)
+
+    link_id = Column(
+        Integer,
+        ForeignKey("ways_base.link_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    station_id = Column(
+        Integer,
+        ForeignKey("dwd_station_locations.dwd_station_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "link_id",
+            "station_id",
+            name="uq_station_link"
+        ),)
 
 
 class WeatherStationMapper(DataSourceABCImpl):
@@ -37,10 +64,10 @@ class WeatherStationMapper(DataSourceABCImpl):
         return filtered
 
     #  This check is called right after the source filter if we should continue
-    def check_before_update(self, old_data, new_data) -> bool:
-        if len(old_data) != len(new_data):
-            return True
-        return False
+    # def check_before_update(self, old_data, new_data) -> bool:
+    #     if len(old_data) != len(new_data):
+    #         return True
+    #     return False
 
     # TODO: mapper to understand how the data is mapped -> for the routing servce to unserstand how the data is mapped
     def map_to_link_db_query(self) -> None | str:

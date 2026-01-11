@@ -115,7 +115,8 @@ class DBRepository(DbConfiguration):
             True
         )
 
-    def create_table_if_not_exist(self, table_name: str, force_create: bool = False):
+    def create_table_if_not_exist(self, table_name: str, force_create: bool = False,
+                                  create_without_indexes: bool = False):
         """Create table defined in Base.metadata."""
         self.logger.info(f"create table {table_name}")
         table = Base.metadata.tables[self.normalize_table_name(table_name, False)]
@@ -124,9 +125,16 @@ class DBRepository(DbConfiguration):
 
         if not self.table_exists(table_name):
             original_indexes = set(table.indexes)
-            self.table_index_map[table_name] = original_indexes
+            # TODO:
+            """
+            TODO: Maybe dont need anymore as we are creating two staging tables one 
+            where processing on raw data happens and the other for persistence in case set to true
+            
+            """
+            if create_without_indexes:
+                self.table_index_map[table_name] = original_indexes
+                table.indexes.clear()
             table.schema = self.schema
-            table.indexes.clear()
             Base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=True)
         else:
             if not self.table_schema_matches(table_name):
@@ -169,9 +177,9 @@ class DBRepository(DbConfiguration):
             ).scalar() is not None
 
     @measure_time(label="create indexes")
-    def create_indexes(self, table_name: str):
+    def create_indexes(self, table_name: str, schema: str = None):
         table = Base.metadata.tables[self.normalize_table_name(table_name, False)]
-        schema = self.schema
+        schema = schema or self.schema
         table.indexes.update(self.table_index_map[table_name])
 
         for idx in table.indexes:
@@ -181,6 +189,8 @@ class DBRepository(DbConfiguration):
 
             self.logger.info(f"Creating index: {idx.name}")
             idx.create(bind=self.engine)
+        #     Delete the mapping from the internal storage after successful creation
+        del self.table_index_map[table_name]
 
     @contextmanager
     def raw_pg_connection(self):
@@ -199,7 +209,7 @@ class DBRepository(DbConfiguration):
             self,
             table_name: str,
             data_list: list[dict],
-            staging:bool = False,
+            staging: bool = False,
     ):
         if not data_list:
             self.logger.info("No data to insert.")
@@ -255,63 +265,6 @@ class DBRepository(DbConfiguration):
         except Exception as e:
             self.logger.error(f"Bulk insert failed for '{table_name}': {e}")
             raise
-
-    @deprecated
-    @measure_time(label="bulk upsert")
-    def bulk_upsert(self, table_name: str, data_list: list[dict], conflict_column: str = "uid", do_update: bool = False,
-                    do_skip: bool = True):
-        # TODO: Check if the table exist before doing upsert
-        """Efficiently insert or update multiple rows using ON CONFLICT (PostgreSQL)."""
-        self.logger.info(f"bulk upsert in {table_name} # no of rows: {len(data_list)}")
-        if not data_list and not isinstance(data_list, list):
-            self.logger.error(f"data should be in the format of list")
-            return
-        if do_update and do_skip:
-            raise ValueError("on_update=True and on_skip=True cannot be used together")
-        for i in range(0, len(data_list), self._UPSERT_THRESHOLD):
-            batch_data = data_list[i:i + self._UPSERT_THRESHOLD]
-            table = self.get_table(table_name)
-            # FILTER INPUT DATA TO ALLOWED COLUMNS
-            table_columns = {c.name for c in table.columns}
-            cleaned_data = [
-                {k: v for k, v in row.items() if k in table_columns}
-                for row in batch_data
-            ]
-
-            stmt = Insert(table).values(cleaned_data)
-            # ------------------------------------
-            # OPTION A → ON CONFLICT DO NOTHING
-            # ------------------------------------
-            if do_skip:
-                stmt = stmt.on_conflict_do_nothing(
-                    # index_elements=[table.c[conflict_column]]
-                )
-                self.logger.info(f"ON CONFLICT DO NOTHING on column '{conflict_column}'")
-
-            # ------------------------------------
-            # OPTION B → ON CONFLICT DO UPDATE
-            # ------------------------------------
-            elif do_update:
-                update_dict = {
-                    c.name: stmt.excluded[c.name]
-                    for c in table.columns
-                    if c.name not in (conflict_column, "id")
-                }
-
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=[table.c[conflict_column]],
-                    set_=update_dict
-                )
-                self.logger.debug(f"ON CONFLICT DO UPDATE on column '{conflict_column}'")
-
-            try:
-                with self.engine.begin() as conn:
-                    conn.execute(stmt)
-                self.logger.info(
-                    f"Bulk upserted {len(batch_data)} rows into '{table_name}. Remaining data {len(data_list) - (i + len(batch_data))}")
-            except SQLAlchemyError as e:
-                msg = getattr(e, "orig", e)
-                self.logger.error(f"Bulk upsert failed: {msg}")
 
     def resolve_sqlalchemy_type(self, type_str: str):
         """

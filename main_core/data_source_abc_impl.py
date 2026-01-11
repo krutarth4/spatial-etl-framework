@@ -68,12 +68,18 @@ class DataSourceABCImpl(DataSourceABC):
     def create_data_tables(self):
         if self.data_source_config.storage.persistent and self.db is not None:
             self.logger.info(f"Creating table")
-            self.db.create_table_if_not_exist(self.data_source_config.storage.table_name,
-                                              self.data_source_config.storage.force_create)
-            self.create_staging_tables(self.data_source_config.storage.table_name)
+            force_create = self.data_source_config.storage.force_create
+            self.create_staging_tables(self.data_source_config.storage.staging.table_name, force_create)
+            self.create_enrichment_tables(self.data_source_config.storage.enrichment.table_name,force_create)
 
-    def create_staging_tables(self, table_name: str):
+    def create_staging_tables(self, table_name: str, force_create: bool):
+        self.db.create_table_if_not_exist(table_name,
+                                          force_create, False)
         self.db.create_unlogged_staging_table(table_name)
+
+    def create_enrichment_tables(self, table_name: str, force_create: bool):
+        self.db.create_table_if_not_exist(table_name,
+                                          force_create, False)
 
     def check_before_update(self) -> bool:
         """
@@ -385,7 +391,6 @@ class DataSourceABCImpl(DataSourceABC):
                 if self.db is not None:
                     self.logger.warning("found new data hence continuing with db upsert")
                     self.pre_database_processing()
-                    # self.db.bulk_upsert(self.data_source_config.storage.table_name, self.source_result, do_skip=True)
                     self.db.bulk_insert(db_storage.table_name, self.source_result, True)
 
 
@@ -417,7 +422,7 @@ class DataSourceABCImpl(DataSourceABC):
                 else:
                     self.logger.warning(f"No new data available for {self.data_source_config.name}")
                     return self.run_job_response(f"No new data available for {self.data_source_config.name}")
-            # add indexes for the newly formed table
+            # add indexes for the newly formed table for faster inserts and transactions
             self.recreate_table_indexes()
             self.post_database_processing()
         except Exception as e:
@@ -427,7 +432,9 @@ class DataSourceABCImpl(DataSourceABC):
 
     def recreate_table_indexes(self):
         if self.db is not None and self.data_source_config.storage.persistent:
-            self.db.create_indexes(self.data_source_config.storage.table_name)
+            self.db.create_indexes(self.data_source_config.storage.enrichment.table_name, self.data_source_config
+                                   .storage.enrichment.table_schema)
+            self.db.create_indexes(self.data_source_config.storage.staging.table_name, self.data_source_config.storage.staging.table_schema)
 
     def post_filter_processing_save_data(self, conf):
         file_handler = FileHandler(conf.destination)
@@ -536,3 +543,5 @@ class DataSourceABCImpl(DataSourceABC):
             "executor": "process" if self.job_configuration.executor is not None else "default"
         }
         self.scheduler.add_job(job_conf, self.job_configuration.id or self.data_source_name)
+
+

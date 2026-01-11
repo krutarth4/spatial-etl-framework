@@ -37,7 +37,7 @@ class DataSourceABC(ABC):
         pass
 
     @abstractmethod
-    def check_before_update(self, old_data, new_data):
+    def check_before_update(self):
         pass
 
     @abstractmethod
