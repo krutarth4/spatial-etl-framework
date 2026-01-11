@@ -71,8 +71,8 @@ class StagingConfDTO:
     table_class: str
     persistent: Optional[bool] = False
 
-
-class EnrichmentConfDto:
+@dataclass
+class EnrichmentConfDTO:
     table_name: str
     table_schema: str
     table_class: str
@@ -80,7 +80,7 @@ class EnrichmentConfDto:
 
 @dataclass
 class StorageDTO:
-    enrichment: EnrichmentConfDto
+    enrichment: EnrichmentConfDTO
     persistent: bool
     staging: StagingConfDTO
     expires_after: Optional[str]
@@ -195,7 +195,7 @@ class DataSourceMapper:
                         result.append(data)
             return result
         except Exception as e:
-            self.logger.error(f"Error loading data sources for {source.get("name")} {e}", e)
+            self.logger.error(f"Error loading data sources for {source.get("name")} {e}")
 
     def run_data_source_mapper(self):
         for source in self.data_sources:
