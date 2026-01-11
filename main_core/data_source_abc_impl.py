@@ -68,9 +68,14 @@ class DataSourceABCImpl(DataSourceABC):
     def create_data_tables(self):
         if self.data_source_config.storage.persistent and self.db is not None:
             self.logger.info(f"Creating table")
-            self.db.create_table_if_not_exist(self.data_source_config.storage.table_name, self.data_source_config.storage.force_create)
+            self.db.create_table_if_not_exist(self.data_source_config.storage.table_name,
+                                              self.data_source_config.storage.force_create)
+            self.create_staging_tables(self.data_source_config.storage.table_name)
 
-    def check_before_update(self, old_data: Any, new_data: Any) -> bool:
+    def create_staging_tables(self, table_name: str):
+        self.db.create_unlogged_staging_table(table_name)
+
+    def check_before_update(self) -> bool:
         """
         After the fetch define some criteria to check if the new data is available or not , if not then return otherwise continue with the run method as usual
 
@@ -381,7 +386,7 @@ class DataSourceABCImpl(DataSourceABC):
                     self.logger.warning("found new data hence continuing with db upsert")
                     self.pre_database_processing()
                     # self.db.bulk_upsert(self.data_source_config.storage.table_name, self.source_result, do_skip=True)
-                    self.db.bulk_insert(db_storage.table_name, self.source_result)
+                    self.db.bulk_insert(db_storage.table_name, self.source_result, True)
 
 
 

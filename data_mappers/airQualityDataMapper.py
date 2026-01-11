@@ -6,8 +6,6 @@ from pyproj import Transformer
 from sqlalchemy import Integer, Column, DateTime, Float, ARRAY, UniqueConstraint, String
 
 from database.base import Base
-from handlers.file_handler import FileHandler
-from handlers.http_handler import HttpHandler
 from main_core.data_source_abc_impl import DataSourceABCImpl
 
 class AirPollutionGrid(Base):
@@ -39,31 +37,9 @@ class AirPollutionGrid(Base):
         UniqueConstraint("id", "forecast_time", name="uq_airgrid_forecast"),
     )
 class AirQualityDataMapper(DataSourceABCImpl):
-    # skips = [0, 100000, 200000, 300000]
-    # transformer = Transformer.from_crs(25833, 4326, always_xy=True)
 # f"https://werkzeug.dcaiti.tu-berlin.de/fairqberlin/inwt_fairq_cache_skip_{skip}_limit_100000.json.gz",f"./airw_{skip}.json.gz")
-#     def fetch(self):
-#         http_handler = HttpHandler()
-#         source = self.data_source_config.source
-#         data_mapper = []
-#         file_handler = FileHandler(source.destination)
-#
-#         for skip in self.skips:
-#             self.logger.info(f"fetching data from {source}:{skip}")
-#             destination = f"{source.destination}/airw_{skip}.{source.response_type}"
-#             url = f"{source.url}inwt_fairq_cache_skip_{skip}_limit_100000.json.gz"
-#             a = file_handler.get_latest_data_file(f"airw_{skip}",source.response_type)
-#             print("file handler", a)
-#             # result = self.load_and_store_gz_json(a)
-#
-#             result = http_handler.call(uri=url, params=source.params, headers=source.headers,
-#                                        destination_path=destination,
-#                                        save=source.save_local)
-#
-#
-#             data_mapper.extend(result)
-#
-#         return data_mapper
+
+    transformer = Transformer.from_crs(25833, 4326, always_xy=True)
 
     def read_file_content(self, path):
         return self.load_and_store_gz_json(path)

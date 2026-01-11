@@ -135,6 +135,27 @@ class DBRepository(DbConfiguration):
             else:
                 self.logger.info("Table exists, skipping the creation of the table")
 
+    @staticmethod
+    def get_staging_table_name(name) -> str:
+        return f"{name}_staging"
+
+    def create_unlogged_staging_table(self, table_name: str):
+        staging_table = self.get_staging_table_name(table_name)
+
+        if self.table_exists(staging_table):
+            self.logger.info(f"Staging table {staging_table} already exists")
+            return
+
+        sql = text(f"""
+            CREATE UNLOGGED TABLE {self.schema}.{staging_table}
+            (LIKE {self.schema}.{table_name} INCLUDING DEFAULTS)
+        """)
+
+        with self.engine.begin() as conn:
+            conn.execute(sql)
+
+        self.logger.info(f"Created UNLOGGED staging table {staging_table}")
+
     def index_exists(self, index_name: str, schema: str) -> bool:
         sql = text("""
                    SELECT 1
@@ -178,11 +199,13 @@ class DBRepository(DbConfiguration):
             self,
             table_name: str,
             data_list: list[dict],
+            staging:bool = False,
     ):
         if not data_list:
             self.logger.info("No data to insert.")
             return
-
+        if staging:
+            table_name = self.get_staging_table_name(table_name)
         table = self.get_table(table_name)
         if table is None:
             raise ValueError(f"Table '{table_name}' does not exist")
@@ -191,7 +214,8 @@ class DBRepository(DbConfiguration):
         insert_columns = [
             c.name
             for c in table.columns
-            if not c.primary_key or not c.autoincrement
+            if not (c.primary_key or c.autoincrement)
+
         ]
 
         if not insert_columns:

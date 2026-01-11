@@ -53,6 +53,7 @@ class SourceMultiFetchStrategy(str, Enum):
     def has_value(cls, value):
         return value in cls._value2member_map_
 
+
 class MappingStrategyDTO(str, Enum):
     EXPAND_PARAMS = "expand_params"
     URL_TEMPLATE = "url_template"
@@ -64,11 +65,24 @@ class MappingStrategyDTO(str, Enum):
 
 
 @dataclass
+class StagingConfDTO:
+    table_name: str
+    table_schema: str
+    table_class: str
+    persistent: Optional[bool] = False
+
+
+class EnrichmentConfDto:
+    table_name: str
+    table_schema: str
+    table_class: str
+
+
+@dataclass
 class StorageDTO:
-    table_name: Optional[str]
-    table_schema: Optional[str]
-    table_class: Optional[str]
+    enrichment: EnrichmentConfDto
     persistent: bool
+    staging: StagingConfDTO
     expires_after: Optional[str]
     force_create: Optional[bool] = False
 
@@ -132,8 +146,6 @@ class SourceDTO:
     params: Optional[Mapping[str, Any]]
     mode: str | SourceFetchModeEnum
     multi_fetch: Optional[SourceMultiFetchDTO]
-
-
 
 
 @dataclass
