@@ -115,10 +115,13 @@ class DBRepository(DbConfiguration):
             True
         )
 
-    def create_table(self, table_name: str):
+    def create_table_if_not_exist(self, table_name: str, force_create: bool = False):
         """Create table defined in Base.metadata."""
         self.logger.info(f"create table {table_name}")
         table = Base.metadata.tables[self.normalize_table_name(table_name, False)]
+        if force_create:
+            self.drop_table(table_name, True, True)
+
         if not self.table_exists(table_name):
             original_indexes = set(table.indexes)
             self.table_index_map[table_name] = original_indexes
@@ -127,9 +130,10 @@ class DBRepository(DbConfiguration):
             Base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=True)
         else:
             if not self.table_schema_matches(table_name):
-                self.drop_table(table_name, True, True)
-                table.schema = self.schema
-                Base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=True)
+                self.logger.info("Table schema doesn't match")
+                self.create_table_if_not_exist(table_name, True)
+            else:
+                self.logger.info("Table exists, skipping the creation of the table")
 
     def index_exists(self, index_name: str, schema: str) -> bool:
         sql = text("""

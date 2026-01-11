@@ -69,7 +69,7 @@ if __name__ == "__main__":
         name = Column(String)
 
     names = [{"name":"mica"}, {"name":"ana"}]
-    db.create_table("db_test")
+    db.create_table_if_not_exist("db_test")
 
     db.bulk_insert("db_test",names)
 

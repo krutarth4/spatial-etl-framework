@@ -68,7 +68,7 @@ class DataSourceABCImpl(DataSourceABC):
     def create_data_tables(self):
         if self.data_source_config.storage.persistent and self.db is not None:
             self.logger.info(f"Creating table")
-            self.db.create_table(self.data_source_config.storage.table_name)
+            self.db.create_table_if_not_exist(self.data_source_config.storage.table_name, self.data_source_config.storage.force_create)
 
     def check_before_update(self, old_data: Any, new_data: Any) -> bool:
         """
@@ -473,12 +473,6 @@ class DataSourceABCImpl(DataSourceABC):
     def map_to_link_db_query(self) -> None | str:
         sql_query = None
         return sql_query
-
-    '''
-    Method to map data to the base table 
-    @goal create a new column in base table to make it ready for the map link to data
-
-    '''
 
     def pre_filter_processing(self):
         pass

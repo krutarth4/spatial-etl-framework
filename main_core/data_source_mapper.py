@@ -70,6 +70,7 @@ class StorageDTO:
     table_class: Optional[str]
     persistent: bool
     expires_after: Optional[str]
+    force_create: Optional[bool] = False
 
 
 @dataclass
