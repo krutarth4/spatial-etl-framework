@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from main_core.data_source_mapper import SourceDTO
+from data_config_dtos.data_source_config_dto import SourceDTO
 
 
 class DataSourceABC(ABC):

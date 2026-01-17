@@ -5,7 +5,6 @@ from typing import Any
 import geopandas as gpd
 from dacite import from_dict
 from geoalchemy2.shape import to_shape
-from numpy.ma.core import max_filler
 from sqlalchemy import inspect, MetaData, create_engine, select, delete, update, insert, Column, Integer, BigInteger, \
     String, text, func, Row, RowMapping
 from sqlalchemy.exc import SQLAlchemyError
