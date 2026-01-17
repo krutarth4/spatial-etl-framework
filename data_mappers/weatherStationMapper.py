@@ -31,7 +31,7 @@ class DwdMappingTable(MappingTable):
     __tablename__ = "dwd_mapping_stations"
     uid = Column(Integer, primary_key=True, autoincrement=True)
     station_id = Column(Integer, unique=True, nullable=False)
-    way_id = Column(Integer, unique=True, nullable=False)
+    distance = Column(Float)
 
 # class StationLocationLink(Base):
 #     __tablename__ = "station_location_link"
@@ -80,19 +80,18 @@ class WeatherStationMapper(DataSourceABCImpl):
     #         return True
     #     return False
 
-    # TODO: mapper to understand how the data is mapped -> for the routing servce to unserstand how the data is mapped
-    # def map_to_link_db_query(self) -> None | str:
-    #     self.logger.info(f"Mapping DWD Stations to links through sql query")
-    #     sql = f"""
-    #         UPDATE {self.data_source_config.mapping.base_table.table_schema}
-    #         .{self.data_source_config.mapping.base_table.table_name} AS w
-    #         SET
-    #             {self.data_source_config.mapping.base_table.column_name} = (
-    #         SELECT d.dwd_station_id
-    #         FROM {self.data_source_config.storage.table_schema}.{self.data_source_config.storage.table_name} AS d
-    #         ORDER BY ST_SetSRID(ST_MakePoint(d.lon, d.lat), 4326) <->
-    #                 w.geom
-    #         LIMIT 1
-    #             )
-    #     """
-    #     return sql
+    def map_to_link_db_query(self) -> None | str:
+        self.logger.info(f"Mapping DWD Stations to links through sql query")
+        sql = f"""
+            UPDATE {self.data_source_config.mapping.base_table.table_schema}
+            .{self.data_source_config.mapping.base_table.table_name} AS w
+            SET
+                {self.data_source_config.mapping.base_table.column_name} = (
+            SELECT d.dwd_station_id
+            FROM {self.data_source_config.storage.table_schema}.{self.data_source_config.storage.table_name} AS d
+            ORDER BY ST_SetSRID(ST_MakePoint(d.lon, d.lat), 4326) <->
+                    w.geom
+            LIMIT 1
+                )
+        """
+        return sql

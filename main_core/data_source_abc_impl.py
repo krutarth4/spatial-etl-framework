@@ -477,13 +477,12 @@ class DataSourceABCImpl(DataSourceABC):
         return f"{ms}ms"
 
     def map_to_links(self):
-        print("this is ABC map to links")
         query = self.map_to_link_db_query()
         if query is not None:
-            print(f"calling the query, {query}")
+            self.logger.info(f"calling the query, {query}")
             self.db.call_sql(query)
         else:
-            print("Nothing done")
+            self.logger.info("Nothing done")
 
     def map_to_link_db_query(self) -> None | str:
         sql_query = None
