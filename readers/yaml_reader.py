@@ -9,7 +9,7 @@ from log_manager.logger_manager import LoggerManager
 
 
 class YamlReader:
-    PYTHON_BLOCK_PATTERN = r"\$\{\{(.*?)\}\}"
+    PYTHON_BLOCK_PATTERN = r"(?<!#)\$\{\{(.*?)\}\}"
     safe_globals = {
         "datetime": datetime,
         "ZoneInfo": ZoneInfo

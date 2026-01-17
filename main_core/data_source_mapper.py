@@ -26,8 +26,8 @@ class DataSourceMapper:
             result = []
             for source in self.data_sources:
                 if isinstance(source, dict):
-                    data = from_dict(DataSourceDTO, data=source, config=Config(cast=[dict]))
-                    if data.enable:
+                    if source["enable"]:
+                        data = from_dict(DataSourceDTO, data=source, config=Config(cast=[dict]))
                         result.append(data)
             return result
         except Exception as e:

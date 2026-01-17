@@ -70,14 +70,17 @@ class DataSourceABCImpl(DataSourceABC):
             force_create = storage_data.force_create
             self.create_staging_tables(storage_data.staging.table_name,storage_data.staging.table_schema, force_create)
             self.create_enrichment_tables(storage_data.enrichment.table_name,storage_data.enrichment.table_schema,force_create)
-            # self.create_mapping_tables
+            self.create_mapping_tables(self.data_source_config.mapping.table_name,self.data_source_config.mapping.table_schema,force_create)
 
     def create_staging_tables(self, table_name: str,schema:str, force_create: bool):
         self.db.create_table_if_not_exist(table_name,table_schema=schema or None,
                                           force_create=force_create,create_without_indexes=True)
-        # self.db.create_unlogged_staging_table(table_name)
 
     def create_enrichment_tables(self, table_name: str,schema : str, force_create: bool):
+        self.db.create_table_if_not_exist(table_name, table_schema= schema or None,
+                                          force_create=force_create, create_without_indexes=False)
+
+    def create_mapping_tables(self, table_name: str,schema : str, force_create: bool):
         self.db.create_table_if_not_exist(table_name, table_schema= schema or None,
                                           force_create=force_create, create_without_indexes=False)
 
