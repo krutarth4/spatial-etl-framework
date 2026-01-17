@@ -66,18 +66,20 @@ class DataSourceABCImpl(DataSourceABC):
     def create_data_tables(self):
         if self.data_source_config.storage.persistent and self.db is not None:
             self.logger.info(f"Creating table")
-            force_create = self.data_source_config.storage.force_create
-            self.create_staging_tables(self.data_source_config.storage.staging.table_name, force_create)
-            self.create_enrichment_tables(self.data_source_config.storage.enrichment.table_name,force_create)
+            storage_data = self.data_source_config.storage
+            force_create = storage_data.force_create
+            self.create_staging_tables(storage_data.staging.table_name,storage_data.staging.table_schema, force_create)
+            self.create_enrichment_tables(storage_data.enrichment.table_name,storage_data.enrichment.table_schema,force_create)
+            # self.create_mapping_tables
 
-    def create_staging_tables(self, table_name: str, force_create: bool):
-        self.db.create_table_if_not_exist(table_name,
-                                          force_create, False)
-        self.db.create_unlogged_staging_table(table_name)
+    def create_staging_tables(self, table_name: str,schema:str, force_create: bool):
+        self.db.create_table_if_not_exist(table_name,table_schema=schema or None,
+                                          force_create=force_create,create_without_indexes=True)
+        # self.db.create_unlogged_staging_table(table_name)
 
-    def create_enrichment_tables(self, table_name: str, force_create: bool):
-        self.db.create_table_if_not_exist(table_name,
-                                          force_create, False)
+    def create_enrichment_tables(self, table_name: str,schema : str, force_create: bool):
+        self.db.create_table_if_not_exist(table_name, table_schema= schema or None,
+                                          force_create=force_create, create_without_indexes=False)
 
     def check_before_update(self) -> bool:
         """
@@ -389,7 +391,8 @@ class DataSourceABCImpl(DataSourceABC):
                 if self.db is not None:
                     self.logger.warning("found new data hence continuing with db upsert")
                     self.pre_database_processing()
-                    self.db.bulk_insert(db_storage.staging.table_name, self.source_result, True)
+                    self.db.bulk_insert(db_storage.staging.table_name,db_storage.staging.table_schema
+                                        , self.source_result, True)
 
 
 

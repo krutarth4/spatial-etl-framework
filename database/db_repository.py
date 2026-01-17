@@ -114,9 +114,9 @@ class DBRepository(DbConfiguration):
             True
         )
 
-    def create_table_if_not_exist(self, table_name: str, force_create: bool = False,
+    def create_table_if_not_exist(self, table_name: str,table_schema: str = None, force_create: bool = False,
                                   create_without_indexes: bool = False):
-        """Create table defined in Base.metadata."""
+        """Create table defined in Base.metadata. for the data sources."""
         try:
 
             self.logger.info(f"create table {table_name}")
@@ -125,14 +125,9 @@ class DBRepository(DbConfiguration):
             if force_create:
                 self.drop_table(table_name, True, True)
 
-            if not self.table_exists(table_name):
+            if not self.table_exists(table_name,table_schema):
                 original_indexes = set(table.indexes)
-                # TODO:
-                """
-                TODO: Maybe dont need anymore as we are creating two staging tables one 
-                where processing on raw data happens and the other for persistence in case set to true
-                
-                """
+
                 if create_without_indexes:
                     self.table_index_map[table_name] = original_indexes
                     table.indexes.clear()
@@ -149,6 +144,7 @@ class DBRepository(DbConfiguration):
     @staticmethod
     def get_staging_table_name(name) -> str:
         return f"{name}_staging"
+
 
     def create_unlogged_staging_table(self, table_name: str):
         staging_table = self.get_staging_table_name(table_name)
@@ -182,20 +178,26 @@ class DBRepository(DbConfiguration):
     @measure_time(label="create indexes")
     def create_indexes(self, table_name: str, schema: str = None):
         table = Base.metadata.tables[self.normalize_table_name(table_name, False)]
-        if not self.table_exists(table_name):
+        if not self.table_exists(table_name,schema):
+            self.logger.warning(f"Table '{table_name}' doesn't exist. For recreating indexes...")
             return
         schema = schema or self.schema
-        table.indexes.update(self.table_index_map[table_name])
+        if table_name in self.table_index_map:
+            table.indexes.update(self.table_index_map[table_name])
 
-        for idx in table.indexes:
-            if self.index_exists(idx.name, schema):
-                self.logger.info(f"Index exists, skipping: {idx.name}")
-                continue
+            for idx in table.indexes:
+                if self.index_exists(idx.name, schema):
+                    self.logger.info(f"Index exists, skipping: {idx.name}")
+                    continue
 
-            self.logger.info(f"Creating index: {idx.name}")
-            idx.create(bind=self.engine)
-        #     Delete the mapping from the internal storage after successful creation
-        del self.table_index_map[table_name]
+                self.logger.info(f"Creating index: {idx.name}")
+                idx.create(bind=self.engine)
+            #     Delete the mapping from the internal storage after successful creation
+            if self.table_index_map[table_name]:
+                del self.table_index_map[table_name]
+        else:
+            self.logger.warning(f"Table '{table_name}' index skipped as the table indexes doesnt exist")
+
 
     @contextmanager
     def raw_pg_connection(self):
@@ -213,15 +215,16 @@ class DBRepository(DbConfiguration):
     def bulk_insert(
             self,
             table_name: str,
+            table_schema: str,
             data_list: list[dict],
             staging: bool = False,
     ):
         if not data_list:
             self.logger.info("No data to insert.")
             return
-        if staging:
-            table_name = self.get_staging_table_name(table_name)
-        table = self.get_table(table_name)
+        # if staging:
+        #     table_name = self.get_staging_table_name(table_name)
+        table = self.get_table(table_name, table_schema)
         if table is None:
             raise ValueError(f"Table '{table_name}' does not exist")
 

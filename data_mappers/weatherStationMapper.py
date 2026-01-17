@@ -9,11 +9,9 @@ from main_core.data_source_abc_impl import DataSourceABCImpl
 class DwdStationsTable(StagingTable):
     # Make sure no indexing and constrains are added here other than a PK
     __tablename__ = "dwd_station_locations"
-
-    uid = Column(Integer, primary_key=True, autoincrement=True,
-                 index=True)  # make sure to create indexing for the table for better query and fast computation
+    uid = Column(Integer, primary_key=True, autoincrement=True)
     id = Column(Integer)
-    dwd_station_id = Column(Integer, unique=True, nullable=False)
+    dwd_station_id = Column(Integer, nullable=False)
     station_name = Column(String)
     observation_type = Column(String)
     lat = Column(Float)

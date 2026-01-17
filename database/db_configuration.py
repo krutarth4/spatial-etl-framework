@@ -78,11 +78,11 @@ class DbConfiguration:
     # -----------------------------
     # Helper: get table object
     # -----------------------------
-    def get_table(self, table_name: str):
+    def get_table(self, table_name: str, schema:str =None):
 
-        table_name = self.normalize_table_name(table_name, True)
+        table_name = self.normalize_table_name(table_name, schema, True)
         if table_name not in self.metadata.tables:
-            self.logger.warning(f"Table '{table_name}' not found in schema '{self.schema}'. Reflecting metadata...")
+            self.logger.warning(f"Table '{table_name}' not found in schema '{schema or self.schema}'. Reflecting metadata...")
             self.update_metadata()
             # return None
             if table_name not in self.metadata.tables:
@@ -91,12 +91,12 @@ class DbConfiguration:
 
         return self.metadata.tables[f"{table_name}"]
 
-    def table_exists(self, table_name: str) -> bool:
+    def table_exists(self, table_name: str, schema: str = None) -> bool:
         """Check if table already exists in database schema."""
         # Table names passed are with schema and inspector just gives out just names with <dbName>.*
         try:
 
-            exists = self.inspector.has_table(table_name.split(".")[-1], schema=self.schema)
+            exists = self.inspector.has_table(table_name.split(".")[-1], schema=schema or self.schema)
             self.logger.info(f"Table '{table_name}' exists: {exists}")
             return exists
         except Exception as e:
@@ -268,12 +268,12 @@ class DbConfiguration:
 
         return db_info
 
-    def normalize_table_name(self, table_name: str, with_schema_prefix: bool = False):
+    def normalize_table_name(self, table_name: str,schema:str =None, with_schema_prefix: bool = False):
         # print(f"before table name normalization {table_name}")
         name = table_name.split(".")
         size = len(name)
         if with_schema_prefix:
-            res = table_name if size > 1 else f"{self.schema}.{table_name}"
+            res = table_name if size > 1 else f"{schema or self.schema}.{table_name}"
 
         else:
             res = table_name if size == 1 else name[-1]
