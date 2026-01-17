@@ -1,4 +1,4 @@
-
+import time
 
 from core.init_graph import InitGraph
 from core.init_scheduler import InitScheduler
@@ -19,14 +19,14 @@ class Application:
     _base = "base"
 
     def __init__(self):
-        self.graph = None
+        self.graph: InitGraph | None = None
         self.graph_conf = None
         self.sources_conf = None
         self.server_core = None
         self.scheduler_core = None
         self.db_instance: DbInstance | None = None
         self.db_url = None
-        self.logger = LoggerManager(type(self).__name__)
+        self.logger = LoggerManager(type(self).__name__).get_logger()
         self.core_conf = CoreConfig()
 
     def initialize_fast_api_uvicorn_server(self, server_conf):
@@ -70,7 +70,7 @@ class Application:
 
         # core graph logic for the base table
         self.graph_conf = self.core_conf.get_value(self._graph)
-        self.graph = InitGraph(self.graph_conf, self.db_instance)
+        self.graph = InitGraph(self.graph_conf, self.db_instance, self.scheduler_core)
 
         if not server["enable"] and scheduler["enable"]:
             self.logger.warning("Fallback mechanism activated for keeping thread alive.")
@@ -96,6 +96,16 @@ if __name__ == "__main__":
     sources = app.get_all_datasources()
 
     # check if the base graph is ready or not
+    if app.graph is not None:
+        app.graph.initialize_base_graph()
+        app.graph.load_graph()
+    #             Wait till the new ways_base_graph has been created
+        while not app.graph.get_is_base_graph_ready():
+            app.logger.warning("Base graph is not ready  ")
+            time.sleep(10)
+
+    # breakpoint for base graph as it will be ready
+
 
     if sources is not None:
         # TODO:  app.graph is not None and app.graph.get_is_base_graph_ready()
