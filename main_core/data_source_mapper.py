@@ -8,6 +8,7 @@ from typing import Union, Optional, Mapping, Any, List
 from dacite import from_dict, Config
 
 from log_manager.logger_manager import LoggerManager
+from main_core.safe_class import safe_class
 
 
 @dataclass
@@ -80,6 +81,7 @@ class EnrichmentConfDTO:
 
 @dataclass
 class StorageDTO:
+
     enrichment: EnrichmentConfDTO
     persistent: bool
     staging: StagingConfDTO
@@ -171,7 +173,7 @@ class DataSourceDTO:
     storage: StorageDTO
     job: JobConfigurationDTO
 
-
+@safe_class
 class DataSourceMapper:
     _prefix_path = "data_mappers"
 
@@ -206,20 +208,11 @@ class DataSourceMapper:
                 module_path = f"{self._prefix_path}.{class_name}Mapper"
                 module = importlib.import_module(module_path)
                 mapper_class = getattr(module, f"{class_name[0].upper() + class_name[1:]}Mapper")
-                #  TODO directly link the table class also present in the mapper class
-                # classes = [
-                #     member
-                #     for name, member in inspect.getmembers(module, inspect.isclass)
-                #     if member.__module__ == module.__name__ # only classes defined in this module
-                #     and issubclass(member,Base)
-                # ]
-                # print(classes)
-
                 instance_data_source = mapper_class(data, self.db_instance, self.scheduler_core)
                 self.logger.info(f"execution finished for the {mapper_class.__name__}")
                 # instance_data_source.run()
             except Exception as e:
-                self.logger.error(f"Error loading data source {class_name} :{e}")
+                self.logger.error(f"Error running data source {class_name} :{e}")
 
 
 if __name__ == "__main__":
