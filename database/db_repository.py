@@ -9,7 +9,6 @@ from geoalchemy2 import Geometry
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import inspect, MetaData, create_engine, select, delete, update, insert, Column, Integer, BigInteger, \
     String, text, func, Row, RowMapping, TIMESTAMP, Numeric
-from sqlalchemy.util import deprecated
 
 from database.base import Base
 from database.db_configuration import DbConfiguration
@@ -118,31 +117,35 @@ class DBRepository(DbConfiguration):
     def create_table_if_not_exist(self, table_name: str, force_create: bool = False,
                                   create_without_indexes: bool = False):
         """Create table defined in Base.metadata."""
-        self.logger.info(f"create table {table_name}")
-        table = Base.metadata.tables[self.normalize_table_name(table_name, False)]
-        if force_create:
-            self.drop_table(table_name, True, True)
+        try:
 
-        if not self.table_exists(table_name):
-            original_indexes = set(table.indexes)
-            # TODO:
-            """
-            TODO: Maybe dont need anymore as we are creating two staging tables one 
-            where processing on raw data happens and the other for persistence in case set to true
-            
-            """
-            if create_without_indexes:
-                self.table_index_map[table_name] = original_indexes
-                table.indexes.clear()
-            table.schema = self.schema
-            Base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=True)
-        else:
-            if not self.table_schema_matches(table_name):
-                self.logger.info("Table schema doesn't match")
-                self.create_table_if_not_exist(table_name, True)
+            self.logger.info(f"create table {table_name}")
+            self.update_metadata()
+            table = self.base.metadata.tables[self.normalize_table_name(table_name, False)]
+            if force_create:
+                self.drop_table(table_name, True, True)
+
+            if not self.table_exists(table_name):
+                original_indexes = set(table.indexes)
+                # TODO:
+                """
+                TODO: Maybe dont need anymore as we are creating two staging tables one 
+                where processing on raw data happens and the other for persistence in case set to true
+                
+                """
+                if create_without_indexes:
+                    self.table_index_map[table_name] = original_indexes
+                    table.indexes.clear()
+                table.schema = self.schema
+                Base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=True)
             else:
-                self.logger.info("Table exists, skipping the creation of the table")
-
+                if not self.table_schema_matches(table_name):
+                    self.logger.info("Table schema doesn't match")
+                    self.create_table_if_not_exist(table_name, True)
+                else:
+                    self.logger.info("Table exists, skipping the creation of the table")
+        except Exception as e:
+            self.logger.error(f"error creating table {table_name} : {e}")
     @staticmethod
     def get_staging_table_name(name) -> str:
         return f"{name}_staging"
@@ -179,6 +182,8 @@ class DBRepository(DbConfiguration):
     @measure_time(label="create indexes")
     def create_indexes(self, table_name: str, schema: str = None):
         table = Base.metadata.tables[self.normalize_table_name(table_name, False)]
+        if not self.table_exists(table_name):
+            return
         schema = schema or self.schema
         table.indexes.update(self.table_index_map[table_name])
 

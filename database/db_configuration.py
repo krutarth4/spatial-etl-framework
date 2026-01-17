@@ -363,7 +363,6 @@ if __name__ == "__main__":
     conf = conf.get_value("database")
     db = DbConfiguration(conf)
     # db.create_table("test")
-    # db.create_all_tables()
 
     #     start with new execution
     #     res = db.fetch_one_session("test", {"source": 2})

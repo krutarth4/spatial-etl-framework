@@ -28,14 +28,14 @@ class StationLocationLink(Base):
 
     link_id = Column(
         Integer,
-        ForeignKey("ways_base.link_id", ondelete="CASCADE"),
+        ForeignKey("test_runner.ways_base.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
     station_id = Column(
         Integer,
-        ForeignKey("dwd_station_locations.dwd_station_id", ondelete="CASCADE"),
+        ForeignKey("test_runner.dwd_station_locations.uid", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

@@ -391,7 +391,7 @@ class DataSourceABCImpl(DataSourceABC):
                 if self.db is not None:
                     self.logger.warning("found new data hence continuing with db upsert")
                     self.pre_database_processing()
-                    self.db.bulk_insert(db_storage.table_name, self.source_result, True)
+                    self.db.bulk_insert(db_storage.staging.table_name, self.source_result, True)
 
 
 
@@ -432,8 +432,7 @@ class DataSourceABCImpl(DataSourceABC):
 
     def recreate_table_indexes(self):
         if self.db is not None and self.data_source_config.storage.persistent:
-            self.db.create_indexes(self.data_source_config.storage.enrichment.table_name, self.data_source_config
-                                   .storage.enrichment.table_schema)
+            self.db.create_indexes(self.data_source_config.storage.enrichment.table_name, self.data_source_config.storage.enrichment.table_schema)
             self.db.create_indexes(self.data_source_config.storage.staging.table_name, self.data_source_config.storage.staging.table_schema)
 
     def post_filter_processing_save_data(self, conf):

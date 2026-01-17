@@ -219,7 +219,7 @@ class DataSourceMapper:
                 self.logger.info(f"execution finished for the {mapper_class.__name__}")
                 # instance_data_source.run()
             except Exception as e:
-                self.logger.error(f"Error loading data source {class_name} :{e}", e)
+                self.logger.error(f"Error loading data source {class_name} :{e}")
 
 
 if __name__ == "__main__":
