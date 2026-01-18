@@ -441,6 +441,7 @@ class DataSourceABCImpl(DataSourceABC):
         if self.db is not None and self.data_source_config.storage.persistent:
             self.db.create_indexes(self.data_source_config.storage.enrichment.table_name, self.data_source_config.storage.enrichment.table_schema)
             self.db.create_indexes(self.data_source_config.storage.staging.table_name, self.data_source_config.storage.staging.table_schema)
+            self.db.create_indexes(self.data_source_config.mapping.table_name, self.data_source_config.mapping.table_schema)
 
     def post_filter_processing_save_data(self, conf):
         file_handler = FileHandler(conf.destination)
