@@ -38,6 +38,8 @@ class HttpHandler:
             self.logger.info(f"[Metadata Check] HEAD {uri}")
             response = requests.head(uri, headers=headers, params=params, timeout=10)
             response.raise_for_status()
+            if response.is_redirect:
+                raise requests.exceptions.HTTPError(response.reason)
             return self.convert_metadata_in_file_format(response.headers)
 
         except requests.exceptions.RequestException as e:
@@ -107,7 +109,7 @@ class HttpHandler:
             ) as response):
                 response.raise_for_status()
                 self.logger.info(f"Fallback Metadata check successful: {uri}")
-                return response.headers
+                return self.convert_metadata_in_file_format(response.headers)
         except requests.exceptions.RequestException as e:
             self.logger.error(f"HTTP metadata and fallback mechanism check failed request failed : {e} ")
             self.logger.warning(f"Skipping check for metadata ....")

@@ -331,7 +331,7 @@ class DataSourceABCImpl(DataSourceABC):
         # read a file from last meta output
         file_handler = FileHandler(source.destination)
         name = source.destination.split("/")[-1].split(".")
-        old_metadata = file_handler.read_metadata(name[0])
+        old_metadata = file_handler.read_metadata('.'.join(name[:-1]))
         if self.is_metadata_changed(old_metadata, current_metadata, source.check_metadata.keys):
             self.logger.info("New UPDATES available for Metadata checks. Fetching new DATA ...... ")
             return True
