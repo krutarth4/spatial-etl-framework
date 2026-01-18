@@ -62,6 +62,9 @@ class InitGraph:
             self.logger.info("Checking for the base graph tables")
 
     def load_graph(self):
+        if not self.graph_configuration.enable :
+            self.is_new_graph_ready = True
+            return
         tool = self.graph_configuration.tool
         if tool == "terminal":
             self.logger.info("Loading Graph through command runner pgrouting")
@@ -83,3 +86,7 @@ class InitGraph:
 
     def get_is_base_graph_ready(self) -> bool:
         return self.is_new_graph_ready
+
+    def reflect_base_tables(self):
+        if self.db is not None:
+            self.db.reflect_base_tables(self.graph_configuration.schema)

@@ -104,10 +104,12 @@ if __name__ == "__main__":
             app.logger.warning("Base graph is not ready  ")
             time.sleep(10)
 
+    app.graph.reflect_base_tables()
     # breakpoint for base graph as it will be ready
 
 
-    if sources is not None:
+    if sources is not None and app.graph.check_if_base_graph_present() and app.graph.get_is_base_graph_ready():
+
         # TODO:  app.graph is not None and app.graph.get_is_base_graph_ready()
         DataSourceMapper(sources, app.db_instance, app.scheduler_core)
     else:

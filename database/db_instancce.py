@@ -58,20 +58,9 @@ if __name__ == "__main__":
     base = conf.get_value("base")
     graph = conf.get_value("graph")
     db = DbInstance(db_conf, base, graph)
+    print(db.get_all_db_tables())
 
-
-
-    #     create table
-
-    class DBTest(Base):
-        __tablename__ = "db_test"
-        id = Column(Integer, primary_key=True, index=True)
-        name = Column(String)
-
-    names = [{"name":"mica"}, {"name":"ana"}]
-    db.create_table_if_not_exist("db_test")
-
-    db.bulk_insert("db_test",names)
+    print(db.get_all_metdata_tables())
 
 #  compare
 

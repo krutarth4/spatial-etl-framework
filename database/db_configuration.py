@@ -42,7 +42,7 @@ class DbConfiguration:
 
     def __init__(self, core_config, base_config):
         self.core_config = from_dict(DBConfigDTO, core_config)
-        self.logger = LoggerManager(type(self).__name__)
+        self.logger = LoggerManager(type(self).__name__).get_logger()
         self.db_url = self.create_db_url()
         self.print_db_url()
         self.engine = self.create_engine()
@@ -56,7 +56,7 @@ class DbConfiguration:
         self.logger.debug(f"db schema {self.schema}")
 
         # create all the tables linked to the Base
-        self.update_metadata()
+        self.update_metadata(self.schema)
 
     # Main engine based function of DDL functions
     def create_schema_if_not_exists(self):
@@ -83,7 +83,7 @@ class DbConfiguration:
         table_name = self.normalize_table_name(table_name, schema, True)
         if table_name not in self.metadata.tables:
             self.logger.warning(f"Table '{table_name}' not found in schema '{schema or self.schema}'. Reflecting metadata...")
-            self.update_metadata()
+            self.update_metadata(schema)
             # return None
             if table_name not in self.metadata.tables:
                 return None
@@ -165,8 +165,9 @@ class DbConfiguration:
     #         return self.session(
     #     return None
 
-    def update_metadata(self):
-        self.metadata.reflect(bind=self.engine)
+    def update_metadata(self, schema):
+        schema = schema or self.schema
+        self.metadata.reflect(bind=self.engine, schema=schema)
 
     def inspect_session(self):
         inspector = inspect(self.engine)
@@ -224,7 +225,8 @@ class DbConfiguration:
         except Exception as e:
             self.logger.error(f"Failed to fetch table list: {e}")
             raise
-
+    def get_all_metdata_tables(self):
+        return self.metadata.tables.values()
     def has_base_tables(self):
         """Return a list of all table names in the configured schema. Based on inspector linked through DB itself """
         try:

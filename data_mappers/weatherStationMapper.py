@@ -8,7 +8,7 @@ from main_core.data_source_abc_impl import DataSourceABCImpl
 
 class DwdStationsTable(StagingTable):
     # Make sure no indexing and constrains are added here other than a PK
-    __tablename__ = "dwd_station_locations"
+    __tablename__ = "dwd_station_locations_staging"
     uid = Column(Integer, primary_key=True, autoincrement=True)
     id = Column(Integer)
     dwd_station_id = Column(Integer, nullable=False)
@@ -31,33 +31,8 @@ class DwdWeatherStationEnrichmentTable(EnrichmentTable):
 class DwdMappingTable(MappingTable):
     __tablename__ = "dwd_mapping_stations"
     uid = Column(Integer, primary_key=True, autoincrement=True)
-    station_id = Column(Integer,ForeignKey("dwd_station_locations.dwd_station_id", ondelete="Cascade") , unique=True, nullable=False)
+    station_id = Column(Integer,ForeignKey("test.dwd_station_locations_staging.uid", ondelete="Cascade") , unique=True, nullable=False)
     distance = Column(Float)
-
-# class StationLocationLink(Base):
-#     __tablename__ = "station_location_link"
-#     uid = Column(Integer, primary_key=True, autoincrement=True)
-#
-#     link_id = Column(
-#         Integer,
-#         ForeignKey("test_runner.ways_base.id", ondelete="CASCADE"),
-#         nullable=False,
-#         index=True,
-#     )
-#
-#     station_id = Column(
-#         Integer,
-#         ForeignKey("test_runner.dwd_station_locations.uid", ondelete="CASCADE"),
-#         nullable=False,
-#         index=True,
-#     )
-#
-#     __table_args__ = (
-#         UniqueConstraint(
-#             "link_id",
-#             "station_id",
-#             name="uq_station_link"
-#         ),)
 
 
 class WeatherStationMapper(DataSourceABCImpl):

@@ -6,9 +6,10 @@ from typing import Union, List, Text
 
 from dacite import from_dict
 from geoalchemy2 import Geometry
+from pandas.core.config_init import table_schema_cb
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import inspect, MetaData, create_engine, select, delete, update, insert, Column, Integer, BigInteger, \
-    String, text, func, Row, RowMapping, TIMESTAMP, Numeric
+    String, text, func, Row, RowMapping, TIMESTAMP, Numeric, Table
 
 from database.base import Base
 from database.db_configuration import DbConfiguration
@@ -76,7 +77,7 @@ class DBRepository(DbConfiguration):
         self.base_table = from_dict(BaseTableConfDTO, base)
         self.graph = graph
         super().__init__(db_conf, self.base_table)
-        self.logger = LoggerManager(__name__).logger
+        self.logger = LoggerManager(__name__).get_logger()
         self.table_index_map = {}
 
     def create_base_table_force(self):
@@ -114,13 +115,26 @@ class DBRepository(DbConfiguration):
             True
         )
 
+    def reflect_base_tables(self, schema):
+        Table(
+            "ways_base",
+            self.base.metadata,
+            schema=schema,
+            autoload_with=self.engine,
+        )
+
+
     def create_table_if_not_exist(self, table_name: str,table_schema: str = None, force_create: bool = False,
                                   create_without_indexes: bool = False):
         """Create table defined in Base.metadata. for the data sources."""
         try:
 
             self.logger.info(f"create table {table_name}")
-            self.update_metadata()
+            self.update_metadata(table_schema)
+            # check if ways_base present
+            for table in self.base.metadata.tables.values():
+                print(table.name, table.schema)
+
             table = self.base.metadata.tables[self.normalize_table_name(table_name, False)]
             if force_create:
                 self.drop_table(table_name, True, True)
@@ -131,8 +145,8 @@ class DBRepository(DbConfiguration):
                 if create_without_indexes:
                     self.table_index_map[table_name] = original_indexes
                     table.indexes.clear()
-                table.schema = self.schema
-                Base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=True)
+                table.schema = table_schema or self.schema
+                self.base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=True)
             else:
                 if not self.table_schema_matches(table_name):
                     self.logger.info("Table schema doesn't match")
