@@ -131,11 +131,7 @@ class DBRepository(DbConfiguration):
 
             self.logger.info(f"create table {table_name}")
             self.update_metadata(table_schema)
-            # check if ways_base present
-            for table in self.base.metadata.tables.values():
-                print(table.name, table.schema)
-
-            table = self.base.metadata.tables[self.normalize_table_name(table_name, False)]
+            table = self.base.metadata.tables[self.normalize_table_name(table_name,table_schema, False)]
             if force_create:
                 self.drop_table(table_name, True, True)
 
@@ -147,8 +143,10 @@ class DBRepository(DbConfiguration):
                     table.indexes.clear()
                 table.schema = table_schema or self.schema
                 self.base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=True)
+                self.logger.info(f"Table '{table_name}' created successfully.")
             else:
-                if not self.table_schema_matches(table_name):
+                schema = table_schema or self.schema
+                if not self.table_schema_matches(table_name,schema):
                     self.logger.info("Table schema doesn't match")
                     self.create_table_if_not_exist(table_name, True)
                 else:
@@ -191,7 +189,7 @@ class DBRepository(DbConfiguration):
 
     @measure_time(label="create indexes")
     def create_indexes(self, table_name: str, schema: str = None):
-        table = Base.metadata.tables[self.normalize_table_name(table_name, False)]
+        table = Base.metadata.tables[self.normalize_table_name(table_name,schema, False)]
         if not self.table_exists(table_name,schema):
             self.logger.warning(f"Table '{table_name}' doesn't exist. For recreating indexes...")
             return

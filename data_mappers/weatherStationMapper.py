@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint, ForeignKeyConstraint
 
 from database_tables.enrichment_table import EnrichmentTable
 from database_tables.mapping_table import MappingTable
@@ -9,6 +9,7 @@ from main_core.data_source_abc_impl import DataSourceABCImpl
 class DwdStationsTable(StagingTable):
     # Make sure no indexing and constrains are added here other than a PK
     __tablename__ = "dwd_station_locations_staging"
+    # __table_args__ = {"schema": "test"}
     uid = Column(Integer, primary_key=True, autoincrement=True)
     id = Column(Integer)
     dwd_station_id = Column(Integer, nullable=False)
@@ -23,6 +24,7 @@ class DwdStationsTable(StagingTable):
 
 class DwdWeatherStationEnrichmentTable(EnrichmentTable):
     __tablename__ = "dwd_weather_station_enrichment"
+    # __table_args__ = {"schema": "test"}
     uid = Column(Integer, primary_key=True, autoincrement=True)
     station_id = Column(Integer, unique=True, nullable=False)
     station_name = Column(String)
@@ -30,6 +32,7 @@ class DwdWeatherStationEnrichmentTable(EnrichmentTable):
 
 class DwdMappingTable(MappingTable):
     __tablename__ = "dwd_mapping_stations"
+    # __table_args__ = {"schema": "test"}
     uid = Column(Integer, primary_key=True, autoincrement=True)
     station_id = Column(Integer,ForeignKey("test.dwd_station_locations_staging.uid", ondelete="Cascade") , unique=True, nullable=False)
     distance = Column(Float)

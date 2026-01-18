@@ -81,15 +81,15 @@ class DbConfiguration:
     def get_table(self, table_name: str, schema:str =None):
 
         table_name = self.normalize_table_name(table_name, schema, True)
-        if table_name not in self.metadata.tables:
+        self.update_metadata(schema)
+        if table_name not in self.base.metadata.tables:
             self.logger.warning(f"Table '{table_name}' not found in schema '{schema or self.schema}'. Reflecting metadata...")
-            self.update_metadata(schema)
             # return None
-            if table_name not in self.metadata.tables:
+            if table_name not in self.base.metadata.tables:
                 return None
                 raise ValueError(f"Table '{table_name}' does not exist in schema '{self.schema}'")
 
-        return self.metadata.tables[f"{table_name}"]
+        return self.base.metadata.tables[f"{table_name}"]
 
     def table_exists(self, table_name: str, schema: str = None) -> bool:
         """Check if table already exists in database schema."""
@@ -167,7 +167,7 @@ class DbConfiguration:
 
     def update_metadata(self, schema):
         schema = schema or self.schema
-        self.metadata.reflect(bind=self.engine, schema=schema)
+        self.base.metadata.reflect(bind=self.engine, schema=schema)
 
     def inspect_session(self):
         inspector = inspect(self.engine)
@@ -241,7 +241,7 @@ class DbConfiguration:
     def get_orm_columns(self, table_name: str):
         """Return column names of ORM BASE model."""
         table_name = f"{self.schema}.{table_name}"
-        table = Base.metadata.tables.get(table_name)
+        table = self.base.metadata.tables.get(table_name)
         print(f"ORM tavble {table}")
         if table is None:
             raise ValueError(f"ORM table '{table_name}' not found!")
@@ -252,9 +252,9 @@ class DbConfiguration:
         cols = self.inspector.get_columns(table_name, schema=self.schema)
         return [col["name"] for col in cols]
 
-    def get_db_column_info(self, table_name: str):
+    def get_db_column_info(self, table_name: str,table_schema: str):
         """Return full DB column metadata (name → attributes)."""
-        table_name = self.normalize_table_name(table_name, False)
+        table_name = self.normalize_table_name(table_name,table_schema, False)
         columns = self.inspector.get_columns(table_name, schema=self.schema)
 
         db_info = {}
@@ -282,15 +282,15 @@ class DbConfiguration:
             # print(f"result for normalization {res}")
         return res
 
-    def get_orm_column_info(self, table_name: str):
+    def get_orm_column_info(self, table_name: str,schema:str):
         """Return ORM model metadata for columns."""
-        table_name = self.normalize_table_name(table_name, False)
+        table_name = self.normalize_table_name(table_name,schema, False)
         table = Base.metadata.tables.get(table_name)
         # print(f"get orm column info ORM table {table}")
         if table is None:
             # workaround for local class testing
 
-            table = Base.metadata.tables.get(self.normalize_table_name(table_name, True))
+            table = Base.metadata.tables.get(self.normalize_table_name(table_name,schema, True))
             if table is None:
                 raise ValueError(f"ORM table '{table_name}' not found!")
 
@@ -311,11 +311,11 @@ class DbConfiguration:
     @staticmethod
     def create_table_schema_comparator(key: str, value: Any):
         return
-    def table_schema_matches(self, table_name: str) -> bool | None:
+    def table_schema_matches(self, table_name: str,table_schema: str = None) -> bool | None:
         """Compare DB table structure vs ORM table structure (deep check)."""
         try:
-            db_info = self.get_db_column_info(table_name)
-            orm_info = self.get_orm_column_info(table_name)
+            db_info = self.get_db_column_info(table_name,table_schema)
+            orm_info = self.get_orm_column_info(table_name,table_schema)
 
             self.logger.debug(f"DB table {table_name}: {db_info}")
             self.logger.debug(f"ORM table {table_name}: {orm_info}")
