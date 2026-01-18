@@ -10,6 +10,7 @@ from data_config_dtos.data_source_config_dto import DataSourceDTO
 from database.db_instancce import DbInstance
 from log_manager.logger_manager import LoggerManager
 from main_core.data_source_mapper import DataSourceMapper
+from main_core.safe_class import safe_class
 
 
 @dataclass
@@ -23,7 +24,7 @@ class GraphConfDTO:
     env: Mapping[str, str]
     datasource: List[DataSourceDTO]
 
-
+@safe_class
 class InitGraph:
 
     def __init__(self, graph_conf, db: DbInstance | None, scheduler_core: InitScheduler | None):
