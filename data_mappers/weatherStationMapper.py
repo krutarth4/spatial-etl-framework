@@ -34,7 +34,7 @@ class DwdMappingTable(MappingTable):
     __tablename__ = "dwd_mapping_stations"
     # __table_args__ = {"schema": "test"}
     uid = Column(Integer, primary_key=True, autoincrement=True)
-    station_id = Column(Integer,ForeignKey("test.dwd_station_locations_staging.uid", ondelete="Cascade") , unique=True, nullable=False)
+    station_id = Column(Integer,ForeignKey("dwd_station_locations_staging.uid", ondelete="Cascade") , unique=True, nullable=False)
     distance = Column(Float)
 
 
