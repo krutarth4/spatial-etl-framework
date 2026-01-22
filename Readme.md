@@ -1,13 +1,15 @@
 # Docker container for postgis extension
 
 * TODO: add the hstore, postgis extension to docker container at start
+* TODO: Add for the command line osm2pgrouting
+to change the file format from pbf to osm and the tool described to do it.
 
 run the conatiner 
 ```
 docker run --name postgres -e POSTGRES_PASSWORD=admin123 -e POSTGRES_USER=postgres -p 5432:5432 -d postgres
 
 ```
-install officiiaal postgres container and install postgis or any other plugin oon top of it too make it more light and no need to have unwanted plugins installed 
+install official postgres container and install postgis or any other plugin oon top of it too make it more light and no need to have unwanted plugins installed 
 
 ```aiignore
 # check postgres version 
@@ -31,6 +33,17 @@ currently not supported psycopg2 so we install the version 3 available in binary
 
 for the url mention "postgresql+psycopg" if still want to use psycopg2 install all the required packages and change the url
 to "postgresql+psycopg2"
+
+# Converting PBF to osm TOOL
+### Install cli tool for the conversion for MAc and Linux terminal
+`brew install osmium-tool`
+
+
+### convert using
+`osmium cat ./tmp/osm_graph/data_berlin.osm_2026-01-18T11-47-07.pbf -o ./tmp/osm_graph/berlin_latest.osm`
+
+
+
 
 
 # For osm2pgrouting - main base table ways and ways_node

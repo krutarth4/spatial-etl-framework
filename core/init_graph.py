@@ -1,5 +1,6 @@
 import subprocess
 from dataclasses import dataclass
+from os.path import exists
 from typing import List, Mapping, Any
 
 from dacite import from_dict
@@ -23,6 +24,7 @@ class GraphConfDTO:
     cmd: List[str | Any]
     env: Mapping[str, str]
     datasource: List[DataSourceDTO]
+
 
 @safe_class
 class InitGraph:
@@ -63,7 +65,8 @@ class InitGraph:
             self.logger.info("Checking for the base graph tables")
 
     def load_graph(self):
-        if not self.graph_configuration.enable :
+        if not self.graph_configuration.enable:
+            self.create_base_table_if_not_exist()
             self.is_new_graph_ready = True
             return
         tool = self.graph_configuration.tool
@@ -84,6 +87,15 @@ class InitGraph:
         else:
             self.logger.error("Graph tool {} not supported".format(tool))
             raise Exception("Graph tool {} not supported".format(tool))
+
+    def create_base_table_if_not_exist(self):
+        base_present = self.check_if_base_graph_present()
+        if not base_present:
+            self.logger.info("Creating Base graph for the ways")
+            self.create_base_table()
+        else:
+            self.logger.warning("checking FORCED new base graph table, if needs to be created ")
+            self.db.create_base_table_force()
 
     def get_is_base_graph_ready(self) -> bool:
         return self.is_new_graph_ready
