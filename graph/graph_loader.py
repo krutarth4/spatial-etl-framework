@@ -5,10 +5,7 @@ from geoalchemy2.shape import from_shape
 from osmium import SimpleHandler
 from shapely.geometry.linestring import LineString
 
-from NotUsed.db_conf import DbConf
-from NotUsed.db_connect import DBConnect
-from NotUsed.db_repo import DbRepo
-from osm_barrier_type import OsmBarrierType
+from graph.osm_barrier_type import OsmBarrierType
 from graph.GeoHelpers import GeoHelpers
 from graph.Link import Link
 from graph.geo_point import GeoPoint
@@ -513,13 +510,13 @@ if __name__ == '__main__':
     # Database bulk insert
 
     core_db_conf = CoreConfig().get_value("database")
-    dbConf = DbConf(core_db_conf)
+    # dbConf = DbConf(core_db_conf)
 
-    conn = DBConnect(dbConf)
-    conn.create_all_tables()
-    db_crud = DbRepo(conn)
+    # conn = DBConnect(dbConf)
+    # conn.create_all_tables()
+    # db_crud = DbRepo(conn)
 
     # db_crud.bulk_upsert("barrier_nodes",list(handler.barrier_nodes.values()), "node_id" )
     # db_crud.bulk_upsert("links",links, "id" )
-    for link in links:
-        db_crud.insert("links", link, None)
+    # for link in links:
+    #     db_crud.insert("links", link, None)
