@@ -151,7 +151,7 @@ class FileHandler:
 
         self.logger.info(f"Searching in: {self.base_dir.resolve()}")
         # print("Pattern:", pattern)
-        # print("Files present:", list(self.base_dir.iterdir()))
+        print("Files present:", list(self.base_dir.iterdir()))
         if not files:
             return None
         files.sort(reverse=True)

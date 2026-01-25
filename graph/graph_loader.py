@@ -15,11 +15,12 @@ from graph.osm_smoothness import OsmSmoothness
 from graph.osm_surface import OsmSurface
 from graph.osm_travel_modes import OsmTravelModes
 from graph.travel_mode_dot import TravelModesDot
+from log_manager.logger_manager import LoggerManager
 from main_core.core_config import CoreConfig
 
 
 
-class OsmHandler(SimpleHandler):
+class NodeRefCounter(SimpleHandler):
     nodeSet = {}
 
     def __init__(self, highway_types):
@@ -27,6 +28,7 @@ class OsmHandler(SimpleHandler):
         self.highway_ways = []
         self.node_reference_counter = {}
         self.barrier_nodes = {}
+        self.logger = LoggerManager(type(self).__name__).get_logger()
 
         self.no_values = {"no", "private"}
         self.yes_values = {"designated", "permissive", "dismount", "yes"}
@@ -34,16 +36,17 @@ class OsmHandler(SimpleHandler):
     def way(self, w):
         # Equivalent to: if (getHighwayTag(way, highwayTypes) != null)
         tags = dict(w.tags)
-        if OsmHandler.get_highway_tag(w,self.highway_types) is not None:
+        if NodeRefCounter.get_highway_tag(w, self.highway_types) is not None:
             for node_ref in w.nodes:
                 self.node_reference_counter[node_ref.ref] = self.node_reference_counter.get(node_ref.ref, 0) + 1
 
     def node(self, n):
         # Equivalent to barrier node detection
 
-        barrier = OsmHandler.generate_barrier_node(n)
+        barrier = NodeRefCounter.generate_barrier_node(n)
+        # self.logger.info(f"processing node {n.id}")
         if barrier is not None :
-            if OsmHandler.is_complete(barrier):
+            if NodeRefCounter.is_complete(barrier):
                 self.barrier_nodes[n.id] =barrier
 
 
@@ -174,6 +177,8 @@ class LinkBuilderHandler(SimpleHandler):
 
     def __init__(self, node_ids_of_graph, tower_nodes, highway_types):
         super().__init__()
+        self.logger = LoggerManager(type(self).__name__).get_logger()
+
         self.node_ids_of_graph = node_ids_of_graph
         self.tower_nodes = tower_nodes
         self.highway_types = highway_types
@@ -191,7 +196,6 @@ class LinkBuilderHandler(SimpleHandler):
         """Split OSM ways into Link objects"""
         if LinkBuilderHandler.get_highway_tag(w,self.highway_types) is None:
             return
-
         travel_mode_dots: TravelModesDot =  TravelModesDot.get_from_way(w)
         max_speed_data = MaxSpeedData.from_way(w)
         street_name= LinkBuilderHandler.get_street_name(w)
@@ -234,6 +238,7 @@ class LinkBuilderHandler(SimpleHandler):
                     surface=surface,
                     osm_highway_type=osm_highway_type,
                 )
+
                 # self.wayId2Links.setdefault(w.id,[]).append(link)
                 self.wayId2Links[w.id].append(link)
 
@@ -459,18 +464,9 @@ class LinkBuilderHandler(SimpleHandler):
 
         return OsmSurface.get(surface_tag)
 
-
-class GraphLoader:
-
-
-    def __init__(self):
-        pass
-
-
-
 if __name__ == '__main__':
     highway_types_standard = OsmHighwayType.get_all_highway_tags(True)
-    handler = OsmHandler(highway_types_standard)
+    handler = NodeRefCounter(highway_types_standard)
     file_loc = "../raw/ernst_cropped.osm.pbf"
     handler.apply_file(file_loc, locations=True)
 

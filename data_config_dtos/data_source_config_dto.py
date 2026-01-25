@@ -167,3 +167,17 @@ class DataSourceDTO:
     mapping: MappingDTO
     storage: StorageDTO
     job: JobConfigurationDTO
+
+
+@dataclass
+class GraphConfDTO:
+    tool: str
+    schema: str
+    table_name: str
+    enable: bool
+    check_before_update: bool
+    osm_file_path: str
+    cmd: Optional[List[str | Any]]
+    env: Mapping[str, str]
+    datasource: List[DataSourceDTO]
+

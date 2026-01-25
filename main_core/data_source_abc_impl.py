@@ -20,6 +20,7 @@ from main_core.data_source_abc import DataSourceABC
 from data_config_dtos.data_source_config_dto import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, SourceInputDTO, SourceDTO
 from main_core.safe_class import safe_class
 from main_core.processing_steps import ProcessingSteps, StepDTO
+from utils.execution_time import format_duration
 
 
 class FetchTypeEnum(Enum):
@@ -456,29 +457,13 @@ class DataSourceABCImpl(DataSourceABC):
     def run_job_response(self, message: str):
         end_timer = time.perf_counter()
         duration = end_timer - self.start_timer
-        formatted_duration = DataSourceABCImpl.format_duration(duration)
+        formatted_duration = format_duration(duration)
 
         self.logger.info(
             f"Finished run for {self.data_source_config.name} in {formatted_duration} seconds -> message: {message}"
         )
 
         return {"message": message, "duration": formatted_duration}
-
-    @staticmethod
-    def format_duration(seconds: float) -> str:
-        ms = int((seconds - int(seconds)) * 1000)
-        total_seconds = int(seconds)
-
-        mins, sec = divmod(total_seconds, 60)
-        hrs, mins = divmod(mins, 60)
-
-        if hrs > 0:
-            return f"{hrs}h {mins}m {sec}s {ms}ms"
-        if mins > 0:
-            return f"{mins}m {sec}s {ms}ms"
-        if sec > 0:
-            return f"{sec}s {ms}ms"
-        return f"{ms}ms"
 
     def map_to_links(self):
         query = self.map_to_link_db_query()

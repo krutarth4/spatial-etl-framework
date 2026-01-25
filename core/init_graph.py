@@ -1,35 +1,26 @@
 import subprocess
 from dataclasses import dataclass
 from os.path import exists
-from typing import List, Mapping, Any
+from typing import List, Mapping, Any, Optional
 
 from dacite import from_dict
 
 from core.command_runner import CommandRunner
+from core.custom_graph_loader import CustomGraphLoader
 from core.init_scheduler import InitScheduler
-from data_config_dtos.data_source_config_dto import DataSourceDTO
+from data_config_dtos.data_source_config_dto import GraphConfDTO
 from database.db_instancce import DbInstance
 from log_manager.logger_manager import LoggerManager
 from main_core.data_source_mapper import DataSourceMapper
 from main_core.safe_class import safe_class
 
 
-@dataclass
-class GraphConfDTO:
-    tool: str
-    schema: str
-    table_name: str
-    enable: bool
-    check_before_update: bool
-    cmd: List[str | Any]
-    env: Mapping[str, str]
-    datasource: List[DataSourceDTO]
-
 
 @safe_class
 class InitGraph:
 
     def __init__(self, graph_conf, db: DbInstance | None, scheduler_core: InitScheduler | None):
+        self.graph_loader = None
         self.graph_configuration = from_dict(GraphConfDTO, graph_conf)
         self.logger = LoggerManager(type(self).__name__)
         self.is_new_graph_ready = False
@@ -82,8 +73,11 @@ class InitGraph:
             else:
                 self.is_new_graph_ready = True
 
-        elif tool == "class":
-            self.logger.info("Loading Graph through command runner")
+        elif tool == "custom":
+            self.logger.info("Loading Graph through custom osm handler class")
+            self.graph_loader = CustomGraphLoader(self.graph_configuration)
+            self.graph_loader.initialize()
+
         else:
             self.logger.error("Graph tool {} not supported".format(tool))
             raise Exception("Graph tool {} not supported".format(tool))
