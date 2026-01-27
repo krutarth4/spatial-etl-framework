@@ -85,7 +85,7 @@ class DBRepository(DbConfiguration):
             if self.has_base_tables():
                 # drop the table backup and create new table
                 self.drop_table(self.base_table.table_name, True, self.base_table.table_schema)
-            self.create_base_table(self.graph.get("schema"), self.graph.get("table_name"))
+            self.create_base_table_clone(self.graph.get("schema"), self.graph.get("table_name"))
             self.logger.info(f"Table '{self.base_table.table_name}' created with force")
         else:
             self.logger.warning(f"Force create table set to False . Hence skipping .....")
@@ -107,7 +107,7 @@ class DBRepository(DbConfiguration):
                 self.logger.info(f"Table '{name}' already exists — skipping creation.")
         self.logger.info("Table creation check complete.")
 
-    def create_base_table(self, source_schema, source_table):
+    def create_base_table_clone(self, source_schema, source_table):
         self.logger.info(f"creating base table {self.base_table.table_name} in schema {self.base_table.table_schema}")
         self.clone_table_schema_with_data(
             source_schema, source_table,

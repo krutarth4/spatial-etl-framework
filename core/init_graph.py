@@ -36,15 +36,8 @@ class InitGraph:
         if db is None:
             self.logger.warning("Base graph can not be checked with database as disabled")
 
-        # base_present = self.check_if_base_graph_present()
-        # if not base_present:
-        #     self.create_base_table()
-        # else:
-        #     self.logger.warning("checking FORCED new base graph table, if needs to be created ")
-        #     self.db.create_base_table_force()
-
-    def create_base_table(self):
-        self.db.create_base_table(self.graph_configuration.schema, self.graph_configuration.table_name)
+    def create_base_table_clone(self):
+        self.db.create_base_table_clone(self.graph_configuration.schema, self.graph_configuration.table_name)
 
     def check_if_base_graph_present(self) -> bool:
 
@@ -80,7 +73,9 @@ class InitGraph:
         elif tool == "custom":
             self.logger.info("Loading Graph through custom osm handler class")
             self.graph_loader = CustomGraphLoader(self.graph_configuration)
-            self.graph_loader.initialize()
+            self.create_base_table_if_not_exist()
+            graph_links = self.graph_loader.initialize()
+            self.db.bulk_insert(self.graph_configuration.table_name,self.graph_configuration.schema,graph_links)
             self.is_new_graph_ready = True
 
         else:
@@ -89,17 +84,18 @@ class InitGraph:
             raise Exception("Graph tool {} not supported".format(tool))
     def create_custom_tables(self):
         if self.db is not None:
-            self.db.create_table_if_not_exist()
+            self.db.create_table_if_not_exist(self.graph_configuration.table_name, self.graph_configuration.schema)
         else:
             self.logger.warning("custom tables can't be created as db connection is missing")
     def create_base_table_if_not_exist(self):
         base_present = self.check_if_base_graph_present()
         if not base_present:
-            self.logger.info("Creating Base graph for the ways")
-            self.create_base_table()
+            self.logger.info(f"Creating Base graph for the {self.graph_configuration.table_name} table")
+            self.create_custom_tables()
+            self.is_new_graph_ready = True
         else:
             self.logger.warning("checking FORCED new base graph table, if needs to be created ")
-            self.db.create_base_table_force()
+            # self.db.create_base_table_force()
 
     def get_is_base_graph_ready(self) -> bool:
         return self.is_new_graph_ready

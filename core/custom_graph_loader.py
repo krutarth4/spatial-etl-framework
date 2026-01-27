@@ -43,6 +43,7 @@ class CustomGraphLoader:
         links = [link for sublist in handler_2.wayId2Links.values() for link in sublist]
         print(f"length of links {len(links)}")
         print(links[0])
+        return links
 
     def get_osm_file_path(self) -> str | None:
         osm_pbf_file_location =  self.conf.osm_file_path
