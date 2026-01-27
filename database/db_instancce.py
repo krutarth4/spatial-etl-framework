@@ -14,7 +14,7 @@ from database.db_repository import DBRepository
 from log_manager.logger_manager import LoggerManager
 
 # import all the tables from the mappers and already created static tables
-import data_tables
+import custom_graph_base_tables
 from main_core.core_config import CoreConfig
 
 

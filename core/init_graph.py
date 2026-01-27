@@ -14,10 +14,14 @@ from log_manager.logger_manager import LoggerManager
 from main_core.data_source_mapper import DataSourceMapper
 from main_core.safe_class import safe_class
 
+# Do not remove this import
 
+import custom_graph_base_tables
 
 @safe_class
 class InitGraph:
+
+    BASE_TABLES = ["barrier_nodes", "links"]
 
     def __init__(self, graph_conf, db: DbInstance | None, scheduler_core: InitScheduler | None):
         self.graph_loader = None
@@ -77,11 +81,17 @@ class InitGraph:
             self.logger.info("Loading Graph through custom osm handler class")
             self.graph_loader = CustomGraphLoader(self.graph_configuration)
             self.graph_loader.initialize()
+            self.is_new_graph_ready = True
 
         else:
+            self.is_new_graph_ready = False
             self.logger.error("Graph tool {} not supported".format(tool))
             raise Exception("Graph tool {} not supported".format(tool))
-
+    def create_custom_tables(self):
+        if self.db is not None:
+            self.db.create_table_if_not_exist()
+        else:
+            self.logger.warning("custom tables can't be created as db connection is missing")
     def create_base_table_if_not_exist(self):
         base_present = self.check_if_base_graph_present()
         if not base_present:

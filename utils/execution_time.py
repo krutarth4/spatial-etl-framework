@@ -19,7 +19,7 @@ def measure_time(label: str | None = None):
                 duration = format_duration(duration)
 
                 if logger:
-                    logger.info(f"⏱ {name} executed in {duration}")
+                    logger.critical(f"⏱ {name} executed in {duration}")
                 else:
                     print(f"⏱ {name} executed in {duration}")
         return wrapper
