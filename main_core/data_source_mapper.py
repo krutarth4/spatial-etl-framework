@@ -30,7 +30,8 @@ class DataSourceMapper:
                         data = from_dict(DataSourceDTO, data=source, config=Config(cast=[dict]))
                         result.append(data)
                 elif isinstance(source, DataSourceDTO):
-                    result.append(source)
+                    if source.enable:
+                        result.append(source)
             return result
         except Exception as e:
             self.logger.error(f"Error loading data sources for {source.get("name")} {e}")
