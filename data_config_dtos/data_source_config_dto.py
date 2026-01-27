@@ -175,7 +175,6 @@ class GraphConfDTO:
     schema: str
     table_name: str
     enable: bool
-    check_before_update: bool
     osm_file_path: str
     cmd: Optional[List[str | Any]]
     env: Mapping[str, str]
