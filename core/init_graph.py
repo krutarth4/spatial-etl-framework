@@ -18,9 +18,9 @@ from main_core.safe_class import safe_class
 
 import custom_graph_base_tables
 
+
 @safe_class
 class InitGraph:
-
     BASE_TABLES = ["barrier_nodes", "links"]
 
     def __init__(self, graph_conf, db: DbInstance | None, scheduler_core: InitScheduler | None):
@@ -72,21 +72,31 @@ class InitGraph:
 
         elif tool == "custom":
             self.logger.info("Loading Graph through custom osm handler class")
-            self.graph_loader = CustomGraphLoader(self.graph_configuration)
-            self.create_base_table_if_not_exist()
-            graph_links = self.graph_loader.initialize()
-            self.db.bulk_insert(self.graph_configuration.table_name,self.graph_configuration.schema,graph_links)
-            self.is_new_graph_ready = True
+            self.execute_custom_strategy()
 
         else:
             self.is_new_graph_ready = False
             self.logger.error("Graph tool {} not supported".format(tool))
             raise Exception("Graph tool {} not supported".format(tool))
+
+    def execute_custom_strategy(self):
+        base_present = self.check_if_base_graph_present()
+        if base_present:
+            self.logger.warning("Base already present")
+            self.is_new_graph_ready = True
+            return
+        self.graph_loader = CustomGraphLoader(self.graph_configuration)
+        self.create_base_table_if_not_exist()
+        graph_links = self.graph_loader.initialize()
+        self.db.bulk_insert(self.graph_configuration.table_name, self.graph_configuration.schema, graph_links)
+        self.is_new_graph_ready = True
+
     def create_custom_tables(self):
         if self.db is not None:
             self.db.create_table_if_not_exist(self.graph_configuration.table_name, self.graph_configuration.schema)
         else:
             self.logger.warning("custom tables can't be created as db connection is missing")
+
     def create_base_table_if_not_exist(self):
         base_present = self.check_if_base_graph_present()
         if not base_present:
@@ -102,4 +112,4 @@ class InitGraph:
 
     def reflect_base_tables(self):
         if self.db is not None:
-            self.db.reflect_base_tables(self.graph_configuration.schema,self.graph_configuration.table_name)
+            self.db.reflect_base_tables(self.graph_configuration.schema, self.graph_configuration.table_name)

@@ -230,9 +230,9 @@ class DbConfiguration:
     def has_base_tables(self):
         """Return a list of all table names in the configured schema. Based on inspector linked through DB itself """
         try:
-
-            return self.inspector.has_table(table_name=self.base_config.table_name,
+            has_table = self.inspector.has_table(table_name=self.base_config.table_name,
                                             schema=self.base_config.table_schema)
+            return has_table
 
         except Exception as e:
             self.logger.error(f"Failed to check  table list: {e}")
