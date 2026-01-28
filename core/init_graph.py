@@ -102,4 +102,4 @@ class InitGraph:
 
     def reflect_base_tables(self):
         if self.db is not None:
-            self.db.reflect_base_tables(self.graph_configuration.schema)
+            self.db.reflect_base_tables(self.graph_configuration.schema,self.graph_configuration.table_name)

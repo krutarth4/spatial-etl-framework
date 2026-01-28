@@ -265,11 +265,17 @@ class DbConfiguration:
                 "nullable": col["nullable"],  # nullable?
                 # "default": str(col.get("default")),  # default value
                 # "autoincrement": col.get("autoincrement"),
-                "python_type": col["type"].python_type or None,
+                "python_type": DbConfiguration.safe_python_type(col["type"]),
             }
 
         return db_info
 
+    @staticmethod
+    def safe_python_type(sqlalchemy_type):
+        try:
+            return sqlalchemy_type.python_type
+        except NotImplementedError:
+            return None
     def normalize_table_name(self, table_name: str,schema:str =None, with_schema_prefix: bool = False):
         # print(f"before table name normalization {table_name}")
         name = table_name.split(".")
@@ -304,7 +310,7 @@ class DbConfiguration:
                 # DB inteprets the default value as false hence added a check
                 # "autoincrement": False if col.autoincrement == "auto" else col.autoincrement,
                 # "all": col,
-                "python_type": col.type.python_type or None,
+                "python_type": DbConfiguration.safe_python_type(col.type),
             }
         return orm_info
     #TODO: implement to be used by both the factors

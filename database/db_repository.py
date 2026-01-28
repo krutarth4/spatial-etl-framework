@@ -115,9 +115,9 @@ class DBRepository(DbConfiguration):
             True
         )
 
-    def reflect_base_tables(self, schema):
+    def reflect_base_tables(self, schema: str,table_name: str):
         Table(
-            "ways_base",
+            table_name,
             self.base.metadata,
             schema=schema,
             autoload_with=self.engine,

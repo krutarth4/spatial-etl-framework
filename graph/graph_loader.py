@@ -159,15 +159,15 @@ def construct_link(w, travel_mode_dots, max_speed_data, street_name, nodes_of_li
         "start_node_id":start_node.id,
         "end_node_id":end_node.id,
         "geometry":linestring,
-        "highway_type":osm_highway_type.osm_name if osm_highway_type is not None else osm_highway_type,
+        # "highway_type":osm_highway_type.osm_name if osm_highway_type is not None else osm_highway_type,
         "meters":float(meters),
-        "travel_mode_dots":travel_mode_dots.general_dot if travel_mode_dots else travel_mode_dots,
+        # "travel_mode_dots":travel_mode_dots.general_dot if travel_mode_dots else travel_mode_dots,
         "max_speed_forward":max_speed_data.forward if max_speed_data else None,
         "max_speed_reverse":max_speed_data.reverse if max_speed_data else None,
         "name":street_name,
-        "attributes":[a.key for a in attributes if a is not None],
+        # "attributes":[a.key for a in attributes if a is not None],
         "smoothness":smoothness.key if smoothness is not None else smoothness ,
-        "surface":surface.key if surface else surface,
+        # "surface":surface.key if surface else surface,
     }
 
 
@@ -395,7 +395,6 @@ class LinkBuilderHandler(SimpleHandler):
             # Example: highway=construction, construction=residential
             construction_tag = dict(w.tags).get('construction')
             if construction_tag:
-                print(f"construction tag found{construction_tag}")
                 highway_tag = construction_tag
         else:
             # --- CASE 2: Normal link ---
