@@ -32,7 +32,7 @@ class CustomGraphLoader:
 
         node_ids_of_graph = self.handler.node_reference_counter.keys()
         print(f"nod id of graphs {len(node_ids_of_graph)}")
-
+        self.logger.info("Starting .....link Building for base graph")
         handler_2 = LinkBuilderHandler(node_ids_of_graph, tower_nodes, OsmHighwayType.get_all_highway_tags(True))
         handler_2.apply_file(osm_pbf_file_location, locations=True)
 
