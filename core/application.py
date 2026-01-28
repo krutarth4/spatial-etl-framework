@@ -1,5 +1,6 @@
 import time
 
+from core.globalconstants import GlobalConstants
 from core.init_graph import InitGraph
 from core.init_scheduler import InitScheduler
 from core.init_server import InitServer
@@ -14,6 +15,7 @@ class Application:
     _server = "server"
     _scheduler = "scheduler"
     _database = "database"
+    _env_variables = "env_variables"
     _datasources = "datasources"
     _graph = "graph"
     _base = "base"
@@ -45,6 +47,11 @@ class Application:
     def start_application(self):
         self.logger.info("Starting Application based on the configuration")
         # TODO: make the none check for core conf top level
+
+        # initialize the environment constants to be used by the mapper
+        env_variables = self.core_conf.get_value(self._env_variables)
+        if env_variables is not None:
+            GlobalConstants.load(env_variables)
 
         # setup Db Intance connection
         if self.core_conf is None or self.core_conf.get_value(self._database) is None:

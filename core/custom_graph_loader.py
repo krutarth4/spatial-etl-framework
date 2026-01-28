@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from data_config_dtos.data_source_config_dto import GraphConfDTO
 from graph.graph_loader import NodeRefCounter, LinkBuilderHandler

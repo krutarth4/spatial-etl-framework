@@ -89,6 +89,7 @@ class InitGraph:
         self.create_base_table_if_not_exist()
         graph_links = self.graph_loader.initialize()
         self.db.bulk_insert(self.graph_configuration.table_name, self.graph_configuration.schema, graph_links)
+
         self.is_new_graph_ready = True
 
     def create_custom_tables(self):

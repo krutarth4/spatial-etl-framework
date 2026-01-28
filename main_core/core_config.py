@@ -7,7 +7,7 @@ class CoreConfig(YamlReader):
 
     def __init__(self,filepath= filepath):
         super().__init__(filepath)
-        self.logger = LoggerManager(self.__class__.__name__).get_logger()
+        self.logger = LoggerManager(type(self).__name__)
         self.config = YamlReader.read(self)
         self.logger.info(f"Config file loaded successfully!")
         
