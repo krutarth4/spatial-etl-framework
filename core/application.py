@@ -113,6 +113,6 @@ if __name__ == "__main__":
         # TODO:  app.graph is not None and app.graph.get_is_base_graph_ready()
         DataSourceMapper(sources, app.db_instance, app.scheduler_core)
     else:
-        app.logger.error("No data sources available or the base graph is not ready and have problems ")
+        app.logger.warning("No data sources available or the base graph is not ready and have problems ")
 
     app.end_execution()

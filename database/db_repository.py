@@ -1,3 +1,4 @@
+import csv
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -254,22 +255,48 @@ class DBRepository(DbConfiguration):
         # Build CSV buffer
         buffer = StringIO()
 
+        writer = csv.writer(
+            buffer,
+            delimiter=",",
+            quotechar='"',
+            quoting=csv.QUOTE_MINIMAL,
+            lineterminator="\n",
+        )
+
         for row in data_list:
-            buffer.write(
-                ",".join(
-                    "" if row.get(col) is None else str(row[col])
+            writer.writerow(
+                [
+                    row.get(col)
                     for col in insert_columns
-                )
-                + "\n"
+                ]
             )
+            # buffer.write(
+            #     ",".join(
+            #         "" if row.get(col) is None else str(row[col])
+            #         for col in insert_columns
+            #     )
+            #     + "\n"
+            # )
 
         buffer.seek(0)
 
         # COPY into table
+        # copy_sql = f"""
+        #     COPY {table.schema}.{table.name}
+        #     ({", ".join(insert_columns)})
+        #     FROM STDIN WITH CSV
+        # """
+
         copy_sql = f"""
             COPY {table.schema}.{table.name}
             ({", ".join(insert_columns)})
-            FROM STDIN WITH CSV
+            FROM STDIN WITH (
+                FORMAT csv,
+                DELIMITER ',',
+                QUOTE '"',
+                ESCAPE '"',
+                NULL ''
+            )
         """
 
         try:
