@@ -8,6 +8,7 @@ from database.db_instancce import DbInstance
 from log_manager.logger_manager import LoggerManager
 from main_core.core_config import CoreConfig
 from main_core.data_source_mapper import DataSourceMapper
+from metadata.data_source_metadata_service import DataSourceMetadataService
 
 
 class Application:
@@ -16,11 +17,13 @@ class Application:
     _scheduler = "scheduler"
     _database = "database"
     _env_variables = "env_variables"
+    _metadata = "metadata-datasource"
     _datasources = "datasources"
     _graph = "graph"
     _base = "base"
 
     def __init__(self):
+        self.metadata_service: DataSourceMetadataService | None = None
         self.graph: InitGraph | None = None
         self.graph_conf = None
         self.sources_conf = None
@@ -50,16 +53,23 @@ class Application:
 
         # initialize the environment constants to be used by the mapper
         env_variables = self.core_conf.get_value(self._env_variables)
+        metadata = self.core_conf.get_value(self._metadata)
         if env_variables is not None:
             GlobalConstants.load(env_variables)
 
         # setup Db Intance connection
         if self.core_conf is None or self.core_conf.get_value(self._database) is None:
-            self.logger.error("Database configuation not set properly")
+            self.logger.error("Database configuration not set properly")
         else:
             self.initialize_database(self.core_conf.get_value(self._database))
 
         db_url = self.db_instance.get_db_url() if self.db_instance is not None else None
+        # create metadata table if not exist
+
+        self.metadata_service = DataSourceMetadataService(self.db_instance,metadata)
+
+        if self.metadata_service is not None:
+            self.metadata_service.create_table()
 
         # start scheduler and server
         server = self.core_conf.get_value(self._server)
@@ -106,14 +116,13 @@ if __name__ == "__main__":
     if app.graph is not None:
         app.graph.initialize_base_graph()
         app.graph.load_graph()
-    #             Wait till the new ways_base_graph has been created
+        #             Wait till the new ways_base_graph has been created
         while not app.graph.get_is_base_graph_ready():
             app.logger.warning("Base graph is not ready  ")
             time.sleep(10)
 
     app.graph.reflect_base_tables()
     # breakpoint for base graph as it will be ready
-
 
     if sources is not None and app.graph.check_if_base_graph_present() and app.graph.get_is_base_graph_ready():
 

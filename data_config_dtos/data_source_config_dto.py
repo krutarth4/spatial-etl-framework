@@ -180,3 +180,8 @@ class GraphConfDTO:
     env: Mapping[str, str]
     datasource: List[DataSourceDTO]
 
+@dataclass
+class MetadataConfDTO:
+    description: Optional[str]
+    table_schema: str
+

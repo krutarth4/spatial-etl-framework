@@ -22,19 +22,6 @@ from main_core.core_config import CoreConfig
 
 
 class DbInstance(DBRepository):
-    # _instance_lock = threading.Lock()
-    # _instance = None
-
-    # def __new__(cls, db_conf, base, graph):
-    #     conf = DBConfigDTO(**db_conf)
-    #     if not conf.enable:
-    #         LoggerManager("DbInstance").warning("DbInstance disabled — not creating scheduler instance")
-    #         return None
-    #     if not cls._instance:
-    #         with cls._instance_lock:
-    #             if not cls._instance:
-    #                 cls._instance = super(DbInstance, cls).__new__(cls)
-    #     return cls._instance
 
     def __init__(self, db_conf, base, graph):
         self.db_conf = from_dict(DBConfigDTO, db_conf)
