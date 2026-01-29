@@ -20,8 +20,8 @@ class BaseGraph:
         self.db.clone_table_data(source_name, source_schema, self.base_graph_conf.table_name,
                                  self.base_graph_conf.table_schema)
 
-    def check_if_base_graph_ready(self) -> bool:
-        return self.check_base_graph_table_exists()
+    def drop_base_graph_table(self):
+        self.db.drop_table(self.base_graph_conf.table_name,True,True,self.base_graph_conf.table_schema)
 
     def check_base_graph_table_exists(self):
         return self.db.has_base_tables()

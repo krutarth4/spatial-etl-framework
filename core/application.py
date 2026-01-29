@@ -118,13 +118,13 @@ if __name__ == "__main__":
         app.graph.update_graph_source()
         app.graph.ingest_graph_data()
         #             Wait till the new ways_base_graph has been created
-        while not app.graph.get_is_base_graph_ready():
+        while not app.graph.is_base_graph_ready():
             app.logger.warning("Base graph is not ready  ")
             time.sleep(10)
 
     # breakpoint for base graph as it will be ready
 
-    if sources is not None and app.graph.check_if_raw_graph_present() and app.graph.get_is_base_graph_ready():
+    if sources is not None and app.graph.is_base_graph_ready():
 
         # TODO:  app.graph is not None and app.graph.get_is_base_graph_ready()
         mappers = DataSourceMapper(sources, app.db_instance, app.scheduler_core)

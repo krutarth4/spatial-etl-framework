@@ -77,6 +77,7 @@ class InitGraph:
             raise Exception("Graph tool {} not supported".format(tool))
 
     def execute_custom_strategy(self):
+        # TODO:check with metadata table if the files imported is same
         raw_graph_present = self.check_if_raw_graph_present()
         if raw_graph_present:
             self.logger.warning("Raw graph already present")
@@ -91,7 +92,9 @@ class InitGraph:
         self.create_ingested_graph_table_if_not_exist()
         graph_links = self.graph_loader.initialize()
         self.db.bulk_insert(self.graph_configuration.table_name, self.graph_configuration.schema, graph_links)
-        self.base_graph.populate_base_graph_table(self.graph_configuration.table_name, self.graph_configuration.schema)
+        if not self.is_base_graph_ready():
+            self.base_graph.drop_base_graph_table()
+            self.base_graph.populate_base_graph_table(self.graph_configuration.table_name, self.graph_configuration.schema)
         self.is_raw_graph_ready = True
 
     def create_custom_tables(self):
@@ -114,5 +117,7 @@ class InitGraph:
         if self.db is not None:
             self.db.reflect_base_tables(self.graph_configuration.schema, self.graph_configuration.table_name)
 
-    def get_is_base_graph_ready(self):
-        return self.base_graph.check_if_base_graph_ready()
+    def is_base_graph_ready(self):
+        base_data_count = self.base_graph.get_base_graph_row_counts()
+        return base_data_count == self.db.get_table_count(self.graph_configuration.table_name,
+                                                                               self.graph_configuration.schema)
