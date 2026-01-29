@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import inspect, MetaData, create_engine, select, delete, update, insert, Column, Integer, BigInteger, \
     String, text, func, Row, RowMapping, TIMESTAMP, Numeric, Table
 
+from data_config_dtos.data_source_config_dto import BaseGraphDTO
 from database.base import Base
 from database.db_configuration import DbConfiguration
 from sqlalchemy.dialects.postgresql import Insert, JSONB, ARRAY, UUID as PG_UUID
@@ -24,13 +25,6 @@ from sqlalchemy import (
 import re
 
 from utils.execution_time import measure_time
-
-
-@dataclass
-class BaseTableConfDTO:
-    table_name: str
-    table_schema: str
-    force_generate: bool
 
 
 SQLALCHEMY_TYPE_MAP = {
@@ -71,26 +65,55 @@ SQLALCHEMY_TYPE_MAP = {
 
 
 class DBRepository(DbConfiguration):
-    _UPSERT_THRESHOLD = 5000  # Not the best upsert threshold makes it too slow
 
-    def __init__(self, db_conf, base, graph):
+    def __init__(self, db_conf, base, raw_graph):
 
-        self.base_table = from_dict(BaseTableConfDTO, base)
-        self.graph = graph
+        self.base_table = from_dict(BaseGraphDTO, base)
+        self.base_graph = raw_graph
         super().__init__(db_conf, self.base_table)
-        self.logger = LoggerManager(__name__).get_logger()
+        self.logger = LoggerManager(type(self).__name__)
         self.table_index_map = {}
 
-    def create_base_table_force(self):
-        if self.base_config.force_generate:
-            if self.has_base_tables():
-                # drop the table backup and create new table
-                self.drop_table(self.base_table.table_name, True, self.base_table.table_schema)
-            self.create_base_table_clone(self.graph.get("schema"), self.graph.get("table_name"))
-            self.logger.info(f"Table '{self.base_table.table_name}' created with force")
-        else:
-            self.logger.warning(f"Force create table set to False . Hence skipping .....")
+    def get_table_count(
+            self,
+            table_name: str,
+            table_schema: str,
+    ) -> int:
+        """
+        Return total row count of a table.
 
+        Args:
+            table_name: table name
+            table_schema: schema name
+
+        Returns:
+            int: number of rows in the table
+        """
+
+        table: Table | None = self.get_table(table_name, table_schema)
+
+        if table is None:
+            raise ValueError(
+                f"Table '{table_schema}.{table_name}' does not exist"
+            )
+
+        stmt = select(func.count()).select_from(table)
+
+        try:
+            with self.session_scope() as session:
+                result = session.execute(stmt).scalar_one()
+
+            self.logger.info(
+                f"Row count for '{table_schema}.{table_name}': {result}"
+            )
+
+            return result
+        except Exception as e:
+            self.logger.error(
+                f"Failed to get row count for "
+                f"'{table_schema}.{table_name}': {e}"
+            )
+            raise
     def create_all_tables(self):
         # TODO: dont check for static table everytime and also for other data source table
         """Create all missing tables defined in Base.metadata."""
@@ -110,13 +133,106 @@ class DBRepository(DbConfiguration):
 
     def create_base_table_clone(self, source_schema, source_table):
         self.logger.info(f"creating base table {self.base_table.table_name} in schema {self.base_table.table_schema}")
-        self.clone_table_schema_with_data(
+        self.clone_table_with_data(
             source_schema, source_table,
             self.base_table.table_schema, self.base_table.table_name,
             True
         )
 
-    def reflect_base_tables(self, schema: str,table_name: str):
+    @measure_time(label="bulk clone")
+    def clone_table_data(
+            self,
+            source_table_name: str,
+            source_table_schema: str,
+            target_table_name: str,
+            target_table_schema: str,
+            exclude_columns: set[str] | None = None,
+    ):
+        """
+        Clone data from source table into target table by automatically
+        selecting matching columns.
+
+        Only columns that:
+        - exist in BOTH tables
+        - are NOT primary keys
+        - are NOT autoincrement
+        - are NOT explicitly excluded
+        will be copied.
+
+        Returns:
+            Number of inserted rows
+        """
+        if not self.table_exists(source_table_name, source_table_schema):
+            self.logger.error(f"Source table does not exist {source_table_name} in schema {source_table_schema}")
+            raise Exception(f"Source table does not exist {source_table_name} in schema {source_table_schema}")
+
+        exclude_columns = exclude_columns or set()
+
+        source_table: Table | None = self.get_table(
+            source_table_name, source_table_schema
+        )
+        target_table: Table | None = self.get_table(
+            target_table_name, target_table_schema
+        )
+
+        if source_table is None:
+            raise ValueError(
+                f"Source table '{source_table_schema}.{source_table_name}' does not exist"
+            )
+
+        if target_table is None:
+            raise ValueError(
+                f"Target table '{target_table_schema}.{target_table_name}' does not exist"
+            )
+
+        # --- resolve common columns ---
+        target_columns = []
+        source_columns = []
+
+        for target_col in target_table.columns:
+            if (
+                    target_col.primary_key
+                    or target_col.autoincrement
+                    or target_col.name in exclude_columns
+            ):
+                continue
+
+            if target_col.name in source_table.c:
+                target_columns.append(target_col)
+                source_columns.append(source_table.c[target_col.name])
+
+        if not target_columns:
+            raise ValueError(
+                f"No compatible columns found between "
+                f"{source_table_schema}.{source_table_name} and "
+                f"{target_table_schema}.{target_table_name}"
+            )
+
+        insert_stmt = insert(target_table).from_select(
+            target_columns,
+            select(*source_columns),
+        )
+
+        try:
+            with self.session_scope() as session:
+                result = session.execute(insert_stmt)
+
+            self.logger.info(
+                f"Cloned data from "
+                f"{source_table_schema}.{source_table_name} → "
+                f"{target_table_schema}.{target_table_name}"
+            )
+
+
+        except Exception as e:
+            self.logger.error(
+                f"Clone failed from "
+                f"{source_table_schema}.{source_table_name} → "
+                f"{target_table_schema}.{target_table_name}: {e}"
+            )
+            raise
+
+    def reflect_base_tables(self, schema: str, table_name: str):
         Table(
             table_name,
             self.base.metadata,
@@ -124,19 +240,18 @@ class DBRepository(DbConfiguration):
             autoload_with=self.engine,
         )
 
-
-    def create_table_if_not_exist(self, table_name: str,table_schema: str = None, force_create: bool = False,
+    def create_table_if_not_exist(self, table_name: str, table_schema: str = None, force_create: bool = False,
                                   create_without_indexes: bool = False):
         """Create table defined in Base.metadata. for the data sources."""
         try:
 
             self.logger.info(f"create table {table_name}")
             self.update_metadata(table_schema)
-            table = self.base.metadata.tables[self.normalize_table_name(table_name,table_schema, False)]
+            table = self.base.metadata.tables[self.normalize_table_name(table_name, table_schema, False)]
             if force_create:
                 self.drop_table(table_name, True, True)
 
-            if not self.table_exists(table_name,table_schema):
+            if not self.table_exists(table_name, table_schema):
                 original_indexes = set(table.indexes)
 
                 if create_without_indexes:
@@ -147,17 +262,17 @@ class DBRepository(DbConfiguration):
                 self.logger.info(f"Table '{table_name}' created successfully.")
             else:
                 schema = table_schema or self.schema
-                if not self.table_schema_matches(table_name,schema):
+                if not self.table_schema_matches(table_name, schema):
                     self.logger.info("Table schema doesn't match")
                     self.create_table_if_not_exist(table_name, True)
                 else:
                     self.logger.info("Table exists, skipping the creation of the table")
         except Exception as e:
             self.logger.error(f"error creating table {table_name} : {e}")
+
     @staticmethod
     def get_staging_table_name(name) -> str:
         return f"{name}_staging"
-
 
     def create_unlogged_staging_table(self, table_name: str):
         staging_table = self.get_staging_table_name(table_name)
@@ -190,8 +305,8 @@ class DBRepository(DbConfiguration):
 
     @measure_time(label="create indexes")
     def create_indexes(self, table_name: str, schema: str = None):
-        table = Base.metadata.tables[self.normalize_table_name(table_name,schema, False)]
-        if not self.table_exists(table_name,schema):
+        table = Base.metadata.tables[self.normalize_table_name(table_name, schema, False)]
+        if not self.table_exists(table_name, schema):
             self.logger.warning(f"Table '{table_name}' doesn't exist. For recreating indexes...")
             return
         schema = schema or self.schema
@@ -210,7 +325,6 @@ class DBRepository(DbConfiguration):
                 del self.table_index_map[table_name]
         else:
             self.logger.warning(f"Table '{table_name}' index skipped as the table indexes doesnt exist")
-
 
     @contextmanager
     def raw_pg_connection(self):
@@ -620,8 +734,8 @@ class DBRepository(DbConfiguration):
             self.logger.error(f"Update failed for '{table_name}': {e}")
             raise
 
-    def clone_table_schema_with_data(self, source_schema: str, table_name: str, target_schema: str,
-                                     target_table_name: str, copy_data: bool = False):
+    def clone_table_with_data(self, source_schema: str, table_name: str, target_schema: str,
+                              target_table_name: str, copy_data: bool = False):
         """
         Clone a table's schema (structure only) from one schema into another.
 

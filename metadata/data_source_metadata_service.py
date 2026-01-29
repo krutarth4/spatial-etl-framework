@@ -22,3 +22,7 @@ class DataSourceMetadataService:
 
     def metadata_exist(self) -> bool:
         return self.metadata_repository.is_metadata_table_present()
+
+    def update(self,key:str, value:dict):
+        pass
+

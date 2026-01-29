@@ -20,7 +20,7 @@ class Application:
     _metadata = "metadata-datasource"
     _datasources = "datasources"
     _graph = "graph"
-    _base = "base"
+    _base_graph = "base"
 
     def __init__(self):
         self.metadata_service: DataSourceMetadataService | None = None
@@ -44,7 +44,7 @@ class Application:
 
     def initialize_database(self, database_conf):
         self.logger.info("Initializing database ......")
-        self.db_instance = DbInstance(database_conf, self.core_conf.get_value(self._base)
+        self.db_instance = DbInstance(database_conf, self.core_conf.get_value(self._base_graph)
                                       , self.core_conf.get_value(self._graph))
 
     def start_application(self):
@@ -87,7 +87,8 @@ class Application:
 
         # core graph logic for the base table
         self.graph_conf = self.core_conf.get_value(self._graph)
-        self.graph = InitGraph(self.graph_conf, self.db_instance, self.scheduler_core)
+        self.graph = InitGraph(self.graph_conf, self.core_conf.get_value(self._base_graph),
+                               self.db_instance, self.scheduler_core)
 
         if not server["enable"] and scheduler["enable"]:
             self.logger.warning("Fallback mechanism activated for keeping thread alive.")
@@ -114,20 +115,20 @@ if __name__ == "__main__":
 
     # check if the base graph is ready or not
     if app.graph is not None:
-        app.graph.initialize_base_graph()
-        app.graph.load_graph()
+        app.graph.update_graph_source()
+        app.graph.ingest_graph_data()
         #             Wait till the new ways_base_graph has been created
         while not app.graph.get_is_base_graph_ready():
             app.logger.warning("Base graph is not ready  ")
             time.sleep(10)
 
-    app.graph.reflect_base_tables()
     # breakpoint for base graph as it will be ready
 
-    if sources is not None and app.graph.check_if_base_graph_present() and app.graph.get_is_base_graph_ready():
+    if sources is not None and app.graph.check_if_raw_graph_present() and app.graph.get_is_base_graph_ready():
 
         # TODO:  app.graph is not None and app.graph.get_is_base_graph_ready()
-        DataSourceMapper(sources, app.db_instance, app.scheduler_core)
+        mappers = DataSourceMapper(sources, app.db_instance, app.scheduler_core)
+        mappers.start_execution()
     else:
         app.logger.warning("No data sources available or the base graph is not ready and have problems ")
 

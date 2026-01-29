@@ -4,6 +4,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Union, Optional, Mapping, Any, List
 
+
 @dataclass
 class TriggerTypeDTO:
     name: str
@@ -65,6 +66,7 @@ class StagingConfDTO:
     table_class: str
     persistent: Optional[bool] = False
 
+
 @dataclass
 class EnrichmentConfDTO:
     table_name: str
@@ -74,12 +76,18 @@ class EnrichmentConfDTO:
 
 @dataclass
 class StorageDTO:
-
     enrichment: EnrichmentConfDTO
     persistent: bool
     staging: StagingConfDTO
     expires_after: Optional[str]
     force_create: Optional[bool] = False
+
+
+@dataclass
+class BaseGraphDTO:
+    table_name: str
+    table_schema: str
+    force_generate: Optional[bool]
 
 
 @dataclass
@@ -180,8 +188,8 @@ class GraphConfDTO:
     env: Mapping[str, str]
     datasource: List[DataSourceDTO]
 
+
 @dataclass
 class MetadataConfDTO:
     description: Optional[str]
     table_schema: str
-

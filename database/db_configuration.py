@@ -78,12 +78,13 @@ class DbConfiguration:
     # -----------------------------
     # Helper: get table object
     # -----------------------------
-    def get_table(self, table_name: str, schema:str =None):
+    def get_table(self, table_name: str, schema: str = None):
 
         table_name = self.normalize_table_name(table_name, schema, True)
         self.update_metadata(schema)
         if table_name not in self.base.metadata.tables:
-            self.logger.warning(f"Table '{table_name}' not found in schema '{schema or self.schema}'. Reflecting metadata...")
+            self.logger.warning(
+                f"Table '{table_name}' not found in schema '{schema or self.schema}'. Reflecting metadata...")
             # return None
             if table_name not in self.base.metadata.tables:
                 return None
@@ -103,25 +104,6 @@ class DbConfiguration:
             self.logger.error(f"Table '{table_name}' does not exist in schema '{self.schema}'")
             self.logger.error(e)
 
-    # -----------------------------
-    # INSERT
-    # -----------------------------
-
-    def insert(self, table_name: str, data_values: dict, column_id: str):
-        """Insert a single row into the given table."""
-        table = self.get_table(table_name)
-        stmt = insert(table).values(**data_values)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=[table.c[column_id]],
-            set_={c.name: getattr(stmt.excluded, c.name) for c in table.columns if c.name != "node_id"})
-
-        try:
-            with self.engine.begin() as conn:
-                conn.execute(stmt)
-            self.logger.info(f"Inserted data into '{table_name}': {data_values}")
-        except SQLAlchemyError as e:
-            self.logger.error(f"Insert failed for '{table_name}': {e}")
-            raise
 
     # -----------------------------
     # FETCH / QUERY
@@ -146,24 +128,22 @@ class DbConfiguration:
         return self.db_url
 
     def create_engine(self):
-        return create_engine(self.db_url, echo=False, plugins=["geoalchemy2"])
+        return create_engine(self.db_url,
+                             echo=False,
+                             pool_size=10,
+                             max_overflow=10,
+                             pool_pre_ping=True,
+                             plugins=["geoalchemy2"]
+                             )
 
     def create_session_factory(self):
         return sessionmaker(bind=self.engine,
                             autocommit=False,
                             autoflush=False,
-                            pool_size=10,
-                            max_overflow = 20,
-                            pool_pre_ping=True
                             )
 
     def get_new_session(self):
         return self.create_scoped_session()
-
-    # def get_session_factory(self):
-    #     if self.session_factory is not None:
-    #         return self.session(
-    #     return None
 
     def update_metadata(self, schema):
         schema = schema or self.schema
@@ -181,15 +161,18 @@ class DbConfiguration:
         """Provide a transactional scope around a series of operations."""
         session = self.scoped_session()
         try:
+            self.logger.info(f"Session opened")
             yield session
             session.commit()
         except:
+            self.logger.warning(f"Session rollback")
             session.rollback()
             raise
         finally:
             # session.remove()
             # TODO: check if the session should be removed or just closed as we are creating new session each time
             # TODO : Evaluate
+            self.logger.info(f"Session closed")
             session.close()
 
     def get_table_row_count(self, table_name: str) -> int:
@@ -225,13 +208,15 @@ class DbConfiguration:
         except Exception as e:
             self.logger.error(f"Failed to fetch table list: {e}")
             raise
+
     def get_all_metdata_tables(self):
         return self.metadata.tables.values()
+
     def has_base_tables(self):
         """Return a list of all table names in the configured schema. Based on inspector linked through DB itself """
         try:
             has_table = self.inspector.has_table(table_name=self.base_config.table_name,
-                                            schema=self.base_config.table_schema)
+                                                 schema=self.base_config.table_schema)
             return has_table
 
         except Exception as e:
@@ -252,9 +237,9 @@ class DbConfiguration:
         cols = self.inspector.get_columns(table_name, schema=self.schema)
         return [col["name"] for col in cols]
 
-    def get_db_column_info(self, table_name: str,table_schema: str):
+    def get_db_column_info(self, table_name: str, table_schema: str):
         """Return full DB column metadata (name → attributes)."""
-        table_name = self.normalize_table_name(table_name,table_schema, False)
+        table_name = self.normalize_table_name(table_name, table_schema, False)
         columns = self.inspector.get_columns(table_name, schema=self.schema)
 
         db_info = {}
@@ -276,7 +261,8 @@ class DbConfiguration:
             return sqlalchemy_type.python_type
         except NotImplementedError:
             return None
-    def normalize_table_name(self, table_name: str,schema:str =None, with_schema_prefix: bool = False):
+
+    def normalize_table_name(self, table_name: str, schema: str = None, with_schema_prefix: bool = False):
         # print(f"before table name normalization {table_name}")
         name = table_name.split(".")
         size = len(name)
@@ -288,15 +274,15 @@ class DbConfiguration:
             # print(f"result for normalization {res}")
         return res
 
-    def get_orm_column_info(self, table_name: str,schema:str):
+    def get_orm_column_info(self, table_name: str, schema: str):
         """Return ORM model metadata for columns."""
-        table_name = self.normalize_table_name(table_name,schema, False)
+        table_name = self.normalize_table_name(table_name, schema, False)
         table = Base.metadata.tables.get(table_name)
         # print(f"get orm column info ORM table {table}")
         if table is None:
             # workaround for local class testing
 
-            table = Base.metadata.tables.get(self.normalize_table_name(table_name,schema, True))
+            table = Base.metadata.tables.get(self.normalize_table_name(table_name, schema, True))
             if table is None:
                 raise ValueError(f"ORM table '{table_name}' not found!")
 
@@ -313,15 +299,17 @@ class DbConfiguration:
                 "python_type": DbConfiguration.safe_python_type(col.type),
             }
         return orm_info
-    #TODO: implement to be used by both the factors
+
+    # TODO: implement to be used by both the factors
     @staticmethod
     def create_table_schema_comparator(key: str, value: Any):
         return
-    def table_schema_matches(self, table_name: str,table_schema: str = None) -> bool | None:
+
+    def table_schema_matches(self, table_name: str, table_schema: str = None) -> bool | None:
         """Compare DB table structure vs ORM table structure (deep check)."""
         try:
-            db_info = self.get_db_column_info(table_name,table_schema)
-            orm_info = self.get_orm_column_info(table_name,table_schema)
+            db_info = self.get_db_column_info(table_name, table_schema)
+            orm_info = self.get_orm_column_info(table_name, table_schema)
 
             self.logger.debug(f"DB table {table_name}: {db_info}")
             self.logger.debug(f"ORM table {table_name}: {orm_info}")

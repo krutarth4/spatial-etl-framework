@@ -19,7 +19,6 @@ class DataSourceMapper:
         self.logger.info(f"Found {len(self.data_sources)} data sources")
         self.data_sources = self.check_enable_data_sources()
         self.logger.info(f"Enable Found {len(self.data_sources)} data sources")
-        self.run_data_source_mapper()
 
     def check_enable_data_sources(self):
         try:
@@ -50,6 +49,9 @@ class DataSourceMapper:
                 # instance_data_source.run()
             except Exception as e:
                 self.logger.error(f"Error running data source {class_name} :{e}")
+
+    def start_execution(self):
+        self.run_data_source_mapper()
 
 
 if __name__ == "__main__":
