@@ -11,6 +11,7 @@ from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from pygments.lexers import j
 
+from core.base_graph import BaseGraph
 from core.init_scheduler import InitScheduler
 from database.db_instancce import DbInstance
 from handlers.file_handler import FileHandler
@@ -20,7 +21,6 @@ from main_core.data_source_abc import DataSourceABC
 from data_config_dtos.data_source_config_dto import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, \
     SourceInputDTO, SourceDTO
 from main_core.safe_class import safe_class
-from main_core.processing_steps import ProcessingSteps, StepDTO
 from utils.execution_time import format_duration
 
 
@@ -47,13 +47,13 @@ class TriggerTypeEnum(Enum):
 @safe_class
 class DataSourceABCImpl(DataSourceABC):
 
-    def __init__(self, data_source_conf: DataSourceDTO, db_instance: DbInstance | None, scheduler_core: InitScheduler):
+    def __init__(self, data_source_conf: DataSourceDTO, db_instance: DbInstance | None, scheduler_core: InitScheduler, base_graph_conf):
 
         self.metadata = None
         self.source_result: List | None = None
         self.logger = LoggerManager(type(self).__name__).get_logger()
         self.logger.info(f"Initializing {type(self).__name__}")
-
+        self.base_graph = BaseGraph(db_instance,base_graph_conf)
         self.data_source_config = data_source_conf
         self.data_source_name = data_source_conf.name
         self.db = db_instance
@@ -502,7 +502,8 @@ class DataSourceABCImpl(DataSourceABC):
             self.logger.info(f"calling the query, {query}")
             self.db.call_sql(query)
         else:
-            self.logger.info("Nothing done")
+            self.logger.info("No mapping Query given. Please write a postgresql query in the respective mapper class. Implement "
+                             "func map_to_link_db_query")
 
     def map_to_link_db_query(self) -> None | str:
         sql_query = None
@@ -523,12 +524,13 @@ class DataSourceABCImpl(DataSourceABC):
             try:
                 if self.db is not None:
                     self.logger.info(f"Mapping started on Mapping Table.....")
-                    # self.db.add_column_to_base(self.data_source_config.mapping.base_table.column_name
-                    #                            , self.data_source_config.mapping.base_table.column_type)
-                    # TODO: add indexation for the elements
-
-                    self.map_to_links()
-
+                    total_ways_count = self.base_graph.get_base_graph_row_counts()
+                    mapped_ways_count = self.db.get_table_count(self.data_source_config.mapping.table_name,
+                                                                self.data_source_config.mapping.table_schema)
+                    if mapped_ways_count != total_ways_count:
+                        self.map_to_links()
+                    else:
+                        self.logger.info(f"Skipping mapping as all ways geometry mapped....")
             except Exception as e:
                 self.logger.error(f"Error occurred during base table update {e}")
 

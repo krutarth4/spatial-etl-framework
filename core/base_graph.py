@@ -10,7 +10,6 @@ class BaseGraph:
         if db is not None:
             self.db = db
             self.base_graph_conf = from_dict(BaseGraphDTO, base_graph_conf)
-            self.create_base_graph_tables()
 
     def create_base_graph_tables(self):
         self.db.create_table_if_not_exist(self.base_graph_conf.table_name,
@@ -22,9 +21,8 @@ class BaseGraph:
                                  self.base_graph_conf.table_schema)
         self.db.create_ways_base_geometry_index(self.base_graph_conf.table_schema
                                                 ,self.base_graph_conf.table_name,
-                                                "geometry"
+                                                "geometry",
                                                 "idx_ways_base_geometry_index"
-
                                                 )
 
 
@@ -37,3 +35,4 @@ class BaseGraph:
 
     def get_base_graph_row_counts(self):
         return self.db.get_table_count(self.base_graph_conf.table_name,self.base_graph_conf.table_schema)
+

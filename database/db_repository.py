@@ -1053,7 +1053,7 @@ class DBRepository(DbConfiguration):
             return result
         except Exception as e:
             self.logger.error(f"SQL execution failed: {e}")
-            raise
+            
 
 
 if __name__ == "__main__":

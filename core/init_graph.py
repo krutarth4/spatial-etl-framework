@@ -30,7 +30,9 @@ class InitGraph:
         self.is_raw_graph_ready = False
         self.scheduler_core = scheduler_core
         self.db = db
+        self.base_graph_conf = base_graph_conf
         self.base_graph = BaseGraph(db, base_graph_conf)
+        self.base_graph.create_base_graph_tables()
         if not self.graph_configuration.enable:
             self.logger.warning("Base graph DISABLED")
             return
@@ -44,7 +46,7 @@ class InitGraph:
         if self.graph_configuration.enable:
             self.logger.info("Initializing Base Graph")
             graph_mapper = DataSourceMapper(self.graph_configuration.datasource, self.db,
-                                            self.scheduler_core)
+                                            self.scheduler_core, self.base_graph_conf)
             graph_mapper.start_execution()
         else:
             self.logger.info("Skipping Initializing Graph as enable set to False......")

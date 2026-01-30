@@ -11,11 +11,12 @@ from main_core.safe_class import safe_class
 class DataSourceMapper:
     _prefix_path = "data_mappers"
 
-    def __init__(self, sources, db_instance, scheduler_core):
+    def __init__(self, sources, db_instance, scheduler_core, base_graph_conf):
         self.logger = LoggerManager(type(self).__name__).get_logger()
         self.db_instance = db_instance
         self.scheduler_core = scheduler_core
         self.data_sources = sources
+        self.base_graph_conf = base_graph_conf
         self.logger.info(f"Found {len(self.data_sources)} data sources")
         self.data_sources = self.check_enable_data_sources()
         self.logger.info(f"Enable Found {len(self.data_sources)} data sources")
@@ -44,7 +45,7 @@ class DataSourceMapper:
                 module_path = f"{self._prefix_path}.{class_name}Mapper"
                 module = importlib.import_module(module_path)
                 mapper_class = getattr(module, f"{class_name[0].upper() + class_name[1:]}Mapper")
-                instance_data_source = mapper_class(data, self.db_instance, self.scheduler_core)
+                instance_data_source = mapper_class(data, self.db_instance, self.scheduler_core, self.base_graph_conf)
                 self.logger.info(f"execution finished for the {mapper_class.__name__}")
                 # instance_data_source.run()
             except Exception as e:
