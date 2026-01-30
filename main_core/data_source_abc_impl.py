@@ -46,9 +46,9 @@ class TriggerTypeEnum(Enum):
 @safe_class
 class DataSourceABCImpl(DataSourceABC):
 
-    def __init__(self, data_source_conf: DataSourceDTO, db_instance: DbInstance | None, scheduler_core: InitScheduler, base_graph_conf):
+    def __init__(self, data_source_conf: DataSourceDTO, db_instance: DbInstance | None, scheduler_core: InitScheduler, base_graph_conf, metadata_service):
 
-        self.metadata = None
+        self.metadata_service = metadata_service
         self.source_result: List | None = None
         self.logger = LoggerManager(type(self).__name__).get_logger()
         self.logger.info(f"Initializing {type(self).__name__}")

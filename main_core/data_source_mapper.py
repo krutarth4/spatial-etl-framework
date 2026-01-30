@@ -5,17 +5,19 @@ from dacite import from_dict, Config
 
 from log_manager.logger_manager import LoggerManager
 from main_core.safe_class import safe_class
+from metadata.data_source_metadata_service import DataSourceMetadataService
 
 
 @safe_class
 class DataSourceMapper:
     _prefix_path = "data_mappers"
 
-    def __init__(self, sources, db_instance, scheduler_core, base_graph_conf):
+    def __init__(self, sources, db_instance, scheduler_core, base_graph_conf, metadata_service: DataSourceMetadataService | None):
         self.logger = LoggerManager(type(self).__name__).get_logger()
         self.db_instance = db_instance
         self.scheduler_core = scheduler_core
         self.data_sources = sources
+        self.metadata_service = metadata_service
         self.base_graph_conf = base_graph_conf
         self.logger.info(f"Found {len(self.data_sources)} data sources")
         self.data_sources = self.check_enable_data_sources()
@@ -45,7 +47,7 @@ class DataSourceMapper:
                 module_path = f"{self._prefix_path}.{class_name}Mapper"
                 module = importlib.import_module(module_path)
                 mapper_class = getattr(module, f"{class_name[0].upper() + class_name[1:]}Mapper")
-                instance_data_source = mapper_class(data, self.db_instance, self.scheduler_core, self.base_graph_conf)
+                instance_data_source = mapper_class(data, self.db_instance, self.scheduler_core, self.base_graph_conf, self.metadata_service)
                 self.logger.info(f"execution finished for the {mapper_class.__name__}")
                 # instance_data_source.run()
             except Exception as e:

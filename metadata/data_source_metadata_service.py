@@ -26,3 +26,5 @@ class DataSourceMetadataService:
     def update(self,key:str, value:dict):
         pass
 
+    def upsert(self,key:str, value:dict):
+        pass

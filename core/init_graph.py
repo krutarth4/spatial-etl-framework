@@ -23,11 +23,13 @@ import custom_graph_base_tables
 @safe_class
 class InitGraph:
 
-    def __init__(self, graph_conf, base_graph_conf, db: DbInstance | None, scheduler_core: InitScheduler | None):
+    def __init__(self, graph_conf, base_graph_conf, metadata_service, db: DbInstance | None,
+                 scheduler_core: InitScheduler | None):
         self.graph_loader = None
         self.graph_configuration = from_dict(GraphConfDTO, graph_conf)
         self.logger = LoggerManager(type(self).__name__)
         self.is_raw_graph_ready = False
+        self.metadata_service = metadata_service
         self.scheduler_core = scheduler_core
         self.db = db
         self.base_graph_conf = base_graph_conf
@@ -46,7 +48,7 @@ class InitGraph:
         if self.graph_configuration.enable:
             self.logger.info("Initializing Base Graph")
             graph_mapper = DataSourceMapper(self.graph_configuration.datasource, self.db,
-                                            self.scheduler_core, self.base_graph_conf)
+                                            self.scheduler_core, self.base_graph_conf, self.metadata_service)
             graph_mapper.start_execution()
         else:
             self.logger.info("Skipping Initializing Graph as enable set to False......")
@@ -85,7 +87,8 @@ class InitGraph:
             self.logger.warning("Raw graph already present")
             self.is_raw_graph_ready = True
             base_data_count = self.base_graph.get_base_graph_row_counts()
-            if base_data_count == 0 and  base_data_count != self.db.get_table_count(self.graph_configuration.table_name, self.graph_configuration.schema):
+            if base_data_count == 0 and base_data_count != self.db.get_table_count(self.graph_configuration.table_name,
+                                                                                   self.graph_configuration.schema):
                 self.logger.info(f"populating data into base_graph")
                 self.base_graph.populate_base_graph_table(self.graph_configuration.table_name,
                                                           self.graph_configuration.schema)
@@ -96,7 +99,8 @@ class InitGraph:
         self.db.bulk_insert(self.graph_configuration.table_name, self.graph_configuration.schema, graph_links)
         if not self.is_base_graph_ready():
             self.base_graph.drop_base_graph_table()
-            self.base_graph.populate_base_graph_table(self.graph_configuration.table_name, self.graph_configuration.schema)
+            self.base_graph.populate_base_graph_table(self.graph_configuration.table_name,
+                                                      self.graph_configuration.schema)
         self.is_raw_graph_ready = True
 
     def create_custom_tables(self):
@@ -122,4 +126,4 @@ class InitGraph:
     def is_base_graph_ready(self):
         base_data_count = self.base_graph.get_base_graph_row_counts()
         return base_data_count == self.db.get_table_count(self.graph_configuration.table_name,
-                                                                               self.graph_configuration.schema)
+                                                          self.graph_configuration.schema)

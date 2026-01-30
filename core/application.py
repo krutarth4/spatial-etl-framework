@@ -89,7 +89,7 @@ class Application:
         # core graph logic for the base table
         self.graph_conf = self.core_conf.get_value(self._graph)
         self.base_graph_conf = self.core_conf.get_value(self._base_graph)
-        self.graph = InitGraph(self.graph_conf, self.base_graph_conf,
+        self.graph = InitGraph(self.graph_conf, self.base_graph_conf,self.metadata_service,
                                self.db_instance, self.scheduler_core)
 
         if not server["enable"] and scheduler["enable"]:
@@ -129,7 +129,8 @@ if __name__ == "__main__":
     if sources is not None and app.graph.is_base_graph_ready():
 
         # TODO:  app.graph is not None and app.graph.get_is_base_graph_ready()
-        mappers = DataSourceMapper(sources, app.db_instance, app.scheduler_core, app.base_graph_conf)
+        mappers = DataSourceMapper(sources, app.db_instance, app.scheduler_core, app.base_graph_conf,
+                                   app.metadata_service)
         mappers.start_execution()
     else:
         app.logger.warning("No data sources available or the base graph is not ready and have problems ")
