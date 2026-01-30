@@ -59,6 +59,8 @@ class DataSourceABCImpl(DataSourceABC):
         self.job_configuration = data_source_conf.job
         self.start_timer = None
         self.end_timer = None
+        self.raw_staging_table = None
+        self.raw_staging_schema = None
 
         if scheduler_core is not None:
             self.scheduler = scheduler_core
@@ -72,13 +74,19 @@ class DataSourceABCImpl(DataSourceABC):
             self.logger.info(f"Creating table")
             storage_data = self.data_source_config.storage
             force_create = storage_data.force_create
-            self.create_staging_tables(storage_data.staging.table_name,storage_data.staging.table_schema, force_create)
-            self.create_enrichment_tables(storage_data.enrichment.table_name,storage_data.enrichment.table_schema,force_create)
-            self.create_mapping_tables(self.data_source_config.mapping.table_name,self.data_source_config.mapping.table_schema,force_create)
+            if storage_data.staging:
+                self.create_staging_tables(storage_data.staging.table_name,storage_data.staging.table_schema, force_create)
+            if storage_data.enrichment:
+                self.create_enrichment_tables(storage_data.enrichment.table_name,storage_data.enrichment.table_schema,force_create)
+            if self.data_source_config.mapping:
+                self.create_mapping_tables(self.data_source_config.mapping.table_name,self.data_source_config.mapping.table_schema,force_create)
 
     def create_staging_tables(self, table_name: str,schema:str, force_create: bool):
+        raw_staging_table_name = f"{table_name}_raw_staging"
         self.db.create_table_if_not_exist(table_name,table_schema=schema or None,
                                           force_create=force_create,create_without_indexes=True)
+        self.raw_staging_schema,self.raw_staging_table= self.db.clone_table_structure(schema, table_name,schema, raw_staging_table_name)
+
 
     def create_enrichment_tables(self, table_name: str,schema : str, force_create: bool):
         self.db.create_table_if_not_exist(table_name, table_schema= schema or None,
@@ -398,7 +406,7 @@ class DataSourceABCImpl(DataSourceABC):
                 if self.db is not None:
                     self.logger.warning("found new data hence continuing with db upsert")
                     self.pre_database_processing()
-                    self.db.bulk_insert(db_storage.staging.table_name,db_storage.staging.table_schema
+                    self.db.bulk_insert(self.raw_staging_table,self.raw_staging_schema
                                         , self.source_result, True)
                     if db_storage.enrichment:
                         self.db.clone_table_data(db_storage.staging.table_name,

@@ -72,6 +72,7 @@ class EnrichmentConfDTO:
     table_name: str
     table_schema: str
     table_class: str
+    persistent: Optional[bool] = False
 
 
 @dataclass

@@ -3,14 +3,13 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from io import StringIO
-from typing import Union, List, Text
+from typing import  Text
 
 from dacite import from_dict
 from geoalchemy2 import Geometry
-from pandas.core.config_init import table_schema_cb
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import inspect, MetaData, create_engine, select, delete, update, insert, Column, Integer, BigInteger, \
-    String, text, func, Row, RowMapping, TIMESTAMP, Numeric, Table
+from sqlalchemy import select, update, insert, Column, BigInteger, text, func, Row, RowMapping, TIMESTAMP, Numeric, \
+    Table, or_, MetaData
 
 from data_config_dtos.data_source_config_dto import BaseGraphDTO
 from database.base import Base
@@ -23,7 +22,6 @@ from sqlalchemy import (
     Integer, Float, String, Boolean, Date, DateTime, JSON
 )
 import re
-
 from utils.execution_time import measure_time
 
 
@@ -427,6 +425,57 @@ class DBRepository(DbConfiguration):
             self.logger.error(f"Bulk insert failed for '{table_name}': {e}")
             raise
 
+    def upsert_from_staging(
+            self,
+            source_table_name: str,
+            target_table_name: str,
+            schema: str,
+            conflict_cols: list[str],
+            update_cols: list[str],
+    ):
+        source = self.get_table(source_table_name, schema)
+        target = self.get_table(target_table_name, schema)
+
+        if not source or not target:
+            raise ValueError("Source or target table not found")
+
+        insert_cols = conflict_cols + update_cols
+
+        stmt = Insert(target).from_select(
+            insert_cols,
+            select(*(source.c[col] for col in insert_cols))
+        )
+
+        update_map = {
+            col: getattr(stmt.excluded, col)
+            for col in update_cols
+        }
+
+        # 🔥 update only if data actually changed
+        where_clause = or_(
+            *(
+                getattr(target.c[col]).is_distinct_from(
+                    getattr(stmt.excluded, col)
+                )
+                for col in update_cols
+            )
+        )
+
+        stmt = stmt.on_conflict_do_update(
+            index_elements=conflict_cols,
+            set_=update_map,
+            where=where_clause,
+        )
+
+        with self.session_scope() as session:
+            result = session.execute(stmt)
+
+        self.logger.info(
+            f"Upserted from {source_table_name} → {target_table_name}"
+        )
+
+        return result.rowcount
+
     def resolve_sqlalchemy_type(self, type_str: str):
         """
         Convert string like:
@@ -769,6 +818,30 @@ class DBRepository(DbConfiguration):
                 conn.execute(text(copy_data_sql))
 
         return f"{target_schema}.{target_table_name}"
+
+    def clone_table_structure(self, source_schema: str, source_table_name: str, target_schema: str, target_table_name: str):
+        self.logger.info(f"Creating raw staging table {target_table_name} ...")
+        source_table = self.get_table(source_table_name,source_schema)
+        if source_table is None:
+            raise ValueError(f"Source table {source_schema}.{source_table_name} not found")
+        metadata = MetaData(schema=target_schema)
+        raw_table = Table(
+            target_table_name,  # ✅ positional
+            metadata,  # ✅ positional
+            *(
+                c.copy(
+                    autoincrement=True,
+                    unique=False,
+                    index=False,
+                )
+                for c in source_table.columns
+            ),
+            schema=target_schema,
+        )
+        self.metadata.create_all(bind=self.engine, checkfirst=True,tables=[raw_table])
+        self.logger.info(f"Table '{target_table_name}' created successfully.")
+        return target_schema, target_table_name
+
 
     def call_sql(self, sql: str, params: dict | None = None):
         """
