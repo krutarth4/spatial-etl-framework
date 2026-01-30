@@ -61,30 +61,6 @@ class WeatherStationMapper(DataSourceABCImpl):
         enrichment = self.data_source_config.storage.enrichment
         mapping = self.data_source_config.mapping
 
-        # sql = f"""
-        # INSERT INTO {mapping.table_schema}.{mapping.table_name} (
-        #     way_id,
-        #     station_id,
-        #     distance
-        # )
-        # SELECT
-        #     d.dwd_station_id,
-        #     w.id AS link_id,
-        #     'nearest_station' AS mapping_method
-        # FROM {enrichment.table_schema}.{enrichment.table_name} d
-        # JOIN LATERAL (
-        #     SELECT id
-        #     FROM {base.table_schema}.{base.table_name}
-        #     ORDER BY
-        #         ST_SetSRID(ST_MakePoint(d.lon, d.lat), 4326) <-> geom
-        #     LIMIT 1
-        # ) w ON TRUE
-        # WHERE NOT EXISTS (
-        #     SELECT 1
-        #     FROM {mapping.table_schema}.{mapping.table_name} m
-        #     WHERE m.station_id = d.dwd_station_id
-        # );
-        # """
 
 
         sql =f"""
