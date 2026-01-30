@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint, ForeignKeyConstraint
 
+from core.globalconstants import GlobalConstants
 from database_tables.enrichment_table import EnrichmentTable
 from database_tables.mapping_table import MappingTable
 from database_tables.staging_table import StagingTable
@@ -21,22 +22,20 @@ class DwdStationsTable(StagingTable):
     first_record = Column(DateTime(timezone=True))
     last_record = Column(DateTime(timezone=True))
 
-    # __table_args__ = (
-    #     UniqueConstraint("dwd_station_id", "lat", "lon", name="uq_dwd_station_locations"),
-    # )
+
 
 class DwdWeatherStationEnrichmentTable(EnrichmentTable):
     __tablename__ = "dwd_station_locations_enrichment"
     uid = Column(Integer, primary_key=True, autoincrement=True)
-    dwd_station_id = Column(Integer, nullable=False)
+    dwd_station_id = Column(Integer,unique=True, nullable=False)
     lat = Column(Float)
     lon = Column(Float)
 
 class DwdMappingTable(MappingTable):
     __tablename__ = "dwd_station_locations_mapping"
     uid = Column(Integer, primary_key=True, autoincrement=True)
-    station_id = Column(Integer,ForeignKey("dwd_station_locations_staging.uid", ondelete="Cascade") , unique=True, nullable=False)
-    distance = Column(Float)
+    station_id = Column(Integer,ForeignKey(f"{GlobalConstants.base_schema}.{DwdWeatherStationEnrichmentTable.__tablename__}.uid", ondelete="Cascade") , nullable=False)
+    distance = Column(Float, nullable=False)
 
 
 class WeatherStationMapper(DataSourceABCImpl):
@@ -54,59 +53,64 @@ class WeatherStationMapper(DataSourceABCImpl):
         self.logger.info(f"Filtered {len(data)} → {len(filtered)} rows")
         return filtered
 
-    #  This check is called right after the source filter if we should continue
-    # def check_before_update(self, old_data, new_data) -> bool:
-    #     if len(old_data) != len(new_data):
-    #         return True
-    #     return False
 
-    # def map_to_link_db_query(self) -> None | str:
-    #     self.logger.info(f"Mapping DWD Stations to links through sql query")
-    #     sql = f"""
-    #         UPDATE {self.data_source_config.mapping.table_schema}
-    #         .{self.data_source_config.mapping.table_name} AS w
-    #         SET
-    #             {self.data_source_config.mapping.base_table.column_name} = (
-    #         SELECT d.dwd_station_id
-    #         FROM {self.data_source_config.storage.table_schema}.{self.data_source_config.storage.table_name} AS d
-    #         ORDER BY ST_SetSRID(ST_MakePoint(d.lon, d.lat), 4326) <->
-    #                 w.geom
-    #         LIMIT 1
-    #             )
-    #     """
-    #     return sql
+    def map_to_link_db_query(self) -> str:
+        self.logger.info("Mapping DWD stations to links (insert into mapping table)")
+
+        base = self.data_source_config.mapping.base_table
+        enrichment = self.data_source_config.storage.enrichment
+        mapping = self.data_source_config.mapping
+
+        # sql = f"""
+        # INSERT INTO {mapping.table_schema}.{mapping.table_name} (
+        #     way_id,
+        #     station_id,
+        #     distance
+        # )
+        # SELECT
+        #     d.dwd_station_id,
+        #     w.id AS link_id,
+        #     'nearest_station' AS mapping_method
+        # FROM {enrichment.table_schema}.{enrichment.table_name} d
+        # JOIN LATERAL (
+        #     SELECT id
+        #     FROM {base.table_schema}.{base.table_name}
+        #     ORDER BY
+        #         ST_SetSRID(ST_MakePoint(d.lon, d.lat), 4326) <-> geom
+        #     LIMIT 1
+        # ) w ON TRUE
+        # WHERE NOT EXISTS (
+        #     SELECT 1
+        #     FROM {mapping.table_schema}.{mapping.table_name} m
+        #     WHERE m.station_id = d.dwd_station_id
+        # );
+        # """
 
 
-def map_to_link_db_query(self) -> str:
-    self.logger.info("Mapping DWD stations to links (insert into mapping table)")
+        sql =f"""
+            INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, station_id, distance)
+            SELECT
+                w.id AS way_id,
+                s.uid AS station_id,
+                ST_Distance(
+                    w.geometry::geography,
+                    ST_SetSRID(ST_MakePoint(s.lon, s.lat), 4326)::geography
+                ) AS distance
+            FROM {base.table_schema}.{base.table_name} w
+            JOIN LATERAL (
+                SELECT
+                    st.uid,
+                    st.lat,
+                    st.lon
+                FROM {enrichment.table_schema}.{enrichment.table_name} st
+                ORDER BY
+                    ST_Distance(
+                        w.geometry::geography,
+                        ST_SetSRID(ST_MakePoint(st.lon, st.lat), 4326)::geography
+                    )
+                LIMIT 1
+            ) s ON TRUE;
+        
+        """
 
-    base = self.data_source_config.mapping.base_table
-    staging = self.data_source_config.storage
-    mapping = self.data_source_config.mapping.mapping_table
-
-    sql = f"""
-    INSERT INTO {mapping.table_schema}.{mapping.table_name} (
-        station_id,
-        link_id,
-        distance
-    )
-    SELECT
-        d.dwd_station_id,
-        w.id AS link_id,
-        'nearest_station' AS mapping_method
-    FROM {staging.table_schema}.{staging.table_name} d
-    JOIN LATERAL (
-        SELECT id
-        FROM {base.table_schema}.{base.table_name}
-        ORDER BY
-            ST_SetSRID(ST_MakePoint(d.lon, d.lat), 4326) <-> geom
-        LIMIT 1
-    ) w ON TRUE
-    WHERE NOT EXISTS (
-        SELECT 1
-        FROM {mapping.table_schema}.{mapping.table_name} m
-        WHERE m.station_id = d.dwd_station_id
-    );
-    """
-
-    return sql
+        return sql

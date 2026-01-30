@@ -1,5 +1,6 @@
 from dacite import from_dict
 
+from custom_graph_base_tables import WaysBaseTable
 from data_config_dtos.data_source_config_dto import BaseGraphDTO
 from database.db_instancce import DbInstance
 
@@ -19,6 +20,14 @@ class BaseGraph:
     def populate_base_graph_table(self, source_name: str, source_schema: str):
         self.db.clone_table_data(source_name, source_schema, self.base_graph_conf.table_name,
                                  self.base_graph_conf.table_schema)
+        self.db.create_ways_base_geometry_index(self.base_graph_conf.table_schema
+                                                ,self.base_graph_conf.table_name,
+                                                "geometry"
+                                                "idx_ways_base_geometry_index"
+
+                                                )
+
+
 
     def drop_base_graph_table(self):
         self.db.drop_table(self.base_graph_conf.table_name,self.base_graph_conf.table_schema,True,True,True)

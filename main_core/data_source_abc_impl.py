@@ -412,13 +412,6 @@ class DataSourceABCImpl(DataSourceABC):
                     self.pre_database_processing()
                     self.db.bulk_insert(self.raw_staging_table, self.raw_staging_schema
                                         , self.source_result, True)
-                    if db_storage.enrichment:
-                        self.db.clone_table_data(db_storage.staging.table_name,
-                                                 db_storage.staging.table_schema,
-                                                 db_storage.enrichment.table_name,
-                                                 db_storage.enrichment.table_schema
-                                                 )
-
 
 
         except Exception as e:
@@ -443,23 +436,33 @@ class DataSourceABCImpl(DataSourceABC):
 
                 if self.check_before_update():
                     self.load()
-                    self.map_to_base()
 
                 else:
                     self.logger.warning(f"No new data available for {self.data_source_config.name}")
                     return self.run_job_response(f"No new data available for {self.data_source_config.name}")
             # add indexes for the newly formed table for faster inserts and transactions
 
-            self.recreate_table_indexes()
             self.post_database_processing()
-            self.db.sync_raw_to_staging(self.raw_staging_schema, self.raw_staging_table
-                                        ,self.data_source_config.storage.staging.table_schema, self.data_source_config.storage.staging.table_name)
+            self.sync_raw_to_staging()
+            self.sync_staging_to_enrichment()
+            self.map_to_base()
             self.clean_raw_staging_table()
+            self.recreate_table_indexes()
         except Exception as e:
             self.logger.error(f"Error occurred in run {e}")
 
         return self.run_job_response("Job finished Successfully !!!")
 
+    def sync_staging_to_enrichment(self):
+        self.db.sync_staging_to_enrichment(self.data_source_config.storage.staging.table_schema,
+                                           self.data_source_config.storage.staging.table_name,
+                                           self.data_source_config.storage.enrichment.table_schema,
+                                           self.data_source_config.storage.enrichment.table_name
+                                           )
+    def sync_raw_to_staging(self):
+        self.db.sync_source_to_target_table(self.raw_staging_schema, self.raw_staging_table
+                                            , self.data_source_config.storage.staging.table_schema,
+                                            self.data_source_config.storage.staging.table_name)
     def clean_raw_staging_table(self):
         self.db.drop_table(self.raw_staging_table, self.raw_staging_schema, False, True, True)
 
@@ -516,12 +519,12 @@ class DataSourceABCImpl(DataSourceABC):
         self.source_result = []
 
     def map_to_base(self):
-        if self.data_source_config.data_type != "static" and self.data_source_config.mapping.enable:
+        if self.data_source_config.mapping.enable:
             try:
                 if self.db is not None:
-                    self.logger.info(f"Starting operation on base table")
-                    self.db.add_column_to_base(self.data_source_config.mapping.base_table.column_name
-                                               , self.data_source_config.mapping.base_table.column_type)
+                    self.logger.info(f"Mapping started on Mapping Table.....")
+                    # self.db.add_column_to_base(self.data_source_config.mapping.base_table.column_name
+                    #                            , self.data_source_config.mapping.base_table.column_type)
                     # TODO: add indexation for the elements
 
                     self.map_to_links()

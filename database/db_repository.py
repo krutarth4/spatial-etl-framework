@@ -213,6 +213,30 @@ class DBRepository(DbConfiguration):
             )
             raise
 
+    def create_ways_base_geometry_index(
+            self,
+            table_schema: str,
+            table_name: str,
+            geometry_column: str = "geometry",
+            index_name: str = "idx_ways_base_geometry_index",
+    ) -> None:
+        """
+        Create GiST index on ways geometry column (idempotent).
+        """
+
+        stmt = text(f"""
+            CREATE INDEX IF NOT EXISTS {index_name}
+            ON {table_schema}.{table_name}
+            USING GIST ({geometry_column});
+        """)
+
+        with self.session_scope() as session:
+            session.execute(stmt)
+
+        self.logger.info(
+            f"GiST index '{index_name}' ensured on "
+            f"{table_schema}.{table_name}({geometry_column})"
+        )
     def reflect_base_tables(self, schema: str, table_name: str):
         Table(
             table_name,
@@ -836,8 +860,99 @@ class DBRepository(DbConfiguration):
             )
 
         return update_cols
-    @measure_time(label= "Syncing Data to Staging")
-    def sync_raw_to_staging(
+
+    def sync_staging_to_enrichment(
+            self,
+            staging_schema: str,
+            staging_table_name: str,
+            enrichment_schema: str,
+            enrichment_table_name: str,
+    ):
+        """
+        Sync data from staging → enrichment.
+
+        - inserts new rows
+        - updates rows only if enrichment-relevant columns changed
+        - ignores unchanged rows
+        """
+
+        staging_table = self.get_table(staging_table_name, staging_schema)
+        enrichment_table = self.get_table(enrichment_table_name, enrichment_schema)
+
+        if staging_table is None:
+            raise ValueError(
+                f"Staging table {staging_schema}.{staging_table_name} not found"
+            )
+        if enrichment_table is None:
+            raise ValueError(
+                f"Enrichment table {enrichment_schema}.{enrichment_table_name} not found"
+            )
+
+        # 🔑 infer business key from enrichment table
+        conflict_cols = DBRepository.resolve_conflict_columns(enrichment_table)
+
+        # 🔄 determine which columns enrichment actually stores
+        update_cols = [
+            c.name
+            for c in enrichment_table.columns
+            if not c.primary_key
+               and c.name not in conflict_cols
+               and c.name in staging_table.c
+        ]
+
+        if not update_cols:
+            raise ValueError(
+                f"No updatable enrichment columns found for "
+                f"{enrichment_schema}.{enrichment_table_name}"
+            )
+
+        insert_cols = conflict_cols + update_cols
+
+        base_insert = Insert(enrichment_table).from_select(
+            insert_cols,
+            select(*(staging_table.c[c] for c in insert_cols))
+        )
+
+        update_map = {
+            col: getattr(base_insert.excluded, col)
+            for col in update_cols
+        }
+
+        where_clause = or_(
+            *(
+                enrichment_table.c[col].is_distinct_from(
+                    getattr(base_insert.excluded, col)
+                )
+                for col in update_cols
+            )
+        )
+
+        upsert_stmt = base_insert.on_conflict_do_update(
+            index_elements=conflict_cols,
+            set_=update_map,
+            where=where_clause,
+        )
+
+        try:
+            with self.session_scope() as session:
+                result = session.execute(upsert_stmt)
+
+            self.logger.info(
+                f"Synced staging → enrichment: "
+                f"{staging_schema}.{staging_table_name} → "
+                f"{enrichment_schema}.{enrichment_table_name}"
+            )
+
+            return result.rowcount
+
+        except Exception as e:
+            self.logger.error(
+                f"Failed syncing staging → enrichment: {e}"
+            )
+            raise
+
+    @measure_time(label= "Syncing source to target table")
+    def sync_source_to_target_table(
             self,
             raw_schema: str,
             raw_table_name: str,
