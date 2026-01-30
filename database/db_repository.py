@@ -836,7 +836,7 @@ class DBRepository(DbConfiguration):
             )
 
         return update_cols
-    @measure_time(label= "Syncing Data to staging")
+    @measure_time(label= "Syncing Data to Staging")
     def sync_raw_to_staging(
             self,
             raw_schema: str,
