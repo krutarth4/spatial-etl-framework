@@ -9,7 +9,7 @@ from dacite import from_dict
 from geoalchemy2 import Geometry
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select, update, insert, Column, BigInteger, text, func, Row, RowMapping, TIMESTAMP, Numeric, \
-    Table, or_, MetaData
+    Table, or_, MetaData, UniqueConstraint
 
 from data_config_dtos.data_source_config_dto import BaseGraphDTO
 from database.base import Base
@@ -408,57 +408,6 @@ class DBRepository(DbConfiguration):
             self.logger.error(f"Bulk insert failed for '{table_name}': {e}")
             raise
 
-    def upsert_from_staging(
-            self,
-            source_table_name: str,
-            target_table_name: str,
-            schema: str,
-            conflict_cols: list[str],
-            update_cols: list[str],
-    ):
-        source = self.get_table(source_table_name, schema)
-        target = self.get_table(target_table_name, schema)
-
-        if not source or not target:
-            raise ValueError("Source or target table not found")
-
-        insert_cols = conflict_cols + update_cols
-
-        stmt = Insert(target).from_select(
-            insert_cols,
-            select(*(source.c[col] for col in insert_cols))
-        )
-
-        update_map = {
-            col: getattr(stmt.excluded, col)
-            for col in update_cols
-        }
-
-        # 🔥 update only if data actually changed
-        where_clause = or_(
-            *(
-                getattr(target.c[col]).is_distinct_from(
-                    getattr(stmt.excluded, col)
-                )
-                for col in update_cols
-            )
-        )
-
-        stmt = stmt.on_conflict_do_update(
-            index_elements=conflict_cols,
-            set_=update_map,
-            where=where_clause,
-        )
-
-        with self.session_scope() as session:
-            result = session.execute(stmt)
-
-        self.logger.info(
-            f"Upserted from {source_table_name} → {target_table_name}"
-        )
-
-        return result.rowcount
-
     def resolve_sqlalchemy_type(self, type_str: str):
         """
         Convert string like:
@@ -800,7 +749,7 @@ class DBRepository(DbConfiguration):
         source_table = self.get_table(source_table_name, source_schema)
         target_table = self.get_table(target_table_name, target_schema)
         if target_table is not None:
-            self.drop_table(target_table_name,target_schema, False, True, True)
+            self.drop_table(target_table_name, target_schema, False, True, True)
         if source_table is None:
             raise ValueError(f"Source table {source_schema}.{source_table_name} not found")
         metadata = MetaData(schema=target_schema)
@@ -820,6 +769,148 @@ class DBRepository(DbConfiguration):
         self.metadata.create_all(bind=self.engine, checkfirst=True, tables=[raw_table])
         self.logger.info(f"Table '{target_table_name}' created successfully.")
         return target_schema, target_table_name
+
+    @staticmethod
+    def resolve_conflict_columns(table):
+        """
+        Determine business-key (conflict) columns from a SQLAlchemy Table.
+
+        Resolution order:
+        1. Single UniqueConstraint → use its columns
+        2. Column(unique=True) → use those columns
+        3. Otherwise → error
+        """
+
+        # 1️⃣ Explicit UNIQUE CONSTRAINTS
+        unique_constraints = [
+            c for c in table.constraints
+            if isinstance(c, UniqueConstraint)
+        ]
+
+        if len(unique_constraints) == 1:
+            return [col.name for col in unique_constraints[0].columns]
+
+        if len(unique_constraints) > 1:
+            raise ValueError(
+                f"Multiple UniqueConstraints found on {table.fullname}. "
+                "Cannot infer business key automatically."
+            )
+
+        # 2️⃣ Column-level unique=True
+        unique_columns = [
+            c.name for c in table.columns
+            if isinstance(c, Column) and c.unique
+        ]
+
+        if unique_columns:
+            return unique_columns
+
+        # 3️⃣ Nothing usable
+        raise ValueError(
+            f"No UNIQUE constraint or unique=True columns found on {table.fullname}. "
+            "Business key must be defined."
+        )
+
+    @staticmethod
+    def resolve_update_columns(
+            table,
+            conflict_cols: list[str],
+            exclude_cols: list[str] | None = None,
+    ):
+        """
+        Determine which columns should be updated on change.
+        """
+        exclude_cols = set(exclude_cols or [])
+
+        update_cols = [
+            c.name
+            for c in table.columns
+            if not c.primary_key
+               and c.name not in conflict_cols
+               and c.name not in exclude_cols
+        ]
+
+        if not update_cols:
+            raise ValueError(
+                f"No updatable columns found for table {table.fullname}"
+            )
+
+        return update_cols
+
+    def sync_raw_to_staging(
+            self,
+            raw_schema: str,
+            raw_table_name: str,
+            staging_schema: str,
+            staging_table_name: str,
+    ):
+        """
+        Sync data from raw_staging → staging.
+
+        - inserts new rows
+        - updates rows only if data actually changed
+        - ignores unchanged rows
+        """
+
+        raw_table = self.get_table(raw_table_name, raw_schema)
+        staging_table = self.get_table(staging_table_name, staging_schema)
+
+        if raw_table is None:
+            raise ValueError(f"Raw table {raw_schema}.{raw_table_name} not found")
+        if staging_table is None:
+            raise ValueError(f"Staging table {staging_schema}.{staging_table_name} not found")
+
+        conflict_cols = DBRepository.resolve_conflict_columns(staging_table)
+        update_cols = DBRepository.resolve_update_columns(
+            staging_table,
+            conflict_cols,
+            # exclude_cols=["ingested_at"]
+        )
+
+        insert_cols = conflict_cols + update_cols
+
+        base_insert = Insert(staging_table).from_select(
+            insert_cols,
+            select(*(raw_table.c[c] for c in insert_cols))
+        )
+
+        update_map = {
+            col: getattr(base_insert.excluded, col)
+            for col in update_cols
+        }
+
+        where_clause = or_(
+            *(
+                staging_table.c[col].is_distinct_from(
+                    getattr(base_insert.excluded, col)
+                )
+                for col in update_cols
+            )
+        )
+
+        upsert_stmt = base_insert.on_conflict_do_update(
+            index_elements=conflict_cols,
+            set_=update_map,
+            where=where_clause,
+        )
+
+        try:
+            with self.session_scope() as session:
+                result = session.execute(upsert_stmt)
+
+            self.logger.info(
+                f"Synced raw → staging: {raw_schema}.{raw_table_name} → "
+                f"{staging_schema}.{staging_table_name}"
+            )
+
+            return result.rowcount
+
+        except Exception as e:
+            self.logger.error(
+                f"Failed syncing raw → staging for "
+                f"{raw_schema}.{raw_table_name}: {e}"
+            )
+            raise
 
     def call_sql(self, sql: str, params: dict | None = None):
         """

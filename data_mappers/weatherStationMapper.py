@@ -11,7 +11,7 @@ class DwdStationsTable(StagingTable):
     __tablename__ = "dwd_station_locations_staging"
     uid = Column(Integer, primary_key=True, autoincrement=True)
     id = Column(Integer)
-    dwd_station_id = Column(Integer, nullable=False)
+    dwd_station_id = Column(Integer,unique=True, nullable=False)
     station_name = Column(String)
     observation_type = Column(String)
     lat = Column(Float)
@@ -20,6 +20,10 @@ class DwdStationsTable(StagingTable):
     wmo_station_id = Column(String)
     first_record = Column(DateTime(timezone=True))
     last_record = Column(DateTime(timezone=True))
+
+    # __table_args__ = (
+    #     UniqueConstraint("dwd_station_id", "lat", "lon", name="uq_dwd_station_locations"),
+    # )
 
 class DwdWeatherStationEnrichmentTable(EnrichmentTable):
     __tablename__ = "dwd_station_locations_enrichment"

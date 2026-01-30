@@ -452,6 +452,8 @@ class DataSourceABCImpl(DataSourceABC):
 
             self.recreate_table_indexes()
             self.post_database_processing()
+            self.db.sync_raw_to_staging(self.raw_staging_schema, self.raw_staging_table
+                                        ,self.data_source_config.storage.staging.table_schema, self.data_source_config.storage.staging.table_name)
             self.clean_raw_staging_table()
         except Exception as e:
             self.logger.error(f"Error occurred in run {e}")
