@@ -165,8 +165,8 @@ class DataSourceABCImpl(DataSourceABC):
             self.logger.warning(
                 f"No new data found for metadata before fetch check. Hence skipping the rest of processing steps ")
             return False
-
-    def create_file_name_for_multi_fetch_expand_params(self, source, param) -> str:
+    @staticmethod
+    def create_file_name_for_multi_fetch_expand_params( source, param) -> str:
         file_name = source.destination.split(".")
         path = f"{'.'.join(file_name[:-1])}_{param}.{file_name[-1]}"
         return path
@@ -177,7 +177,7 @@ class DataSourceABCImpl(DataSourceABC):
         self.logger.info(f" no. of urls: {len(urls)}, process starting ......")
         for i, url in enumerate(urls):
             url_name = url.split("/")[-1:]
-            path = self.create_file_name_for_multi_fetch_expand_params(source, "_".join(url_name))
+            path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(source, "_".join(url_name))
             self.logger.info(f" count {i + 1}")
             if self.check_multi_metadata_before_fetch(url=url, headers=source.headers,
                                                       params=source.params, path=path):
@@ -208,7 +208,7 @@ class DataSourceABCImpl(DataSourceABC):
                         for combo in product(*values):
                             call_params = dict(zip(keys, combo))
                             param = {**constant_param, **call_params}
-                            path = self.create_file_name_for_multi_fetch_expand_params(source, param)
+                            path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(source, param)
                             if self.check_multi_metadata_before_fetch(url=source.url, headers=source.headers,
                                                                       params=param, path=path):
                                 path = http_handler.call(uri=source.url, destination_path=path, stream=source.stream,
@@ -232,7 +232,7 @@ class DataSourceABCImpl(DataSourceABC):
                                 url = multi_fetch.url_template.format(**params_dict)
                             except Exception as e:
                                 self.logger.error(f"URL template and template urls specified not correct {e} ")
-                            path = self.create_file_name_for_multi_fetch_expand_params(source, params_dict)
+                            path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(source, params_dict)
                             paths.append(path)
 
                             if self.check_multi_metadata_before_fetch(url=url, headers=source.headers,
