@@ -400,6 +400,12 @@ class DataSourceABCImpl(DataSourceABC):
                     self.pre_database_processing()
                     self.db.bulk_insert(db_storage.staging.table_name,db_storage.staging.table_schema
                                         , self.source_result, True)
+                    if db_storage.enrichment:
+                        self.db.clone_table_data(db_storage.staging.table_name,
+                                                 db_storage.staging.table_schema,
+                                                 db_storage.enrichment.table_name,
+                                                 db_storage.enrichment.table_schema
+                                                 )
 
 
 

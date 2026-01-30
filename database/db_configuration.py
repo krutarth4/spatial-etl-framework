@@ -51,7 +51,6 @@ class DbConfiguration:
         self.schema = self.core_config.database_schema or "public"
         self.create_schema_if_not_exists()
         self.metadata = self.create_metadata()
-        self.inspector = inspect(self.engine)
         self.base_config = base_config
         self.logger.debug(f"db schema {self.schema}")
 
@@ -92,18 +91,19 @@ class DbConfiguration:
 
         return self.base.metadata.tables[f"{table_name}"]
 
+    def get_inspector(self):
+        return inspect(self.engine)
+
     def table_exists(self, table_name: str, schema: str = None) -> bool:
         """Check if table already exists in database schema."""
         # Table names passed are with schema and inspector just gives out just names with <dbName>.*
         try:
-
-            exists = self.inspector.has_table(table_name.split(".")[-1], schema=schema or self.schema)
+            exists = self.get_inspector().has_table(table_name.split(".")[-1], schema=schema or self.schema)
             self.logger.info(f"Table '{table_name}' exists: {exists}")
             return exists
         except Exception as e:
             self.logger.error(f"Table '{table_name}' does not exist in schema '{self.schema}'")
             self.logger.error(e)
-
 
     # -----------------------------
     # FETCH / QUERY
@@ -202,7 +202,7 @@ class DbConfiguration:
     def get_all_db_tables(self):
         """Return a list of all table names in the configured schema. Based on inspector linked through DB itself """
         try:
-            tables = self.inspector.get_table_names(schema=self.schema)
+            tables = self.get_inspector().get_table_names(schema=self.schema)
             self.logger.info(f"Tables found in schema '{self.schema}': {tables}")
             return tables
         except Exception as e:
@@ -215,7 +215,7 @@ class DbConfiguration:
     def has_base_tables(self):
         """Return a list of all table names in the configured schema. Based on inspector linked through DB itself """
         try:
-            has_table = self.inspector.has_table(table_name=self.base_config.table_name,
+            has_table = self.get_inspector().has_table(table_name=self.base_config.table_name,
                                                  schema=self.base_config.table_schema)
             return has_table
 
@@ -234,13 +234,13 @@ class DbConfiguration:
 
     def get_db_columns(self, table_name: str):
         """Return column names of a table from the DB."""
-        cols = self.inspector.get_columns(table_name, schema=self.schema)
+        cols = self.get_inspector().get_columns(table_name, schema=self.schema)
         return [col["name"] for col in cols]
 
     def get_db_column_info(self, table_name: str, table_schema: str):
         """Return full DB column metadata (name → attributes)."""
         table_name = self.normalize_table_name(table_name, table_schema, False)
-        columns = self.inspector.get_columns(table_name, schema=self.schema)
+        columns = self.get_inspector().get_columns(table_name, schema=self.schema)
 
         db_info = {}
 

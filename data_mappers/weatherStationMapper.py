@@ -19,17 +19,17 @@ class DwdStationsTable(StagingTable):
     height = Column(Float)
     wmo_station_id = Column(String)
     first_record = Column(DateTime(timezone=True))
-    last_record = Column(String)
+    last_record = Column(DateTime(timezone=True))
 
 class DwdWeatherStationEnrichmentTable(EnrichmentTable):
-    __tablename__ = "dwd_weather_station_enrichment"
+    __tablename__ = "dwd_station_locations_enrichment"
     uid = Column(Integer, primary_key=True, autoincrement=True)
-    station_id = Column(Integer, unique=True, nullable=False)
-    station_name = Column(String)
-    weight = Column(Float)
+    dwd_station_id = Column(Integer, nullable=False)
+    lat = Column(Float)
+    lon = Column(Float)
 
 class DwdMappingTable(MappingTable):
-    __tablename__ = "dwd_mapping_stations"
+    __tablename__ = "dwd_station_locations_mapping"
     uid = Column(Integer, primary_key=True, autoincrement=True)
     station_id = Column(Integer,ForeignKey("dwd_station_locations_staging.uid", ondelete="Cascade") , unique=True, nullable=False)
     distance = Column(Float)
