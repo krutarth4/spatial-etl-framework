@@ -9,7 +9,6 @@ from apscheduler.triggers.calendarinterval import CalendarIntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from pygments.lexers import j
 
 from core.base_graph import BaseGraph
 from core.init_scheduler import InitScheduler
