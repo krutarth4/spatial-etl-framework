@@ -2,7 +2,7 @@ import time
 from datetime import datetime
 from enum import Enum
 from itertools import product
-from pathlib import  Path
+from pathlib import Path
 from typing import Any, List
 
 from apscheduler.triggers.calendarinterval import CalendarIntervalTrigger
@@ -17,7 +17,8 @@ from handlers.file_handler import FileHandler
 from handlers.http_handler import HttpHandler
 from log_manager.logger_manager import LoggerManager
 from main_core.data_source_abc import DataSourceABC
-from data_config_dtos.data_source_config_dto import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, SourceInputDTO, SourceDTO
+from data_config_dtos.data_source_config_dto import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, \
+    SourceInputDTO, SourceDTO
 from main_core.safe_class import safe_class
 from main_core.processing_steps import ProcessingSteps, StepDTO
 from utils.execution_time import format_duration
@@ -75,25 +76,28 @@ class DataSourceABCImpl(DataSourceABC):
             storage_data = self.data_source_config.storage
             force_create = storage_data.force_create
             if storage_data.staging:
-                self.create_staging_tables(storage_data.staging.table_name,storage_data.staging.table_schema, force_create)
+                self.create_staging_tables(storage_data.staging.table_name, storage_data.staging.table_schema,
+                                           force_create)
             if storage_data.enrichment:
-                self.create_enrichment_tables(storage_data.enrichment.table_name,storage_data.enrichment.table_schema,force_create)
+                self.create_enrichment_tables(storage_data.enrichment.table_name, storage_data.enrichment.table_schema,
+                                              force_create)
             if self.data_source_config.mapping:
-                self.create_mapping_tables(self.data_source_config.mapping.table_name,self.data_source_config.mapping.table_schema,force_create)
+                self.create_mapping_tables(self.data_source_config.mapping.table_name,
+                                           self.data_source_config.mapping.table_schema, force_create)
 
-    def create_staging_tables(self, table_name: str,schema:str, force_create: bool):
+    def create_staging_tables(self, table_name: str, schema: str, force_create: bool):
         raw_staging_table_name = f"{table_name}_raw_staging"
-        self.db.create_table_if_not_exist(table_name,table_schema=schema or None,
-                                          force_create=force_create,create_without_indexes=True)
-        self.raw_staging_schema,self.raw_staging_table= self.db.clone_table_structure(schema, table_name,schema, raw_staging_table_name)
+        self.db.create_table_if_not_exist(table_name, table_schema=schema or None,
+                                          force_create=force_create, create_without_indexes=True)
+        self.raw_staging_schema, self.raw_staging_table = self.db.clone_table_structure(schema, table_name, schema,
+                                                                                        raw_staging_table_name)
 
-
-    def create_enrichment_tables(self, table_name: str,schema : str, force_create: bool):
-        self.db.create_table_if_not_exist(table_name, table_schema= schema or None,
+    def create_enrichment_tables(self, table_name: str, schema: str, force_create: bool):
+        self.db.create_table_if_not_exist(table_name, table_schema=schema or None,
                                           force_create=force_create, create_without_indexes=False)
 
-    def create_mapping_tables(self, table_name: str,schema : str, force_create: bool):
-        self.db.create_table_if_not_exist(table_name, table_schema= schema or None,
+    def create_mapping_tables(self, table_name: str, schema: str, force_create: bool):
+        self.db.create_table_if_not_exist(table_name, table_schema=schema or None,
                                           force_create=force_create, create_without_indexes=False)
 
     def check_before_update(self) -> bool:
@@ -406,7 +410,7 @@ class DataSourceABCImpl(DataSourceABC):
                 if self.db is not None:
                     self.logger.warning("found new data hence continuing with db upsert")
                     self.pre_database_processing()
-                    self.db.bulk_insert(self.raw_staging_table,self.raw_staging_schema
+                    self.db.bulk_insert(self.raw_staging_table, self.raw_staging_schema
                                         , self.source_result, True)
                     if db_storage.enrichment:
                         self.db.clone_table_data(db_storage.staging.table_name,
@@ -445,18 +449,26 @@ class DataSourceABCImpl(DataSourceABC):
                     self.logger.warning(f"No new data available for {self.data_source_config.name}")
                     return self.run_job_response(f"No new data available for {self.data_source_config.name}")
             # add indexes for the newly formed table for faster inserts and transactions
+
             self.recreate_table_indexes()
             self.post_database_processing()
+            self.clean_raw_staging_table()
         except Exception as e:
             self.logger.error(f"Error occurred in run {e}")
 
         return self.run_job_response("Job finished Successfully !!!")
 
+    def clean_raw_staging_table(self):
+        self.db.drop_table(self.raw_staging_table, self.raw_staging_schema, False, True, True)
+
     def recreate_table_indexes(self):
         if self.db is not None and self.data_source_config.storage.persistent:
-            self.db.create_indexes(self.data_source_config.storage.enrichment.table_name, self.data_source_config.storage.enrichment.table_schema)
-            self.db.create_indexes(self.data_source_config.storage.staging.table_name, self.data_source_config.storage.staging.table_schema)
-            self.db.create_indexes(self.data_source_config.mapping.table_name, self.data_source_config.mapping.table_schema)
+            self.db.create_indexes(self.data_source_config.storage.enrichment.table_name,
+                                   self.data_source_config.storage.enrichment.table_schema)
+            self.db.create_indexes(self.data_source_config.storage.staging.table_name,
+                                   self.data_source_config.storage.staging.table_schema)
+            self.db.create_indexes(self.data_source_config.mapping.table_name,
+                                   self.data_source_config.mapping.table_schema)
 
     def post_filter_processing_save_data(self, conf):
         file_handler = FileHandler(conf.destination)
@@ -548,5 +560,3 @@ class DataSourceABCImpl(DataSourceABC):
             "executor": "process" if self.job_configuration.executor is not None else "default"
         }
         self.scheduler.add_job(job_conf, self.job_configuration.id or self.data_source_name)
-
-

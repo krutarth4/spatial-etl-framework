@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from io import StringIO
-from typing import  Text
+from typing import Text
 
 from dacite import from_dict
 from geoalchemy2 import Geometry
@@ -23,7 +23,6 @@ from sqlalchemy import (
 )
 import re
 from utils.execution_time import measure_time
-
 
 SQLALCHEMY_TYPE_MAP = {
     # Basic
@@ -112,22 +111,6 @@ class DBRepository(DbConfiguration):
                 f"'{table_schema}.{table_name}': {e}"
             )
             raise
-    def create_all_tables(self):
-        # TODO: dont check for static table everytime and also for other data source table
-        """Create all missing tables defined in Base.metadata."""
-        # self.logger.info(f"create all tables {self.metadata.tables.items()}")
-        self.logger.info(f"create all tables {Base.metadata.tables.keys()}")
-        for name, table in Base.metadata.tables.items():
-            self.logger.info(f"in base mode; check all tables {name} - {table}")
-            if not self.table_exists(name):
-                self.logger.info(f"Creating missing table  or with another schema '{name}'...")
-                self.drop_table(name, True, True)
-                Base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=False)
-                # table.create(self.engine)
-
-            else:
-                self.logger.info(f"Table '{name}' already exists — skipping creation.")
-        self.logger.info("Table creation check complete.")
 
     def create_base_table_clone(self, source_schema, source_table):
         self.logger.info(f"creating base table {self.base_table.table_name} in schema {self.base_table.table_schema}")
@@ -247,7 +230,7 @@ class DBRepository(DbConfiguration):
             self.update_metadata(table_schema)
             table = self.base.metadata.tables[self.normalize_table_name(table_name, table_schema, False)]
             if force_create:
-                self.drop_table(table_name, True, True)
+                self.drop_table(table_name, table_schema, True, True, True)
 
             if not self.table_exists(table_name, table_schema):
                 original_indexes = set(table.indexes)
@@ -694,76 +677,68 @@ class DBRepository(DbConfiguration):
             # Multi-column result → return list of tuples
             return result.fetchall()
 
-    def drop_table(self, table_name: str, backup=False, check_exist=True, schema=None):
+    def drop_table(
+            self,
+            table_name: str,
+            schema: str | None = None,
+            backup: bool = False,
+            check_exist: bool = True,
+            cascade: bool = True,
+    ):
         """
-        Drop a table in the configured schema.
+        Drop or backup a table safely.
 
-        Args:
-            table_name (str): Table name without schema (e.g., "test").
-            backup (bool): If True → table is renamed instead of dropped (safe mode).
-            check_exist (bool): If True → skip dropping if table doesn't exist.
-
+        :param table_name: table name (without schema)
+        :param schema: schema name (defaults to self.schema)
+        :param backup: if True, rename table instead of dropping
+        :param check_exist: skip if table does not exist
+        :param cascade: drop dependent objects
         """
-        # Determine schema-aware name
         schema_name = schema or self.schema
         full_name = f"{schema_name}.{table_name}"
 
-        # Check existence first
-        if check_exist and not self.inspector.has_table(table_name, schema=schema_name):
-            self.logger.warning(f"Table '{full_name}' does not exist — skipping drop.")
+        try:
+            inspector = self.get_inspector()
 
-        # ---- DROP INDEXES FIRST ----
-        self.drop_indexes_for_table(table_name, schema_name)
-        # BACKUP MODE (rename instead of drop)
-        if backup:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_name = f"{table_name}_backup_{timestamp}"
-            self.logger.warning(f"Renaming table '{full_name}' → '{schema_name}.{backup_name}'")
-
-            sql = text(
-                f'CREATE TABLE "{schema_name}"."{backup_name}" '
-                f'SELECT * FROM "{schema_name}"."{table_name}"'
-            )
+            if check_exist and not inspector.has_table(table_name, schema=schema_name):
+                self.logger.warning(
+                    f"Table '{full_name}' does not exist — skipping."
+                )
+                return
 
             with self.engine.begin() as conn:
-                conn.execute(sql)
+                if backup:
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    backup_name = f"{table_name}_backup_{timestamp}"
 
-        # NORMAL DROP
-        self.logger.warning(f"Dropping table '{full_name}' ...")
+                    self.logger.warning(
+                        f"Renaming table '{full_name}' → '{schema_name}.{backup_name}'"
+                    )
 
-        sql = text(
-            f'DROP TABLE IF EXISTS "{schema_name}"."{table_name}" CASCADE'
-        )
+                    conn.execute(
+                        text(
+                            f'ALTER TABLE "{schema_name}"."{table_name}" '
+                            f'RENAME TO "{backup_name}"'
+                        )
+                    )
+                    return
 
-        with self.engine.begin() as conn:
-            conn.execute(sql)
+                self.logger.warning(f"Dropping table '{full_name}' ...")
 
-        self.logger.info(f"Table '{full_name}' dropped successfully.")
+                cascade_sql = "CASCADE" if cascade else ""
+                conn.execute(
+                    text(
+                        f'DROP TABLE "{schema_name}"."{table_name}" {cascade_sql}'
+                    )
+                )
 
-    def drop_indexes_for_table(self, table_name: str, schema: str):
-        """
-        Drop all indexes referencing the given table in the given schema.
-        Prevents duplicate index-name errors when recreating tables.
-        """
-        # TODO: not a  working function
-        self.logger.warning(f"Dropping indexes {table_name} ...")
-        query = text("""
-                     SELECT indexname, schemaname
-                     FROM pg_indexes
-                     WHERE tablename = :table
-                       AND schemaname = :schema
-                     """)
+            self.logger.info(f"Table '{full_name}' dropped successfully.")
 
-        with self.engine.begin() as conn:
-            result = conn.execute(query, {"table": table_name, "schema": schema}).fetchall()
-            for row in result:
-                print(row)
-                index = f"{row.schemaname}.{row.indexname}"
-                # self.logger.warning(f"Dropping index '{index}'")
-                #
-                # conn.execute(text(
-                #     f'DROP INDEX IF EXISTS "{row.schemaname}"."{row.indexname}"'
-                # ))
+        except Exception as e:
+            self.logger.error(
+                f"Failed to drop table '{full_name}': {e}"
+            )
+            raise
 
     # -----------------------------
     # UPDATE
@@ -819,9 +794,13 @@ class DBRepository(DbConfiguration):
 
         return f"{target_schema}.{target_table_name}"
 
-    def clone_table_structure(self, source_schema: str, source_table_name: str, target_schema: str, target_table_name: str):
+    def clone_table_structure(self, source_schema: str, source_table_name: str, target_schema: str,
+                              target_table_name: str):
         self.logger.info(f"Creating raw staging table {target_table_name} ...")
-        source_table = self.get_table(source_table_name,source_schema)
+        source_table = self.get_table(source_table_name, source_schema)
+        target_table = self.get_table(target_table_name, target_schema)
+        if target_table is not None:
+            self.drop_table(target_table_name,target_schema, False, True, True)
         if source_table is None:
             raise ValueError(f"Source table {source_schema}.{source_table_name} not found")
         metadata = MetaData(schema=target_schema)
@@ -838,10 +817,9 @@ class DBRepository(DbConfiguration):
             ),
             schema=target_schema,
         )
-        self.metadata.create_all(bind=self.engine, checkfirst=True,tables=[raw_table])
+        self.metadata.create_all(bind=self.engine, checkfirst=True, tables=[raw_table])
         self.logger.info(f"Table '{target_table_name}' created successfully.")
         return target_schema, target_table_name
-
 
     def call_sql(self, sql: str, params: dict | None = None):
         """

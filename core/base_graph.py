@@ -21,7 +21,7 @@ class BaseGraph:
                                  self.base_graph_conf.table_schema)
 
     def drop_base_graph_table(self):
-        self.db.drop_table(self.base_graph_conf.table_name,True,True,self.base_graph_conf.table_schema)
+        self.db.drop_table(self.base_graph_conf.table_name,self.base_graph_conf.table_schema,True,True,True)
 
     def check_base_graph_table_exists(self):
         return self.db.has_base_tables()
