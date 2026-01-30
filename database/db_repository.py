@@ -836,7 +836,7 @@ class DBRepository(DbConfiguration):
             )
 
         return update_cols
-
+    @measure_time(label= "Syncing Data to staging")
     def sync_raw_to_staging(
             self,
             raw_schema: str,
@@ -888,22 +888,34 @@ class DBRepository(DbConfiguration):
             )
         )
 
-        upsert_stmt = base_insert.on_conflict_do_update(
+        upsert_stmt = (base_insert.on_conflict_do_update(
             index_elements=conflict_cols,
             set_=update_map,
             where=where_clause,
+        ).returning(
+            staging_table.c.uid,
+            text("xmax")
+        )
         )
 
         try:
             with self.session_scope() as session:
                 result = session.execute(upsert_stmt)
+                rows = result.fetchall()
+
+            inserted = sum(1 for r in rows if r.xmax == 0)
+            updated = len(rows) - inserted
 
             self.logger.info(
                 f"Synced raw → staging: {raw_schema}.{raw_table_name} → "
                 f"{staging_schema}.{staging_table_name}"
             )
 
-            return result.rowcount
+            return {
+                "inserted": inserted,
+                "updated": updated,
+                "total": len(rows),
+            }
 
         except Exception as e:
             self.logger.error(
