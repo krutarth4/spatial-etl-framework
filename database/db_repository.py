@@ -688,6 +688,54 @@ class DBRepository(DbConfiguration):
                         f"Renaming table '{full_name}' → '{schema_name}.{backup_name}'"
                     )
 
+                    # 1️⃣ Drop constraints
+                    conn.execute(
+                        text(
+                            f"""
+                                    DO $$
+                                    DECLARE r RECORD;
+                                    BEGIN
+                                        FOR r IN (
+                                            SELECT conname
+                                            FROM pg_constraint
+                                            WHERE conrelid = '{schema_name}.{table_name}'::regclass
+                                            AND contype NOT IN ('p', 'n')
+                                        ) LOOP
+                                            EXECUTE format(
+                                                'ALTER TABLE "{schema_name}"."{table_name}" DROP CONSTRAINT %I',
+                                                r.conname
+                                            );
+                                        END LOOP;
+                                    END $$;
+                                    """
+                        )
+                    )
+
+                    # 2️⃣ Drop indexes (except PK)
+                    conn.execute(
+                        text(
+                            f"""
+                                    DO $$
+                                    DECLARE r RECORD;
+                                    BEGIN
+                                        FOR r IN (
+                                            SELECT indexname
+                                            FROM pg_indexes
+                                            WHERE schemaname = '{schema_name}'
+                                              AND tablename = '{table_name}'
+                                              AND indexname NOT LIKE '%_pkey'
+                                        ) LOOP
+                                            EXECUTE format(
+                                                'DROP INDEX IF EXISTS "{schema_name}".%I',
+                                                r.indexname
+                                            );
+                                        END LOOP;
+                                    END $$;
+                                    """
+                        )
+                    )
+
+
                     conn.execute(
                         text(
                             f'ALTER TABLE "{schema_name}"."{table_name}" '
@@ -711,7 +759,7 @@ class DBRepository(DbConfiguration):
             self.logger.error(
                 f"Failed to drop table '{full_name}': {e}"
             )
-            raise
+
 
     # -----------------------------
     # UPDATE
@@ -1053,7 +1101,7 @@ class DBRepository(DbConfiguration):
             return result
         except Exception as e:
             self.logger.error(f"SQL execution failed: {e}")
-            
+
 
 
 if __name__ == "__main__":
