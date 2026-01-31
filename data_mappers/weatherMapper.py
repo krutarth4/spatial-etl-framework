@@ -4,7 +4,7 @@ from typing import Any, List
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import Column, Integer, String, Float, TIMESTAMP, DATETIME, DateTime, UniqueConstraint, ForeignKey
-
+from sqlalchemy.orm import relationship
 
 from database.base import Base
 from database_tables.enrichment_table import EnrichmentTable
@@ -50,22 +50,6 @@ class WeatherEnrichmentTable(EnrichmentTable):
         UniqueConstraint('dwd_station_id', "timestamp", name='uniq_weatherenrichment'),
     )
 
-
-# class WeatherMappingTable(MappingTable):
-#
-#
-#     __tablename__ = "weather_mapping"
-#
-#     uid = Column(Integer, primary_key=True, autoincrement=True, index=True) # make sure to create indexing for the table for better query and fast computation
-#     dwd_station_id = Column(String, nullable=False)
-#     timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
-#     visibility = Column(Float)
-#     conditions = Column(String)
-#     wind_speed = Column(Float)
-#     wind_direction = Column(Float, nullable=False)
-#     __table_args__ = (
-#         UniqueConstraint('dwd_station_id', "timestamp", name='uniq_weatherenrichment'),
-#     )
 
 class WeatherMapper(DataSourceABCImpl):
     pass
