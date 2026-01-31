@@ -7,17 +7,19 @@ from sqlalchemy import Column, Integer, String, Float, TIMESTAMP, DATETIME, Date
 
 
 from database.base import Base
+from database_tables.enrichment_table import EnrichmentTable
+from database_tables.mapping_table import MappingTable
+from database_tables.staging_table import StagingTable
 from handlers.http_handler import HttpHandler
 from main_core.data_source_abc_impl import DataSourceABCImpl
 
 #
-class WeatherTable(Base):
-    __tablename__ = "weather"
+class WeatherStagingTable(StagingTable):
+    __tablename__ = "weather_staging"
 
-    uid = Column(Integer, primary_key=True, autoincrement=True, index=True) # make sure to create indexing for the table for better query and fast computation
+    uid = Column(Integer, primary_key=True, autoincrement=True) # make sure to create indexing for the table for better query and fast computation
     source_id = Column(Integer, nullable=False)
-    station_id = Column(Integer)
-    dwd_station_id = Column(String)
+    dwd_station_id = Column(String, nullable=False)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     temperature = Column(Float, nullable=False)
     relative_humidity = Column(Float)
@@ -30,8 +32,40 @@ class WeatherTable(Base):
     wind_direction = Column(Float, nullable=False)
     precipitation = Column(Float, nullable=False)
     sunshine = Column(Float, nullable=False)
-    UniqueConstraint('source_id', "timestamp", name='station_time_unique_id')
-    # station = relationship("DwdStationsTable", backref="weather_rows")
+    __table_args__ = (
+        UniqueConstraint('dwd_station_id', "timestamp", name='uniq_weatherstaging'),
+    )
+
+class WeatherEnrichmentTable(EnrichmentTable):
+    __tablename__ = "weather_enrichment"
+
+    uid = Column(Integer, primary_key=True, autoincrement=True, index=True) # make sure to create indexing for the table for better query and fast computation
+    dwd_station_id = Column(String, nullable=False)
+    timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
+    visibility = Column(Float)
+    conditions = Column(String)
+    wind_speed = Column(Float)
+    wind_direction = Column(Float, nullable=False)
+    __table_args__ = (
+        UniqueConstraint('dwd_station_id', "timestamp", name='uniq_weatherenrichment'),
+    )
+
+
+# class WeatherMappingTable(MappingTable):
+#
+#
+#     __tablename__ = "weather_mapping"
+#
+#     uid = Column(Integer, primary_key=True, autoincrement=True, index=True) # make sure to create indexing for the table for better query and fast computation
+#     dwd_station_id = Column(String, nullable=False)
+#     timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
+#     visibility = Column(Float)
+#     conditions = Column(String)
+#     wind_speed = Column(Float)
+#     wind_direction = Column(Float, nullable=False)
+#     __table_args__ = (
+#         UniqueConstraint('dwd_station_id', "timestamp", name='uniq_weatherenrichment'),
+#     )
 
 class WeatherMapper(DataSourceABCImpl):
     pass

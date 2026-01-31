@@ -101,10 +101,10 @@ class BaseDataMappingSourceDTO:
 
 @dataclass
 class MappingDTO:
-    joins_on: str
+    joins_on: Optional[str]
     strategy: Optional[MappingStrategyDTO]
-    table_name: str
-    table_schema: str
+    table_name: Optional[str]
+    table_schema: Optional[str]
     enable: bool
     base_table: BaseDataMappingSourceDTO
 

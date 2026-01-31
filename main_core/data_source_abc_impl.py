@@ -80,7 +80,7 @@ class DataSourceABCImpl(DataSourceABC):
             if storage_data.enrichment:
                 self.create_enrichment_tables(storage_data.enrichment.table_name, storage_data.enrichment.table_schema,
                                               force_create)
-            if self.data_source_config.mapping:
+            if self.data_source_config.mapping and self.data_source_config.mapping.enable:
                 self.create_mapping_tables(self.data_source_config.mapping.table_name,
                                            self.data_source_config.mapping.table_schema, force_create)
 
