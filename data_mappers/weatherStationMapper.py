@@ -12,7 +12,7 @@ class DwdStationsTable(StagingTable):
     __tablename__ = "dwd_station_locations_staging"
     uid = Column(Integer, primary_key=True, autoincrement=True)
     id = Column(Integer)
-    dwd_station_id = Column(Integer,unique=True, nullable=False)
+    dwd_station_id = Column(Integer, unique=True, nullable=False)
     station_name = Column(String)
     observation_type = Column(String)
     lat = Column(Float)
@@ -23,18 +23,20 @@ class DwdStationsTable(StagingTable):
     last_record = Column(DateTime(timezone=True))
 
 
-
 class DwdWeatherStationEnrichmentTable(EnrichmentTable):
     __tablename__ = "dwd_station_locations_enrichment"
     uid = Column(Integer, primary_key=True, autoincrement=True)
-    dwd_station_id = Column(Integer,unique=True, nullable=False)
+    dwd_station_id = Column(Integer, unique=True, nullable=False)
     lat = Column(Float)
     lon = Column(Float)
+
 
 class DwdMappingTable(MappingTable):
     __tablename__ = "dwd_station_locations_mapping"
     uid = Column(Integer, primary_key=True, autoincrement=True)
-    station_id = Column(Integer,ForeignKey(f"{GlobalConstants.base_schema}.{DwdWeatherStationEnrichmentTable.__tablename__}.uid", ondelete="Cascade") , nullable=False)
+    station_id = Column(Integer, ForeignKey(
+        f"{GlobalConstants.base_schema}.{DwdWeatherStationEnrichmentTable.__tablename__}.uid", ondelete="Cascade"),
+                        nullable=False)
     distance = Column(Float, nullable=False)
 
 
@@ -53,7 +55,6 @@ class WeatherStationMapper(DataSourceABCImpl):
         self.logger.info(f"Filtered {len(data)} → {len(filtered)} rows")
         return filtered
 
-
     def mapping_db_query(self) -> str:
         self.logger.info("Mapping DWD stations to links (insert into mapping table)")
 
@@ -61,9 +62,7 @@ class WeatherStationMapper(DataSourceABCImpl):
         enrichment = self.data_source_config.storage.enrichment
         mapping = self.data_source_config.mapping
 
-
-
-        sql =f"""
+        sql = f"""
             INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, station_id, distance)
             SELECT
                 w.id AS way_id,
