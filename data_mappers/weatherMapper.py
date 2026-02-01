@@ -10,7 +10,6 @@ from database.base import Base
 from database_tables.enrichment_table import EnrichmentTable
 from database_tables.mapping_table import MappingTable
 from database_tables.staging_table import StagingTable
-from handlers.http_handler import HttpHandler
 from main_core.data_source_abc_impl import DataSourceABCImpl
 
 #
@@ -19,7 +18,7 @@ class WeatherStagingTable(StagingTable):
 
     uid = Column(Integer, primary_key=True, autoincrement=True) # make sure to create indexing for the table for better query and fast computation
     source_id = Column(Integer, nullable=False)
-    dwd_station_id = Column(String, nullable=False)
+    dwd_station_id = Column(Integer, nullable=False)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     temperature = Column(Float, nullable=False)
     relative_humidity = Column(Float)
@@ -40,7 +39,7 @@ class WeatherEnrichmentTable(EnrichmentTable):
     __tablename__ = "weather_enrichment"
 
     uid = Column(Integer, primary_key=True, autoincrement=True, index=True) # make sure to create indexing for the table for better query and fast computation
-    dwd_station_id = Column(String, nullable=False)
+    dwd_station_id = Column(Integer, nullable=False)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     visibility = Column(Float)
     conditions = Column(String)
@@ -64,7 +63,7 @@ class WeatherMapper(DataSourceABCImpl):
             if not sources:
                 continue  # or raise, depending on strictness
 
-            dwd_station_id = sources[0].get("dwd_station_id")
+            dwd_station_id = int(sources[0].get("dwd_station_id"))
 
             for weather in content.get("weather", []):
                 # copy to avoid mutating original payload
