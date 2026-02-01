@@ -949,9 +949,10 @@ class DBRepository(DbConfiguration):
         ]
 
         if not update_cols:
-            raise ValueError(
+            self.logger.warning(
                 f"No updatable enrichment columns found for "
                 f"{enrichment_schema}.{enrichment_table_name}"
+                f" -> this means there is not copying of columns present in staging to enrichment, which is not a PK, FK, or any other constraints."
             )
 
         insert_cols = conflict_cols + update_cols
@@ -975,11 +976,16 @@ class DBRepository(DbConfiguration):
             )
         )
 
-        upsert_stmt = base_insert.on_conflict_do_update(
-            index_elements=conflict_cols,
-            set_=update_map,
-            where=where_clause,
-        )
+        if not update_cols:
+            upsert_stmt = base_insert.on_conflict_do_nothing(
+                index_elements=conflict_cols
+            )
+        else:
+            upsert_stmt = base_insert.on_conflict_do_update(
+                index_elements=conflict_cols,
+                set_=update_map,
+                where=where_clause,
+            )
 
         try:
             with self.session_scope() as session:
