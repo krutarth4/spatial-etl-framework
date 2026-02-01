@@ -54,7 +54,7 @@ class WeatherStationMapper(DataSourceABCImpl):
         return filtered
 
 
-    def map_to_link_db_query(self) -> str:
+    def mapping_db_query(self) -> str:
         self.logger.info("Mapping DWD stations to links (insert into mapping table)")
 
         base = self.data_source_config.mapping.base_table

@@ -29,11 +29,27 @@ class DataSourceABC(ABC):
         pass
 
     @abstractmethod
-    def map_to_link_db_query(self):
+    def mapping_db_query(self):
         pass
 
     @abstractmethod
     def map_to_base(self):
+        pass
+
+    @abstractmethod
+    def execute_on_staging(self):
+        pass
+
+    @abstractmethod
+    def staging_db_query(self) -> str | None:
+        pass
+
+    @abstractmethod
+    def execute_on_enrichment(self):
+        pass
+
+    @abstractmethod
+    def enrichment_db_query(self) -> str | None:
         pass
 
     @abstractmethod
@@ -74,8 +90,6 @@ class DataSourceABC(ABC):
         Execute any function which needs to be implemented before inserting data into the db
         """
         pass
-
-
 
     @abstractmethod
     def post_database_processing(self):

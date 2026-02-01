@@ -46,13 +46,14 @@ class TriggerTypeEnum(Enum):
 @safe_class
 class DataSourceABCImpl(DataSourceABC):
 
-    def __init__(self, data_source_conf: DataSourceDTO, db_instance: DbInstance | None, scheduler_core: InitScheduler, base_graph_conf, metadata_service):
+    def __init__(self, data_source_conf: DataSourceDTO, db_instance: DbInstance | None, scheduler_core: InitScheduler,
+                 base_graph_conf, metadata_service):
 
         self.metadata_service = metadata_service
         self.source_result: List | None = None
         self.logger = LoggerManager(type(self).__name__).get_logger()
         self.logger.info(f"Initializing {type(self).__name__}")
-        self.base_graph = BaseGraph(db_instance,base_graph_conf)
+        self.base_graph = BaseGraph(db_instance, base_graph_conf)
         self.data_source_config = data_source_conf
         self.data_source_name = data_source_conf.name
         self.db = db_instance
@@ -165,8 +166,9 @@ class DataSourceABCImpl(DataSourceABC):
             self.logger.warning(
                 f"No new data found for metadata before fetch check. Hence skipping the rest of processing steps ")
             return False
+
     @staticmethod
-    def create_file_name_for_multi_fetch_expand_params( source, param) -> str:
+    def create_file_name_for_multi_fetch_expand_params(source, param) -> str:
         file_name = source.destination.split(".")
         path = f"{'.'.join(file_name[:-1])}_{param}.{file_name[-1]}"
         return path
@@ -442,9 +444,15 @@ class DataSourceABCImpl(DataSourceABC):
             # add indexes for the newly formed table for faster inserts and transactions
 
             self.post_database_processing()
+
             self.sync_raw_to_staging()
+            self.execute_on_staging()
+
             self.sync_staging_to_enrichment()
+            self.execute_on_enrichment()
+
             self.map_to_base()
+
             self.clean_raw_staging_table()
             self.recreate_table_indexes()
         except Exception as e:
@@ -458,10 +466,12 @@ class DataSourceABCImpl(DataSourceABC):
                                            self.data_source_config.storage.enrichment.table_schema,
                                            self.data_source_config.storage.enrichment.table_name
                                            )
+
     def sync_raw_to_staging(self):
         self.db.sync_source_to_target_table(self.raw_staging_schema, self.raw_staging_table
                                             , self.data_source_config.storage.staging.table_schema,
                                             self.data_source_config.storage.staging.table_name)
+
     def clean_raw_staging_table(self):
         self.db.drop_table(self.raw_staging_table, self.raw_staging_schema, False, True, True)
 
@@ -495,16 +505,37 @@ class DataSourceABCImpl(DataSourceABC):
 
         return {"message": message, "duration": formatted_duration}
 
-    def map_to_links(self):
-        query = self.map_to_link_db_query()
+    def execute_query(self, table_key: str, query: str | None):
         if query is not None:
-            self.logger.info(f"calling the query, {query}")
+            self.logger.info(f"calling the query for {table_key} -->, {query}")
             self.db.call_sql(query)
         else:
-            self.logger.info("No mapping Query given. Please write a postgresql query in the respective mapper class. Implement "
-                             "func map_to_link_db_query")
+            if table_key.lower() == "mapping":
+                self.logger.info(
+                    "No mapping Query given. Please write a postgresql query in the respective mapper class. Implement "
+                    "func map_to_link_db_query")
 
-    def map_to_link_db_query(self) -> None | str:
+    def map_to_links(self):
+        query = self.mapping_db_query()
+        self.execute_query("Mapping", query)
+
+    def mapping_db_query(self) -> None | str:
+        sql_query = None
+        return sql_query
+
+    def execute_on_staging(self):
+        query = self.staging_db_query()
+        self.execute_query("Staging", query)
+
+    def staging_db_query(self) -> None | str:
+        sql_query = None
+        return sql_query
+
+    def execute_on_enrichment(self):
+        query = self.enrichment_db_query()
+        self.execute_query("Enrichment", query)
+
+    def enrichment_db_query(self) -> None | str:
         sql_query = None
         return sql_query
 
