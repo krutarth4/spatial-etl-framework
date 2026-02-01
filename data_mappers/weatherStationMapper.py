@@ -1,3 +1,4 @@
+from geoalchemy2 import Geometry
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint, ForeignKeyConstraint
 
 from core.globalconstants import GlobalConstants
@@ -27,15 +28,17 @@ class DwdWeatherStationEnrichmentTable(EnrichmentTable):
     __tablename__ = "dwd_station_locations_enrichment"
     uid = Column(Integer, primary_key=True, autoincrement=True)
     dwd_station_id = Column(Integer, unique=True, nullable=False)
-    lat = Column(Float)
-    lon = Column(Float)
+    # lat = Column(Float)
+    # lon = Column(Float)
+    point = Column(Geometry(geometry_type="POINT", srid=4326), index=True)
+    # geometry = Column(Geometry(geometry_type="LINESTRING", srid=4326), nullable=False)
 
 
 class DwdMappingTable(MappingTable):
     __tablename__ = "dwd_station_locations_mapping"
     uid = Column(Integer, primary_key=True, autoincrement=True)
-    station_id = Column(Integer, ForeignKey(
-        f"{GlobalConstants.base_schema}.{DwdWeatherStationEnrichmentTable.__tablename__}.uid", ondelete="Cascade"),
+    dwd_station_id = Column(Integer, ForeignKey(
+        f"{GlobalConstants.base_schema}.{DwdWeatherStationEnrichmentTable.__tablename__}.dwd_station_id", ondelete="Cascade"),
                         nullable=False)
     distance = Column(Float, nullable=False)
 
@@ -54,7 +57,23 @@ class WeatherStationMapper(DataSourceABCImpl):
 
         self.logger.info(f"Filtered {len(data)} → {len(filtered)} rows")
         return filtered
+    def enrichment_db_query(self) -> None | str:
+        staging = self.data_source_config.storage.staging
+        enrichment = self.data_source_config.storage.enrichment
+        sql = f"""
+        UPDATE {enrichment.table_schema}.{enrichment.table_name} e 
+        SET point = ST_SetSRID(
+                    ST_MakePoint(s.lon, s.lat),
+                    4326
+                )
+                from {staging.table_schema}.{staging.table_name} s
+        WHERE e.dwd_station_id = s.dwd_station_id
+            AND e.point IS NULL
+        
+            
+              """
 
+        return sql
     def mapping_db_query(self) -> str:
         self.logger.info("Mapping DWD stations to links (insert into mapping table)")
 
@@ -63,25 +82,25 @@ class WeatherStationMapper(DataSourceABCImpl):
         mapping = self.data_source_config.mapping
 
         sql = f"""
-            INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, station_id, distance)
+            INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, dwd_station_id, distance)
             SELECT
                 w.id AS way_id,
-                s.uid AS station_id,
+                s.dwd_station_id AS dwd_station_id,
                 ST_Distance(
                     w.geometry::geography,
-                    ST_SetSRID(ST_MakePoint(s.lon, s.lat), 4326)::geography
+                    s.point::geography
                 ) AS distance
             FROM {base.table_schema}.{base.table_name} w
             JOIN LATERAL (
                 SELECT
-                    st.uid,
-                    st.lat,
-                    st.lon
-                FROM {enrichment.table_schema}.{enrichment.table_name} st
+                    en.uid,
+                    en.dwd_station_id,
+                    en.point
+                FROM {enrichment.table_schema}.{enrichment.table_name} en
                 ORDER BY
                     ST_Distance(
                         w.geometry::geography,
-                        ST_SetSRID(ST_MakePoint(st.lon, st.lat), 4326)::geography
+                        en.point::geography
                     )
                 LIMIT 1
             ) s ON TRUE;
