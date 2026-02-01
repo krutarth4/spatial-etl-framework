@@ -1092,7 +1092,7 @@ class DBRepository(DbConfiguration):
                 f"{raw_schema}.{raw_table_name}: {e}"
             )
             raise
-
+    @measure_time(label= "SQL execution time: ")
     def call_sql(self, sql: str, params: dict | None = None):
         """
         Execute raw SQL using the session_scope().
