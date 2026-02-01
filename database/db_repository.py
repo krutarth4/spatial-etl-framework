@@ -1093,7 +1093,7 @@ class DBRepository(DbConfiguration):
             )
             raise
     @measure_time(label= "SQL execution time: ")
-    def call_sql(self, sql: str, params: dict | None = None):
+    def call_sql(self, sql: str):
         """
         Execute raw SQL using the session_scope().
         Ensures the same transactional behavior as ORM operations.
