@@ -41,6 +41,7 @@ class DwdMappingTable(MappingTable):
         f"{GlobalConstants.base_schema}.{DwdWeatherStationEnrichmentTable.__tablename__}.dwd_station_id", ondelete="Cascade"),
                         nullable=False)
     distance = Column(Float, nullable=False)
+    bearing_degree = Column(Float, nullable=True)
 
 
 class WeatherStationMapper(DataSourceABCImpl):
@@ -82,14 +83,23 @@ class WeatherStationMapper(DataSourceABCImpl):
         mapping = self.data_source_config.mapping
 
         sql = f"""
-            INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, dwd_station_id, distance)
+            INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, dwd_station_id, distance, bearing_degree)
             SELECT
                 w.id AS way_id,
                 s.dwd_station_id AS dwd_station_id,
                 ST_Distance(
                     w.geometry::geography,
                     s.point::geography
-                ) AS distance
+                ) AS distance,
+                MOD(
+                    (DEGREES(
+                      ST_Azimuth(
+                        ST_StartPoint(w.geometry),
+                        ST_EndPoint(w.geometry)
+                      )
+                    ) + 360)::NUMERIC,
+                    360
+                  ) AS bearing_degree
             FROM {base.table_schema}.{base.table_name} w
             JOIN LATERAL (
                 SELECT
