@@ -1,4 +1,7 @@
+import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from enum import Enum
 from itertools import product
@@ -50,8 +53,8 @@ class DataSourceABCImpl(DataSourceABC):
                  base_graph_conf, metadata_service):
 
         self.metadata_service = metadata_service
-        self.source_result: List | None = None
-        self.logger = LoggerManager(type(self).__name__).get_logger()
+        # self.source_result: List | None = None
+        self.logger = LoggerManager(type(self).__name__)
         self.logger.info(f"Initializing {type(self).__name__}")
         self.base_graph = BaseGraph(db_instance, base_graph_conf)
         self.data_source_config = data_source_conf
@@ -391,16 +394,17 @@ class DataSourceABCImpl(DataSourceABC):
         result = self.read_files(path)
         self.logger.info(f"result contains currently {len(result)}")
 
-        self.source_result = result
+        # self.source_result = result
         # print(self.source_result)
-        self.pre_filter_processing()
+        self.pre_filter_processing(result)
         # 1.1 filter from the results in case needs to be filtered
-        self.source_result = self.source_filter(self.source_result)
+        result = self.source_filter(result)
 
         # 1.2 post processing filter
-        self.post_filter_processing()
+        self.post_filter_processing(result)
+        return result
 
-    def load(self):
+    def load(self, data):
         db_storage = self.data_source_config.storage
         try:
             if not db_storage.persistent:
@@ -412,11 +416,66 @@ class DataSourceABCImpl(DataSourceABC):
                     self.logger.warning("found new data hence continuing with db upsert")
                     self.pre_database_processing()
                     self.db.bulk_insert(self.raw_staging_table, self.raw_staging_schema
-                                        , self.source_result, True)
+                                        , data, True)
 
 
         except Exception as e:
             self.logger.error(f"Error occurred while loading the file into Database: {e}")
+
+    def process_file(self, path: str):
+        """
+        One-file ETL unit
+        """
+
+        thread = threading.current_thread()
+        thread_id = threading.get_ident()
+        start = time.monotonic()
+        self.logger.info(
+            f"[THREAD START] name={thread.name} id={thread_id} file={path}"
+        )
+
+        self.logger.info(f"Processing file {path}")
+
+        try:
+            t0 = time.monotonic()
+            transformed_data = self.transform(path)
+            self.logger.info(
+                f"[THREAD TRANSFORM DONE] name={thread.name} "
+                f"rows={len(transformed_data) if transformed_data else 0} "
+                f"time={time.monotonic() - t0:.2f}s"
+            )
+
+            if not transformed_data:
+                self.logger.info(
+                    f"[THREAD SKIP] name={thread.name} no data"
+                )
+                return
+
+            t1 = time.monotonic()
+            self.load(transformed_data)
+            self.logger.info(
+                f"[THREAD LOAD DONE] name={thread.name} "
+                f"time={time.monotonic() - t1:.2f}s"
+            )
+
+        except Exception as e:
+            self.logger.error(
+                f"[THREAD ERROR] name={thread.name} file={path}"
+            )
+            raise
+        finally:
+            self.logger.info(
+                f"[THREAD END] name={thread.name} "
+                f"total_time={time.monotonic() - start:.2f}s"
+            )
+
+        # transformed_data = self.transform(path)
+        #
+        # if not transformed_data:
+        #     self.logger.info(f"No data after transform for {path}")
+        #     return
+        #
+        # self.load(transformed_data)
 
     def run(self):
         self.start_execution()
@@ -430,17 +489,33 @@ class DataSourceABCImpl(DataSourceABC):
 
             if not DataSourceABCImpl.is_file_available(paths):
                 return self.run_job_response("No files available")
+            # Create tables if not exist
+
             self.create_data_tables()
-            for i, path in enumerate(paths):
-                self.logger.info(f"Reading file {i + 1} -> {path}")
-                self.transform(path)
+            max_workers = min(8, os.cpu_count() * 2)
+            self.logger.critical(f"Starting with {max_workers} workers")
+            with ThreadPoolExecutor(
+                    max_workers=max_workers,
+                    thread_name_prefix="ETLWorker"
+            ) as executor:
+                futures = [
+                    executor.submit(self.process_file, path)
+                    for path in paths
+                ]
 
-                if self.check_before_update():
-                    self.load()
-
-                else:
-                    self.logger.warning(f"No new data available for {self.data_source_config.name}")
-                    return self.run_job_response(f"No new data available for {self.data_source_config.name}")
+                for future in as_completed(futures):
+                    # surfaces exceptions immediately
+                    future.result()
+            # for i, path in enumerate(paths):
+            #     self.logger.info(f"Reading file {i + 1} -> {path}")
+            #     transformed_data = self.transform(path)
+            #
+            #     if self.check_before_update():
+            #         self.load(transformed_data)
+            #
+            #     else:
+            #         self.logger.warning(f"No new data available for {self.data_source_config.name}")
+            #         return self.run_job_response(f"No new data available for {self.data_source_config.name}")
             # add indexes for the newly formed table for faster inserts and transactions
 
             self.post_database_processing()
@@ -484,15 +559,15 @@ class DataSourceABCImpl(DataSourceABC):
             self.db.create_indexes(self.data_source_config.mapping.table_name,
                                    self.data_source_config.mapping.table_schema)
 
-    def post_filter_processing_save_data(self, conf):
+    def post_filter_processing_save_data(self, conf, data):
         file_handler = FileHandler(conf.destination)
-        file_handler.save_data(conf.destination, self.source_result, True)
+        file_handler.save_data(conf.destination, data, True)
 
-    def post_filter_processing(self):
+    def post_filter_processing(self, data):
         if self.data_source_config.post_filter_processing is not None and self.data_source_config.post_filter_processing.save:
             conf = self.data_source_config.post_filter_processing
             if conf is not None and conf.save:
-                self.post_filter_processing_save_data(conf)
+                self.post_filter_processing_save_data(conf,data)
 
     def run_job_response(self, message: str):
         end_timer = time.perf_counter()
@@ -539,7 +614,7 @@ class DataSourceABCImpl(DataSourceABC):
         sql_query = None
         return sql_query
 
-    def pre_filter_processing(self):
+    def pre_filter_processing(self, data):
         pass
 
     def pre_database_processing(self):
@@ -547,7 +622,7 @@ class DataSourceABCImpl(DataSourceABC):
 
     def post_database_processing(self):
 
-        self.source_result = []
+        pass
 
     def map_to_base(self):
         if self.data_source_config.mapping.enable:

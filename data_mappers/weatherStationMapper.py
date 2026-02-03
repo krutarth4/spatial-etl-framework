@@ -28,18 +28,16 @@ class DwdWeatherStationEnrichmentTable(EnrichmentTable):
     __tablename__ = "dwd_station_locations_enrichment"
     uid = Column(Integer, primary_key=True, autoincrement=True)
     dwd_station_id = Column(Integer, unique=True, nullable=False)
-    # lat = Column(Float)
-    # lon = Column(Float)
     point = Column(Geometry(geometry_type="POINT", srid=4326), index=True)
-    # geometry = Column(Geometry(geometry_type="LINESTRING", srid=4326), nullable=False)
 
 
 class DwdMappingTable(MappingTable):
     __tablename__ = "dwd_station_locations_mapping"
     uid = Column(Integer, primary_key=True, autoincrement=True)
     dwd_station_id = Column(Integer, ForeignKey(
-        f"{GlobalConstants.base_schema}.{DwdWeatherStationEnrichmentTable.__tablename__}.dwd_station_id", ondelete="Cascade"),
-                        nullable=False)
+        f"{GlobalConstants.base_schema}.{DwdWeatherStationEnrichmentTable.__tablename__}.dwd_station_id",
+        ondelete="Cascade"),
+                            nullable=False)
     distance = Column(Float, nullable=False)
     bearing_degree = Column(Float, nullable=True)
 
@@ -58,6 +56,7 @@ class WeatherStationMapper(DataSourceABCImpl):
 
         self.logger.info(f"Filtered {len(data)} → {len(filtered)} rows")
         return filtered
+
     def enrichment_db_query(self) -> None | str:
         staging = self.data_source_config.storage.staging
         enrichment = self.data_source_config.storage.enrichment
@@ -75,6 +74,7 @@ class WeatherStationMapper(DataSourceABCImpl):
               """
 
         return sql
+
     def mapping_db_query(self) -> str:
         self.logger.info("Mapping DWD stations to links (insert into mapping table)")
 
