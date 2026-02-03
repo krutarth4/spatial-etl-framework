@@ -6,6 +6,7 @@ from io import StringIO
 from typing import Text
 
 from dacite import from_dict
+from exceptiongroup import catch
 from geoalchemy2 import Geometry
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select, update, insert, Column, BigInteger, text, func, Row, RowMapping, TIMESTAMP, Numeric, \
@@ -310,26 +311,29 @@ class DBRepository(DbConfiguration):
 
     @measure_time(label="create indexes")
     def create_indexes(self, table_name: str, schema: str = None):
-        table = Base.metadata.tables[self.normalize_table_name(table_name, schema, False)]
-        if not self.table_exists(table_name, schema):
-            self.logger.warning(f"Table '{table_name}' doesn't exist. For recreating indexes...")
-            return
-        schema = schema or self.schema
-        if table_name in self.table_index_map:
-            table.indexes.update(self.table_index_map[table_name])
+        try:
+            table = Base.metadata.tables[self.normalize_table_name(table_name, schema, False)]
+            if not self.table_exists(table_name, schema):
+                self.logger.warning(f"Table '{table_name}' doesn't exist. For recreating indexes...")
+                return
+            schema = schema or self.schema
+            if table_name in self.table_index_map:
+                table.indexes.update(self.table_index_map[table_name])
 
-            for idx in table.indexes:
-                if self.index_exists(idx.name, schema):
-                    self.logger.info(f"Index exists, skipping: {idx.name}")
-                    continue
+                for idx in table.indexes:
+                    if self.index_exists(idx.name, schema):
+                        self.logger.info(f"Index exists, skipping: {idx.name}")
+                        continue
 
-                self.logger.info(f"Creating index: {idx.name}")
-                idx.create(bind=self.engine)
-            #     Delete the mapping from the internal storage after successful creation
-            if self.table_index_map[table_name]:
-                del self.table_index_map[table_name]
-        else:
-            self.logger.warning(f"Table '{table_name}' index skipped as the table indexes doesnt exist")
+                    self.logger.info(f"Creating index: {idx.name}")
+                    idx.create(bind=self.engine)
+                #     Delete the mapping from the internal storage after successful creation
+                if self.table_index_map[table_name]:
+                    del self.table_index_map[table_name]
+            else:
+                self.logger.warning(f"Table '{table_name}' index skipped as the table indexes doesnt exist")
+        except Exception as e:
+            self.logger.error(f"error creating indexes : {e}")
 
     @contextmanager
     def raw_pg_connection(self):
@@ -1084,6 +1088,7 @@ class DBRepository(DbConfiguration):
                 "inserted": inserted,
                 "updated": updated,
                 "total": len(rows),
+                "success": True
             }
 
         except Exception as e:
@@ -1091,7 +1096,10 @@ class DBRepository(DbConfiguration):
                 f"Failed syncing raw → staging for "
                 f"{raw_schema}.{raw_table_name}: {e}"
             )
-            raise
+            return {
+                "success": False
+            }
+
     @measure_time(label= "SQL execution time: ")
     def call_sql(self, sql: str):
         """

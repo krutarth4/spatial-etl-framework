@@ -81,7 +81,7 @@ class DataSourceABCImpl(DataSourceABC):
             if storage_data.enrichment:
                 self.create_enrichment_tables(storage_data.enrichment.table_name, storage_data.enrichment.table_schema,
                                               force_create)
-            if self.data_source_config.mapping and self.data_source_config.mapping.enable:
+            if self.data_source_config.mapping.table_name and self.data_source_config.mapping.enable:
                 self.create_mapping_tables(self.data_source_config.mapping.table_name,
                                            self.data_source_config.mapping.table_schema, force_create)
 
@@ -445,15 +445,16 @@ class DataSourceABCImpl(DataSourceABC):
 
             self.post_database_processing()
 
-            self.sync_raw_to_staging()
+            res = self.sync_raw_to_staging()
+
             self.execute_on_staging()
 
             self.sync_staging_to_enrichment()
             self.execute_on_enrichment()
 
             self.map_to_base()
-
-            self.clean_raw_staging_table()
+            # delete fully if the staging sync is successful
+            self.clean_raw_staging_table(not res.get("success"))
             self.recreate_table_indexes()
         except Exception as e:
             self.logger.error(f"Error occurred in run {e}")
@@ -467,22 +468,26 @@ class DataSourceABCImpl(DataSourceABC):
                                            self.data_source_config.storage.enrichment.table_name
                                            )
 
-    def sync_raw_to_staging(self):
-        self.db.sync_source_to_target_table(self.raw_staging_schema, self.raw_staging_table
+    def sync_raw_to_staging(self)  :
+        return self.db.sync_source_to_target_table(self.raw_staging_schema, self.raw_staging_table
                                             , self.data_source_config.storage.staging.table_schema,
                                             self.data_source_config.storage.staging.table_name)
 
-    def clean_raw_staging_table(self):
-        self.db.drop_table(self.raw_staging_table, self.raw_staging_schema, False, True, True)
+
+    def clean_raw_staging_table(self, backup: bool):
+        self.db.drop_table(self.raw_staging_table, self.raw_staging_schema, backup, True, True)
 
     def recreate_table_indexes(self):
         if self.db is not None and self.data_source_config.storage.persistent:
-            self.db.create_indexes(self.data_source_config.storage.enrichment.table_name,
-                                   self.data_source_config.storage.enrichment.table_schema)
-            self.db.create_indexes(self.data_source_config.storage.staging.table_name,
-                                   self.data_source_config.storage.staging.table_schema)
-            self.db.create_indexes(self.data_source_config.mapping.table_name,
-                                   self.data_source_config.mapping.table_schema)
+            if self.data_source_config.storage.enrichment:
+                self.db.create_indexes(self.data_source_config.storage.enrichment.table_name,
+                                       self.data_source_config.storage.enrichment.table_schema)
+            if self.data_source_config.storage.staging:
+                self.db.create_indexes(self.data_source_config.storage.staging.table_name,
+                                       self.data_source_config.storage.staging.table_schema)
+            if self.data_source_config.mapping.table_name and self.data_source_config.mapping.enable:
+                self.db.create_indexes(self.data_source_config.mapping.table_name,
+                                       self.data_source_config.mapping.table_schema)
 
     def post_filter_processing_save_data(self, conf):
         file_handler = FileHandler(conf.destination)

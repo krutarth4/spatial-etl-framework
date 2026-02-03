@@ -264,6 +264,8 @@ class DbConfiguration:
 
     def normalize_table_name(self, table_name: str, schema: str = None, with_schema_prefix: bool = False):
         # print(f"before table name normalization {table_name}")
+        if table_name is None:
+            return None
         name = table_name.split(".")
         size = len(name)
         if with_schema_prefix:
