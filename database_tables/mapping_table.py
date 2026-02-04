@@ -9,5 +9,5 @@ class MappingTable(Base):
 
     way_id = Column(Integer,ForeignKey(f"{GlobalConstants.base_schema}.{GlobalConstants.base_table}.id"), unique=True, nullable=False)
     __table_args__ = (
-        UniqueConstraint("way_id", name="way_id_uniq"),
+        UniqueConstraint("way_id"),
     )
