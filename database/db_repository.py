@@ -1009,6 +1009,8 @@ class DBRepository(DbConfiguration):
             )
             raise
 
+    def resolve_primary_key_columns(self, table):
+        return [col.name for col in table.primary_key.columns]
     @measure_time(label= "Syncing source to target table")
     def sync_source_to_target_table(
             self,
@@ -1047,6 +1049,8 @@ class DBRepository(DbConfiguration):
             select(*(raw_table.c[c] for c in insert_cols))
         )
 
+        pk_cols = self.resolve_primary_key_columns(staging_table)
+        returning_cols = [staging_table.c[c] for c in pk_cols]
         update_map = {
             col: getattr(base_insert.excluded, col)
             for col in update_cols
@@ -1066,7 +1070,7 @@ class DBRepository(DbConfiguration):
             set_=update_map,
             where=where_clause,
         ).returning(
-            staging_table.c.uid,
+            *returning_cols,
             text("xmax")
         )
         )
