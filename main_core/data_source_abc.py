@@ -57,7 +57,7 @@ class DataSourceABC(ABC):
         pass
 
     @abstractmethod
-    def load(self):
+    def load(self, data):
         pass
 
     @abstractmethod
@@ -73,11 +73,11 @@ class DataSourceABC(ABC):
         pass
 
     @abstractmethod
-    def pre_filter_processing(self):
+    def pre_filter_processing(self, data):
         pass
 
     @abstractmethod
-    def post_filter_processing(self):
+    def post_filter_processing(self, data):
         pass
 
     """

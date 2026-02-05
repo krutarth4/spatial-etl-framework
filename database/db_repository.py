@@ -1,7 +1,9 @@
 import csv
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
+import time
 from io import StringIO
 from typing import Text
 
@@ -342,6 +344,7 @@ class DBRepository(DbConfiguration):
             yield conn
             conn.commit()
         except:
+            self.logger.error(f"Error committing to database{conn}")
             conn.rollback()
             raise
         finally:
@@ -422,8 +425,19 @@ class DBRepository(DbConfiguration):
             )
         """
 
+        thread = threading.current_thread()
+        tid = threading.get_ident()
+
+        t0 = time.monotonic()
+        self.logger.info(
+            f"[DB WAIT] thread={thread.name} rows={len(data_list)}"
+        )
         try:
             with self.raw_pg_connection() as conn:
+
+                self.logger.info(
+                    f"[DB ACQUIRED] thread={thread.name}"
+                )
                 with conn.cursor() as cur:
                     with cur.copy(copy_sql) as copy:
                         copy.write(buffer.getvalue())
@@ -431,6 +445,9 @@ class DBRepository(DbConfiguration):
             self.logger.info(
                 f"Inserted {len(data_list)} rows into '{table_name}'"
             )
+            self.logger.critical(
+                f"[DB DONE] thread={thread.name} "
+                f"time={time.monotonic() - t0:.2f}s")
 
         except Exception as e:
             self.logger.error(f"Bulk insert failed for '{table_name}': {e}")

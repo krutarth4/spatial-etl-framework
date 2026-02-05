@@ -133,7 +133,10 @@ class DbConfiguration:
                              pool_size=10,
                              max_overflow=10,
                              pool_pre_ping=True,
-                             plugins=["geoalchemy2"]
+                             plugins=["geoalchemy2"],
+                             connect_args={
+                                 "application_name": "Modular data pipeline",
+                             }
                              )
 
     def create_session_factory(self):
