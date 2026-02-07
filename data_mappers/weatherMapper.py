@@ -1,22 +1,17 @@
-from datetime import datetime
 from typing import Any, List
 
-from zoneinfo import ZoneInfo
-
 from sqlalchemy import Column, Integer, String, Float, TIMESTAMP, DATETIME, DateTime, UniqueConstraint, ForeignKey
-from sqlalchemy.orm import relationship
-
-from database.base import Base
 from database_tables.enrichment_table import EnrichmentTable
-from database_tables.mapping_table import MappingTable
 from database_tables.staging_table import StagingTable
 from main_core.data_source_abc_impl import DataSourceABCImpl
+
 
 #
 class WeatherStagingTable(StagingTable):
     __tablename__ = "weather_staging"
 
-    uid = Column(Integer, primary_key=True, autoincrement=True) # make sure to create indexing for the table for better query and fast computation
+    uid = Column(Integer, primary_key=True,
+                 autoincrement=True)  # make sure to create indexing for the table for better query and fast computation
     source_id = Column(Integer, nullable=False)
     dwd_station_id = Column(Integer, nullable=False)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
@@ -35,10 +30,12 @@ class WeatherStagingTable(StagingTable):
         UniqueConstraint('dwd_station_id', "timestamp"),
     )
 
+
 class WeatherEnrichmentTable(EnrichmentTable):
     __tablename__ = "weather_enrichment"
 
-    uid = Column(Integer, primary_key=True, autoincrement=True, index=True) # make sure to create indexing for the table for better query and fast computation
+    uid = Column(Integer, primary_key=True, autoincrement=True,
+                 index=True)  # make sure to create indexing for the table for better query and fast computation
     dwd_station_id = Column(Integer, nullable=False)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     visibility = Column(Float)
@@ -52,8 +49,8 @@ class WeatherEnrichmentTable(EnrichmentTable):
 
 class WeatherMapper(DataSourceABCImpl):
     pass
-    # https: // brightsky.dev / docs /  # /operations/getWeather#Query-Parameters
 
+    # https: // brightsky.dev / docs /  # /operations/getWeather#Query-Parameters
 
     def source_filter(self, data: list[Any]) -> List[dict]:
         result: List[dict] = []
@@ -72,8 +69,3 @@ class WeatherMapper(DataSourceABCImpl):
                 result.append(enriched)
 
         return result
-
-
-
-
-
