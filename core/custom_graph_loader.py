@@ -12,7 +12,7 @@ class CustomGraphLoader:
     def __init__(self,graph_conf:GraphConfDTO):
         self.conf = graph_conf
         self.handler = None
-        self.logger = LoggerManager(type(self).__name__).get_logger()
+        self.logger = LoggerManager(type(self).__name__)
 
     @measure_time(label= "OSM initialization")
     def initialize(self):

@@ -24,6 +24,7 @@ class InitServer:
         if not self.conf.enable:
             self.logger.warning("Fast API server enable set to False. Continue...")
             return
+        # TODO: remove from the constructor
         self.initialize_uvicorn_server()
 
     def initialize_uvicorn_server(self):

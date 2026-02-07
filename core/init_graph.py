@@ -75,10 +75,50 @@ class InitGraph:
             self.logger.info("Loading Graph through custom osm handler class")
             self.execute_custom_strategy()
 
+        elif tool == "external_ingest":
+            self.logger.info(f"Loading Graph through {tool} which means the base graph "
+                             "data will be parsed at router level")
+            self.execute_external_ingest()
+
+
         else:
             self.is_raw_graph_ready = False
             self.logger.error("Graph tool {} not supported".format(tool))
             raise Exception("Graph tool {} not supported".format(tool))
+    def execute_external_ingest(self):
+
+
+        #     check if the table is present
+        table_conf = self.graph_configuration
+
+        if self.check_if_raw_graph_present():
+            self.is_raw_graph_ready = True
+            self.logger.info(f"Table {table_conf.table_name} exists")
+            # TODO: check if the base graph is ready as it will created new
+
+            base_data_count = self.base_graph.get_base_graph_row_counts()
+            if base_data_count == 0 and base_data_count != self.db.get_table_count(self.graph_configuration.table_name,
+                                                                                   self.graph_configuration.schema):
+                self.logger.info(f"populating data into base_graph")
+                self.base_graph.populate_base_graph_table(self.graph_configuration.table_name,
+                                                          self.graph_configuration.schema)
+            else:
+                if not self.is_base_graph_ready():
+                    self.base_graph.drop_base_graph_table()
+                    self.base_graph.create_base_graph_tables()
+                    self.base_graph.populate_base_graph_table(self.graph_configuration.table_name,
+                                                              self.graph_configuration.schema)
+
+            return
+
+
+
+
+        else:
+            self.logger.warning(f"Table {table_conf.table_name} does not exist")
+            self.logger.warning(f"Make sure the schema and tablename are correct in config file"
+                                f". If the issue still presist check if external ingestion of table in database was successful")
+
 
     def execute_custom_strategy(self):
         # TODO:check with metadata table if the files imported is same

@@ -10,9 +10,10 @@ class WaysBaseTable(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     way_id = Column(BigInteger, unique=False, nullable=False)
-    start_node_id = Column(BigInteger, nullable=False)
-    end_node_id = Column(BigInteger, nullable=False)
+    from_node_id = Column(BigInteger, nullable=False)
+    to_node_id = Column(BigInteger, nullable=False)
     way_link_index = Column(Integer, nullable=False)
+    length_m = Column(Integer)
 
     #Postgis Geometry
     geometry = Column(Geometry(geometry_type="LINESTRING", srid=4326), nullable=False)
