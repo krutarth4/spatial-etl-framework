@@ -1,5 +1,6 @@
 import zipfile
 
+from geoalchemy2 import Geometry
 from pyproj import Transformer
 from sqlalchemy import Column, Integer, Float, ARRAY, UniqueConstraint
 
@@ -31,7 +32,7 @@ class ElevationEnrichmentTable(EnrichmentTable):
     lat = Column(Float)
     lon = Column(Float)
     altitude = Column(Float)
-    # geom = Column(Geometry(geometry_type="POINT", srid=4326))
+    geom = Column(Geometry(geometry_type="POINT", srid=4326))
 
     __table_args__ = (
         UniqueConstraint("id","altitude"),
