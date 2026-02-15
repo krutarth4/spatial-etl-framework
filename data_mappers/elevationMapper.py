@@ -75,4 +75,3 @@ class ElevationMapper(DataSourceABCImpl):
         # print("content is ", content)
         return rows
 
-# TODO geometry operations ins
