@@ -27,4 +27,4 @@ RUN useradd -m appuser
 USER appuser
 
 # 👇 Adjust THIS depending on your structure
-CMD ["python", "-m", "core.application_core"]
+CMD ["python", "-m", "core.application"]
