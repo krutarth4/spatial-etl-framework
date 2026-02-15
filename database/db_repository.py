@@ -8,7 +8,6 @@ from io import StringIO
 from typing import Text
 
 from dacite import from_dict
-from exceptiongroup import catch
 from geoalchemy2 import Geometry
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select, update, insert, Column, BigInteger, text, func, Row, RowMapping, TIMESTAMP, Numeric, \
