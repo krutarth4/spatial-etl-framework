@@ -9,7 +9,6 @@ requests
 APScheduler==3.11.1
 click==8.3.0
 dacite==1.9.2
-GDAL==3.11.5
 GeoAlchemy2==0.18.0
 h11==0.16.0
 numpy==2.3.4
@@ -21,5 +20,4 @@ SQLAlchemy==2.0.44
 typing_extensions==4.15.0
 tzlocal==5.3.1
 uvicorn==0.38.0
-wheel==0.45.1
 psycopg[binary]==3.2.12
