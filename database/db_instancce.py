@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from dacite import from_dict
 from sqlalchemy import String, Column, Integer, Index
 
-from NotUsed import db_conf
 
 from database.base import Base
 from database.db_configuration import DbConfiguration, DBConfigDTO
