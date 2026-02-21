@@ -28,10 +28,7 @@ class DwdWeatherStationEnrichmentTable(EnrichmentTable):
     __tablename__ = "dwd_station_locations_enrichment"
     uid = Column(Integer, primary_key=True, autoincrement=True)
     dwd_station_id = Column(Integer, unique=True, nullable=False)
-    # lat = Column(Float)
-    # lon = Column(Float)
     point = Column(Geometry(geometry_type="POINT", srid=4326), index=True)
-    # geometry = Column(Geometry(geometry_type="LINESTRING", srid=4326), nullable=False)
 
 
 class DwdMappingTable(MappingTable):
