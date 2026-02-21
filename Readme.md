@@ -2,8 +2,24 @@
 
 * TODO: add the hstore, postgis extension to docker container at start
 * TODO: Add for the command line osm2pgrouting
-to change the file format from pbf to osm and the tool described to do it.
 
+
+### To change the file format from pbf to osm and the tool described to do it.
+functions in postgis or upload information directly in POSTGIS with GDAL
+
+Follow the steps [currently used for Elevation mapper]
+```aiignore
+
+ALTER DATABASE <DB_name>
+  SET postgis.gdal_enabled_drivers TO 'GTiff';
+
+ALTER DATABASE <DB_name>
+  SET postgis.enable_outdb_rasters TO true;
+
+```
+
+FYI : https://www.crunchydata.com/blog/using-cloud-rasters-with-postgis
+---------
 run the conatiner 
 ```
 docker run --name postgres -e POSTGRES_PASSWORD=admin123 -e POSTGRES_USER=postgres -p 5432:5432 -d postgres
