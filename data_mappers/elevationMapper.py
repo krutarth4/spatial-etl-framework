@@ -111,36 +111,51 @@ class ElevationMapper(DataSourceABCImpl):
         mapping = self.data_source_config.mapping
 
         sql = f"""
-            INSERT INTO {mapping.table_schema}.{mapping.table_name}
-                (way_id, elevation_profile)
+            WITH sampled_points AS (
+                SELECT
+                    w.id AS way_id,
+                    dp.path[1] AS path_idx,
+                    dp.geom AS geom_25833
+                FROM {base.table_schema}.{base.table_name} w
+                CROSS JOIN LATERAL ST_DumpPoints(
+                    ST_Segmentize(
+                        ST_Transform(w.geometry, 25833),
+                        1.0
+                    )
+                ) AS dp
+            ),
+            points_with_elevation AS (
+                SELECT
+                    sp.way_id,
+                    sp.path_idx,
+                    sp.geom_25833,
+                    z_lookup.z
+                FROM sampled_points sp
+                LEFT JOIN LATERAL (
+                    SELECT z
+                    FROM (
+                        SELECT ST_Value(r.rast, sp.geom_25833) AS z
+                        FROM {enrichment.table_schema}.{enrichment.table_name} r
+                        WHERE ST_Intersects(r.footprint_4326, ST_Transform(sp.geom_25833, 4326))
+                    ) sampled_z
+                    WHERE sampled_z.z IS NOT NULL
+                    LIMIT 1
+                ) AS z_lookup ON TRUE
+            )
+            INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, elevation_profile)
             SELECT
-                w.id AS way_id,
+                p.way_id AS way_id,
                 jsonb_agg(
                     jsonb_build_object(
-                        'x', ST_X(pts.geom),
-                        'y', ST_Y(pts.geom),
-                        'z', pts.z
+                        'x', ST_X(ST_Transform(p.geom_25833, 4326)),
+                        'y', ST_Y(ST_Transform(p.geom_25833, 4326)),
+                        'z', p.z
                     )
-                    ORDER BY pts.path
+                    ORDER BY p.path_idx
                 ) AS elevation_profile
-            FROM {base.table_schema}.{base.table_name} w
-            JOIN {enrichment.table_schema}.{enrichment.table_name} r
-              ON r.dataset_id = 'default'
-              AND ST_Intersects(w.geometry, r.footprint_4326)
-            CROSS JOIN LATERAL (
-                SELECT
-                    dp.path[1] AS path,
-                    dp.geom,
-                    ST_Value(r.rast, dp.geom) AS z
-                FROM ST_DumpPoints(
-                        ST_Segmentize(
-                            ST_Transform(w.geometry, 25833),
-                            1.0
-                        )
-                     ) AS dp
-            ) AS pts
-            WHERE pts.z IS NOT NULL
-            GROUP BY w.id
+            FROM points_with_elevation p
+            WHERE p.z IS NOT NULL
+            GROUP BY p.way_id
             ON CONFLICT (way_id)
             DO UPDATE SET
                 elevation_profile = EXCLUDED.elevation_profile;
@@ -179,7 +194,7 @@ class ElevationMapper(DataSourceABCImpl):
               """
 
         return sql
-    @measure_time("rater creation")
+    @measure_time("raster creation")
     def create_raster(self, xyz_path: str, pixel_size: float = 1.0) -> str:
         """
         Streaming XYZ → GeoTIFF.
@@ -190,8 +205,8 @@ class ElevationMapper(DataSourceABCImpl):
 
         xyz_path = Path(xyz_path)
         tif_path = xyz_path.with_suffix(".tif")
-        # if tif_path.exists():
-        #     return str(tif_path)
+        if tif_path.exists():
+            return str(tif_path)
 
         min_x = float("inf")
         max_x = float("-inf")
