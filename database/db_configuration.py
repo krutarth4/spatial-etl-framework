@@ -177,6 +177,7 @@ class DbConfiguration:
             # TODO : Evaluate
             self.logger.info(f"Session closed")
             session.close()
+            self.scoped_session.remove()
 
     def get_table_row_count(self, table_name: str) -> int:
         """

@@ -1121,7 +1121,7 @@ class DBRepository(DbConfiguration):
             }
 
     @measure_time(label= "SQL execution time: ")
-    def call_sql(self, sql: str):
+    def call_sql(self, sql: str, params: Any = None):
         """
         Execute raw SQL using the session_scope().
         Ensures the same transactional behavior as ORM operations.
@@ -1130,11 +1130,15 @@ class DBRepository(DbConfiguration):
 
         try:
             with self.session_scope() as session:
-                result = session.execute(text(sql))
+                if params:
+                    result = session.execute(text(sql), params=params)
+                else:
+                    result = session.execute(text(sql))
             self.logger.info("SQL execution completed.")
             return result
         except Exception as e:
             self.logger.error(f"SQL execution failed: {e}")
+
 
 
 
