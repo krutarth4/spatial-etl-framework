@@ -1,3 +1,5 @@
+rasterio
+pandas
 celery
 ijson
 pyproj
