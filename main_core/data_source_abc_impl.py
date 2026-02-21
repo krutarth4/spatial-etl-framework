@@ -371,7 +371,6 @@ class DataSourceABCImpl(DataSourceABC):
         """Default filter: returns data unchanged.
             data : the fetch data which needs to be processed after the fetch request
         """
-        print("calling filter from the datasource ABC impl")
         return data
 
     def start_execution(self):
@@ -588,7 +587,7 @@ class DataSourceABCImpl(DataSourceABC):
 
     def execute_query(self, table_key: str, query: str | None, params= None):
         if query is not None:
-            self.logger.info(f"calling the query for {table_key} -->, {query}")
+            # self.logger.info(f"calling the query for {table_key} -->, {query}")
             self.db.call_sql(query, params)
         else:
             if table_key.lower() == "mapping":

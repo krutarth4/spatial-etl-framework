@@ -1126,16 +1126,16 @@ class DBRepository(DbConfiguration):
         Execute raw SQL using the session_scope().
         Ensures the same transactional behavior as ORM operations.
         """
-        self.logger.info(f"Executing SQL:\n{sql}")
+        # self.logger.debug(f"Executing SQL:\n{sql}")
 
         try:
             with self.session_scope() as session:
                 if params:
-                    result = session.execute(text(sql), params=params)
+                    session.execute(text(sql), params=params)
                 else:
-                    result = session.execute(text(sql))
+                    session.execute(text(sql))
             self.logger.info("SQL execution completed.")
-            return result
+            # return result
         except Exception as e:
             self.logger.error(f"SQL execution failed: {e}")
 

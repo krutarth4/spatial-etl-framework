@@ -1,11 +1,13 @@
 import binascii
+import hashlib
 import os
 import zipfile
 from pathlib import Path
 
 from geoalchemy2 import Geometry, Raster
 from pyproj import Transformer
-from sqlalchemy import Column, Integer, Float, ARRAY, UniqueConstraint, Index, func
+from sqlalchemy import Column, Integer, Float, ARRAY, UniqueConstraint, Index, func, String
+from sqlalchemy.dialects.postgresql import JSONB
 
 from database_tables.enrichment_table import EnrichmentTable
 from database_tables.mapping_table import MappingTable
@@ -18,6 +20,8 @@ import rasterio
 from rasterio.transform import from_origin
 from pyproj import CRS
 
+from utils.execution_time import measure_time
+
 
 class ElevationTable(StagingTable):
     __tablename__ = "elevation_staging"
@@ -25,6 +29,8 @@ class ElevationTable(StagingTable):
     id = Column(Integer, primary_key=True, autoincrement=True,
                 index=True)  # make sure to create indexing for the table for better query and fast computation
     rast = Column(Raster)
+    raster_hash = Column(String, index=True)
+    dataset_id = Column(String)
 
     __table_args__ = (
         Index(
@@ -32,18 +38,40 @@ class ElevationTable(StagingTable):
             func.ST_ConvexHull(rast),
             postgresql_using="gist"
         ),
+        UniqueConstraint("raster_hash")
     )
 
 
 class ElevationEnrichmentTable(EnrichmentTable):
     __tablename__ = "elevation_enrichment"
 
-    id = Column(Integer, primary_key=True, autoincrement=True,
-                index=True)  # make sure to create indexing for the table for better query and fast computation
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+
+    dataset_id = Column(String, nullable=False, default="default", index=True)
+
+    tile_x = Column(Integer, nullable=False, index=True)
+    tile_y = Column(Integer, nullable=False, index=True)
     rast = Column(Raster)
+    raster_hash = Column(String, index=True)
+
+    footprint_4326 = Column(Geometry("POLYGON", srid=4326), index=True)
 
     __table_args__ = (
-        UniqueConstraint("id", "rast"),
+        Index(
+            "elevation_enrichment_rast_gix",
+            func.ST_ConvexHull(rast),
+            postgresql_using="gist"
+        ),
+        Index(
+            "elevation_enrichment_footprint",
+            func.ST_ConvexHull(footprint_4326),
+            postgresql_using="gist"
+        ),
+        UniqueConstraint(
+            "dataset_id",
+            "tile_x",
+            "tile_y",
+        ),
     )
 
 
@@ -52,23 +80,118 @@ class ElevationMappingTable(MappingTable):
 
     id = Column(Integer, primary_key=True,
                 autoincrement=True)  # make sure to create indexing for the table for better query and fast computation
-    altitude = Column(Float)
-    linked_points = Column(ARRAY(Integer))
-    difference = Column(Float)
+    elevation_profile = Column(JSONB)
+
 
 
 class ElevationMapper(DataSourceABCImpl):
     transformer = Transformer.from_crs(25833, 4326, always_xy=True)
     docker_container_path = "/extracted/"
 
+    @staticmethod
+    def _parse_xyz_line(line: str):
+        line = line.strip()
+        if not line:
+            return None
+        parts = line.replace(",", " ").split()
+        if len(parts) < 3:
+            return None
+        try:
+            return float(parts[0]), float(parts[1]), float(parts[2])
+        except ValueError:
+            return None
+
+    def sync_staging_to_enrichment(self):
+        return
+    def mapping_db_query(self) -> str:
+        self.logger.info("Mapping Elevation to links (insert into mapping table)")
+
+        base = self.data_source_config.mapping.base_table
+        enrichment = self.data_source_config.storage.enrichment
+        mapping = self.data_source_config.mapping
+
+        sql = f"""
+            INSERT INTO {mapping.table_schema}.{mapping.table_name}
+                (way_id, elevation_profile)
+            SELECT
+                w.id AS way_id,
+                jsonb_agg(
+                    jsonb_build_object(
+                        'x', ST_X(pts.geom),
+                        'y', ST_Y(pts.geom),
+                        'z', pts.z
+                    )
+                    ORDER BY pts.path
+                ) AS elevation_profile
+            FROM {base.table_schema}.{base.table_name} w
+            JOIN {enrichment.table_schema}.{enrichment.table_name} r
+              ON r.dataset_id = 'default'
+              AND ST_Intersects(w.geometry, r.footprint_4326)
+            CROSS JOIN LATERAL (
+                SELECT
+                    dp.path[1] AS path,
+                    dp.geom,
+                    ST_Value(r.rast, dp.geom) AS z
+                FROM ST_DumpPoints(
+                        ST_Segmentize(
+                            ST_Transform(w.geometry, 25833),
+                            1.0
+                        )
+                     ) AS dp
+            ) AS pts
+            WHERE pts.z IS NOT NULL
+            GROUP BY w.id
+            ON CONFLICT (way_id)
+            DO UPDATE SET
+                elevation_profile = EXCLUDED.elevation_profile;
+        """
+
+        return sql
+    def enrichment_db_query(self) -> None | str:
+        staging = self.data_source_config.storage.staging
+        enrichment = self.data_source_config.storage.enrichment
+        sql = f"""
+                    INSERT INTO {enrichment.table_schema}.{enrichment.table_name}
+                          (dataset_id, tile_x, tile_y, rast, raster_hash, footprint_4326)
+                        SELECT
+                        dataset_id,
+                        
+                          floor(ST_UpperLeftX(s.rast) / 1000)::int AS tile_x,
+                          floor(ST_UpperLeftY(s.rast) / 1000)::int AS tile_y,
+                        
+                          s.rast,
+                          s.raster_hash,
+                          ST_Transform(ST_ConvexHull(s.rast), 4326) AS footprint_4326
+                        
+                        FROM {staging.table_schema}.{staging.table_name} s
+                        WHERE s.raster_hash IS NOT NULL
+                        
+                        ON CONFLICT (dataset_id, tile_x, tile_y)
+                        DO UPDATE SET
+                            rast = EXCLUDED.rast,
+                            raster_hash = EXCLUDED.raster_hash,
+                            footprint_4326 = EXCLUDED.footprint_4326
+                        
+                        -- Only update if content actually changed
+                        WHERE {enrichment.table_schema}.{enrichment.table_name}.raster_hash
+                              IS DISTINCT FROM EXCLUDED.raster_hash;
+
+              """
+
+        return sql
+    @measure_time("rater creation")
     def create_raster(self, xyz_path: str, pixel_size: float = 1.0) -> str:
         """
         Streaming XYZ → GeoTIFF.
         Memory stable for large files (~4M rows).
         """
 
+
+
         xyz_path = Path(xyz_path)
         tif_path = xyz_path.with_suffix(".tif")
+        # if tif_path.exists():
+        #     return str(tif_path)
 
         min_x = float("inf")
         max_x = float("-inf")
@@ -76,13 +199,21 @@ class ElevationMapper(DataSourceABCImpl):
         max_y = float("-inf")
 
         # -------- PASS 1: determine bounds --------
+        valid_points = 0
         with open(xyz_path, "r") as f:
             for line in f:
-                x, y, _ = map(float, line.strip().split())
+                parsed = self._parse_xyz_line(line)
+                if parsed is None:
+                    continue
+                x, y, _ = parsed
                 min_x = min(min_x, x)
                 max_x = max(max_x, x)
                 min_y = min(min_y, y)
                 max_y = max(max_y, y)
+                valid_points += 1
+
+        if valid_points == 0:
+            raise ValueError(f"No valid XYZ points found in file: {xyz_path}")
 
         width = int((max_x - min_x) / pixel_size) + 1
         height = int((max_y - min_y) / pixel_size) + 1
@@ -92,12 +223,16 @@ class ElevationMapper(DataSourceABCImpl):
         # -------- PASS 2: fill raster --------
         with open(xyz_path, "r") as f:
             for line in f:
-                x, y, z = map(float, line.strip().split())
+                parsed = self._parse_xyz_line(line)
+                if parsed is None:
+                    continue
+                x, y, z = parsed
 
                 col = int((x - min_x) / pixel_size)
                 row = int((max_y - y) / pixel_size)
 
-                raster[row, col] = z
+                if 0 <= row < height and 0 <= col < width:
+                    raster[row, col] = z
         origin_x = min_x - (pixel_size / 2)
         origin_y = max_y + (pixel_size / 2)
 
@@ -189,26 +324,40 @@ class ElevationMapper(DataSourceABCImpl):
         # self.ensure_raster_constraints(self.data_source_config.storage.staging.table_schema,ElevationTable.__tablename__)
         # os.remove(tif_path)
 
-
-
     def insert_into_staging(self, source_schema, source_name, file_path):
         self.logger.info(f"Inserting into staging table {source_schema}.{source_name} -> {file_path}")
+
         try:
             absolute_path = os.path.abspath(file_path)
+
             with open(absolute_path, "rb") as f:
                 raster_bytes = f.read()
-            # hex_string = binascii.hexlify(raster_bytes).decode("ascii")
 
             query = f"""
-                INSERT INTO {source_schema}.{source_name} (rast)
-                SELECT ST_Tile(
-                    ST_FromGDALRaster(:raster_data),
-                    1000,
-                    1000
-                );
+                INSERT INTO {source_schema}.{source_name} (rast, raster_hash, dataset_id)
+                SELECT
+                    tile.rast,
+                    md5(ST_AsBinary(tile.rast)),
+                    :dataset_id
+                FROM (
+                    SELECT ST_Tile(
+                        ST_FromGDALRaster(:raster_data),
+                        1000,
+                        1000
+                    ) AS rast
+                ) AS tile
+                ON CONFLICT (raster_hash) DO NOTHING;
             """
 
-            self.execute_query("custom", query, {"raster_data": raster_bytes})
+            self.execute_query(
+                "custom",
+                query,
+                {
+                    "raster_data": raster_bytes,
+                    "dataset_id": os.path.basename(file_path)
+                }
+            )
+
         except Exception as e:
             self.logger.error(e)
 
