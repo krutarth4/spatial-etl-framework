@@ -295,7 +295,7 @@ class DataSourceABCImpl(DataSourceABC):
         try:
             path = Path(path)
             file_handler = FileHandler(path.parent)
-            res = file_handler.read_local_file(path.name, self.read_file_content)
+            res = file_handler.read_local_file("gpkg_packet_anlagebaum.gpkg", self.read_file_content)
             if isinstance(res, list):
                 result.extend(res)
             elif isinstance(res, dict):

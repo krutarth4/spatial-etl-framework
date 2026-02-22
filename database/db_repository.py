@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import time
 from io import StringIO
+import json
 from typing import Text
 
 from dacite import from_dict
@@ -17,7 +18,7 @@ from data_config_dtos.data_source_config_dto import BaseGraphDTO
 from database.base import Base
 from database.db_configuration import DbConfiguration
 from sqlalchemy.dialects.postgresql import Insert, JSONB, ARRAY, UUID as PG_UUID
-from typing import Optional, Union, List, Any, Sequence
+from typing import Union, List, Any, Sequence
 
 from log_manager.logger_manager import LoggerManager
 from sqlalchemy import (
@@ -411,9 +412,14 @@ class DBRepository(DbConfiguration):
                 val = row.get(col)
                 column_obj = table.columns.get(col)
 
-                # Detect PostgreSQL ARRAY column
+                # Handle ARRAY columns
                 if isinstance(column_obj.type, ARRAY):
                     val = self.pg_array_literal(val)
+
+                # Handle JSONB columns
+                elif isinstance(column_obj.type, JSONB):
+                    if val is not None:
+                        val = json.dumps(val)
 
                 formatted_row.append(val)
 
