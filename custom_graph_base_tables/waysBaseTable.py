@@ -1,5 +1,5 @@
 from geoalchemy2 import Geometry
-from sqlalchemy import Column, Integer, BigInteger, Enum, ARRAY, String
+from sqlalchemy import Column, Integer, BigInteger, Enum, ARRAY, String, Index
 
 from database.base import Base
 
@@ -17,3 +17,17 @@ class WaysBaseTable(Base):
 
     #Postgis Geometry
     geometry = Column(Geometry(geometry_type="LINESTRING", srid=4326), nullable=False)
+    geometry_25833 = Column(Geometry(geometry_type="LINESTRING", srid=25833), nullable=True,default="NULL")
+
+    __table_args__ = (
+        Index(
+            None,
+            "geometry",
+            postgresql_using="gist"
+        ),
+        Index(
+            None,
+            "geometry_25833",
+            postgresql_using="gist"
+        ),
+    )

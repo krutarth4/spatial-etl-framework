@@ -19,12 +19,15 @@ class BaseGraph:
     def populate_base_graph_table(self, source_name: str, source_schema: str):
         self.db.clone_table_data(source_name, source_schema, self.base_graph_conf.table_name,
                                  self.base_graph_conf.table_schema)
-        self.db.create_ways_base_geometry_index(self.base_graph_conf.table_schema
-                                                ,self.base_graph_conf.table_name,
-                                                "geometry",
-                                                "idx_ways_base_geometry_index"
-                                                )
 
+        # Populate geometry_25833
+        query = f"""
+                UPDATE {self.base_graph_conf.table_schema}.{self.base_graph_conf.table_name}
+                SET geometry_25833 = ST_Transform(geometry, 25833)
+                WHERE geometry IS NOT NULL;
+            """
+
+        self.db.call_sql(query)
 
 
     def drop_base_graph_table(self):
