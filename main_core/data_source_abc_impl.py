@@ -1,4 +1,5 @@
 import os
+import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -172,9 +173,19 @@ class DataSourceABCImpl(DataSourceABC):
 
     @staticmethod
     def create_file_name_for_multi_fetch_expand_params(source, param) -> str:
-        file_name = source.destination.split(".")
-        path = f"{'.'.join(file_name[:-1])}_{param}.{file_name[-1]}"
-        return path
+        base, ext = source.destination.rsplit(".", 1)
+
+        # Sort keys for deterministic filename
+        parts = []
+        for k in sorted(param.keys()):
+            v = str(param[k])
+            # Replace unsafe characters
+            v = re.sub(r"[^\w\-\.]", "_", v)
+            parts.append(f"{k}-{v}")
+
+        suffix = "_".join(parts)
+
+        return f"{base}_{suffix}.{ext}"
 
     def process_multi_fetch_expand_list(self, source, urls) -> list[str]:
         http_handler = HttpHandler()
@@ -295,7 +306,7 @@ class DataSourceABCImpl(DataSourceABC):
         try:
             path = Path(path)
             file_handler = FileHandler(path.parent)
-            res = file_handler.read_local_file("gpkg_packet_anlagebaum.gpkg", self.read_file_content)
+            res = file_handler.read_local_file(path.name, self.read_file_content)
             if isinstance(res, list):
                 result.extend(res)
             elif isinstance(res, dict):
