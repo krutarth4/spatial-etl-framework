@@ -502,7 +502,7 @@ class DataSourceABCImpl(DataSourceABC):
             # Create tables if not exist
 
             self.create_data_tables()
-            max_workers = min(1, os.cpu_count() * 2)
+            max_workers = min(3, os.cpu_count() * 2)
             self.logger.critical(f"Starting with {max_workers} workers")
             with ThreadPoolExecutor(
                     max_workers=max_workers,
