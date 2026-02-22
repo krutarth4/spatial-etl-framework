@@ -349,6 +349,22 @@ class DBRepository(DbConfiguration):
         finally:
             conn.close()
 
+    def pg_array_literal(self, value):
+        if value is None:
+            return None
+
+        if not isinstance(value, (list, tuple)):
+            raise ValueError(f"Expected list/tuple for ARRAY column, got {type(value)}")
+
+        # Escape quotes inside elements
+        escaped = [
+            '"' + str(v).replace('"', '\\"') + '"'
+            for v in value
+        ]
+
+        return "{" + ",".join(escaped) + "}"
+
+
     @measure_time(label="bulk insert")
     def bulk_insert(
             self,
@@ -389,19 +405,26 @@ class DBRepository(DbConfiguration):
         )
 
         for row in data_list:
-            writer.writerow(
-                [
-                    row.get(col)
-                    for col in insert_columns
-                ]
-            )
-            # buffer.write(
-            #     ",".join(
-            #         "" if row.get(col) is None else str(row[col])
+            formatted_row = []
+
+            for col in insert_columns:
+                val = row.get(col)
+                column_obj = table.columns.get(col)
+
+                # Detect PostgreSQL ARRAY column
+                if isinstance(column_obj.type, ARRAY):
+                    val = self.pg_array_literal(val)
+
+                formatted_row.append(val)
+
+            writer.writerow(formatted_row)
+            # writer.writerow(
+            #     [
+            #         row.get(col)
             #         for col in insert_columns
-            #     )
-            #     + "\n"
+            #     ]
             # )
+
 
         buffer.seek(0)
 
@@ -1027,6 +1050,22 @@ class DBRepository(DbConfiguration):
 
     def resolve_primary_key_columns(self, table):
         return [col.name for col in table.primary_key.columns]
+
+    def fetch_query(self, query, params):
+        """
+        Execute a SELECT query and return all rows.
+        """
+
+        try:
+            with self.session_scope() as session:
+                result = session.execute(text(query), params or {})
+                rows = result.fetchall()
+                return rows
+
+        except Exception as e:
+            self.logger.error(f"Fetch query failed: {e}")
+            raise
+
     @measure_time(label= "Syncing source to target table")
     def sync_source_to_target_table(
             self,

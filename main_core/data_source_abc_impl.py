@@ -481,17 +481,17 @@ class DataSourceABCImpl(DataSourceABC):
 
         try:
             # 1 Extract
-            # paths = self.extract()
-            # Testing scalability with small dataset from elevation  # TODO: Remove later
-            paths = ['tmp/elevation_zips/data_elevation_DGM1_368_5808.zip_2025-12-18T16-15-40.zip',
-                      'tmp/elevation_zips/data_elevation_DGM1_370_5806.zip_2025-12-18T16-15-41.zip']
+            paths = self.extract()
+            # # Testing scalability with small dataset from elevation  # TODO: Remove later
+            # paths = ['tmp/elevation_zips/data_elevation_DGM1_368_5808.zip_2025-12-18T16-15-40.zip',
+            #           'tmp/elevation_zips/data_elevation_DGM1_370_5806.zip_2025-12-18T16-15-41.zip']
 
             if not DataSourceABCImpl.is_file_available(paths):
                 return self.run_job_response("No files available")
             # Create tables if not exist
 
             self.create_data_tables()
-            max_workers = min(5, os.cpu_count() * 2)
+            max_workers = min(1, os.cpu_count() * 2)
             self.logger.critical(f"Starting with {max_workers} workers")
             with ThreadPoolExecutor(
                     max_workers=max_workers,
