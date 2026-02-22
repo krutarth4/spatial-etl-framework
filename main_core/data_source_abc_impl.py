@@ -481,10 +481,10 @@ class DataSourceABCImpl(DataSourceABC):
 
         try:
             # 1 Extract
-            paths = self.extract()
+            # paths = self.extract()
             # Testing scalability with small dataset from elevation  # TODO: Remove later
-            # paths = ['tmp/elevation_zips/data_elevation_DGM1_368_5808.zip_2025-12-18T16-15-40.zip',
-            #           'tmp/elevation_zips/data_elevation_DGM1_370_5806.zip_2025-12-18T16-15-41.zip']
+            paths = ['tmp/elevation_zips/data_elevation_DGM1_368_5808.zip_2025-12-18T16-15-40.zip',
+                      'tmp/elevation_zips/data_elevation_DGM1_370_5806.zip_2025-12-18T16-15-41.zip']
 
             if not DataSourceABCImpl.is_file_available(paths):
                 return self.run_job_response("No files available")

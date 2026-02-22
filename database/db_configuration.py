@@ -1,3 +1,4 @@
+import traceback
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -167,7 +168,19 @@ class DbConfiguration:
             self.logger.info(f"Session opened")
             yield session
             session.commit()
+        except KeyboardInterrupt:
+            self.logger.warning("SIGINT received. Committing partial work before exit.")
+            session.commit()  # commit whatever is done
+            raise  # re-raise so program still exits cleanly
+
+        except Exception as e:
+            self.logger.error("Session failed with exception:")
+            self.logger.error(traceback.format_exc())
+            session.rollback()
+            raise
+
         except:
+            self.logger.error(f"Session closed unexpected with exception")
             self.logger.warning(f"Session rollback")
             session.rollback()
             raise

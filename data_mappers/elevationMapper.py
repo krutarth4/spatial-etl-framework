@@ -120,7 +120,7 @@ class ElevationMapper(DataSourceABCImpl):
                 CROSS JOIN LATERAL ST_DumpPoints(
                     ST_Segmentize(
                         ST_Transform(w.geometry, 25833),
-                        1.0
+                        100.0
                     )
                 ) AS dp
             ),
