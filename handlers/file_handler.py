@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime
 from pathlib import Path, PurePath, PosixPath
 from typing import Any, Optional, Callable
@@ -16,26 +17,32 @@ class FileHandler:
     _META = "meta"
     _DATA = "data"
     _BASE_DIR = "../"
+    _STORAGE_ROOT_ENV = "MDP_STORAGE_ROOT"
     data_folders = ("tmp", "data")
 
     def __init__(self, base_dir: str | Path = _BASE_DIR):
         self.logger = LoggerManager(type(self).__name__).get_logger()
-
-        if isinstance(base_dir, PosixPath):
-            if base_dir.is_absolute():
-                self.base_dir = base_dir.resolve()
-            else:
-                repo_root = Path(__file__).resolve().parents[1]
-                self.base_dir = (repo_root / base_dir).resolve()
-        else:
-            base_dir = base_dir.split("/")
-            base_dir = "/".join(base_dir[:-1])
-            repo_root = Path(__file__).resolve().parents[1]
-            self.base_dir = (repo_root / base_dir).resolve()
-
-        # self.base_dir = Path(base_dir).expanduser().resolve()
+        self.base_dir = self._resolve_base_dir(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.logger.info(f"Base directory: {self.base_dir.resolve()}")
+
+    def _resolve_base_dir(self, base_dir: str | Path) -> Path:
+        repo_root = Path(__file__).resolve().parents[1]
+        storage_root = Path(os.getenv(self._STORAGE_ROOT_ENV, str(repo_root))).expanduser()
+
+        raw_path = base_dir if isinstance(base_dir, (Path, PosixPath)) else Path(str(base_dir))
+
+        # Call sites pass both directories and full file paths; normalize to directory.
+        looks_like_file = raw_path.suffix != ""
+        dir_path = raw_path.parent if looks_like_file else raw_path
+
+        if str(dir_path) in ("", "."):
+            dir_path = Path(".")
+
+        if dir_path.is_absolute():
+            return dir_path.resolve()
+
+        return (storage_root / dir_path).resolve()
 
     def _timestamp(self) -> str:
         return datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
