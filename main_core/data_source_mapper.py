@@ -36,7 +36,7 @@ class DataSourceMapper:
                         result.append(source)
             return result
         except Exception as e:
-            self.logger.error(f"Error loading data sources for {source.get("name")} {e}")
+            self.logger.error(f"Error loading data sources for {source.get('name')} {e}")
 
     def run_data_source_mapper(self):
         for source in self.data_sources:

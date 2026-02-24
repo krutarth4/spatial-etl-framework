@@ -270,8 +270,8 @@ class DataSourceABCImpl(DataSourceABC):
                         elif isinstance(multi_fetch.urls, SourceInputDTO):
 
                             file_handler = FileHandler(multi_fetch.urls.input)
-                            print(f"{multi_fetch.urls.input.split("/")[-1]}")
-                            urls = file_handler.read_local_file(f"{multi_fetch.urls.input.split("/")[-1]}")
+                            print(f"{multi_fetch.urls.input.split('/')[-1]}")
+                            urls = file_handler.read_local_file(f"{multi_fetch.urls.input.split('/')[-1]}")
                             paths = self.process_multi_fetch_expand_list(source, urls)
 
         elif source.fetch in FetchTypeEnum.LOCAL.value:

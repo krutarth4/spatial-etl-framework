@@ -94,8 +94,9 @@ class FileHandler:
         self._write_file(meta_path, metadata)
 
         # Enforce retention: keep only last 2
-        self._enforce_retention(f"{self._DATA}_{name}_*.{data_extension}")
-        self._enforce_retention(f"{self._META}_{name}_*.{metadata_extension}")
+        base_name = ".".join(str(name).split(".")[:-1]) or str(name)
+        self._enforce_retention(f"{self._DATA}_{base_name}_*.{data_extension}")
+        self._enforce_retention(f"{self._META}_{base_name}_*.{metadata_extension}")
 
         return data_path, meta_path
 

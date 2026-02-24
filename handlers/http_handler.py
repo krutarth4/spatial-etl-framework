@@ -90,7 +90,7 @@ class HttpHandler:
                     "path": data_path,
                 }
 
-                self.logger.info(f"Saving metadata to {result["path"]}")
+                self.logger.info(f"Saving metadata to {result['path']}")
                 return result["path"]
 
 
