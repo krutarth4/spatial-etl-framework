@@ -175,15 +175,21 @@ class DataSourceABCImpl(DataSourceABC):
     def create_file_name_for_multi_fetch_expand_params(source, param) -> str:
         base, ext = source.destination.rsplit(".", 1)
 
+        # Volatile request params (e.g. current timestamp/date) should not change
+        # the logical file identity, otherwise retention won't group files correctly.
+        ignore_file_name_keys = {"date"}
+
         # Sort keys for deterministic filename
         parts = []
         for k in sorted(param.keys()):
+            if k in ignore_file_name_keys:
+                continue
             v = str(param[k])
             # Replace unsafe characters
             v = re.sub(r"[^\w\-\.]", "_", v)
             parts.append(f"{k}-{v}")
 
-        suffix = "_".join(parts)
+        suffix = "_".join(parts) if parts else "request"
 
         return f"{base}_{suffix}.{ext}"
 
