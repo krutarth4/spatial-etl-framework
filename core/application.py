@@ -1,5 +1,6 @@
 import time
 import threading
+from pathlib import Path
 
 from core.globalconstants import GlobalConstants
 from core.init_graph import InitGraph
@@ -26,6 +27,7 @@ class Application:
     def __init__(self):
         self._pipeline_lock = threading.Lock()
         self._pipeline_executed = False
+        self._config_watch_signature = None
         self.base_graph_conf = None
         self.metadata_service: DataSourceMetadataService | None = None
         self.graph: InitGraph | None = None
@@ -124,14 +126,37 @@ class Application:
         else:
             self.logger.warning("No data sources available or the base graph is not ready and have problems")
 
-    def run_standalone(self):
+    def run_standalone(self, keep_alive_when_idle: bool = True):
         self.start_application()
         self.run_pipeline()
         self.end_execution()
+        if keep_alive_when_idle and self.scheduler_core is None:
+            self.keep_alive_forever()
 
     def end_execution(self):
         if self.scheduler_core is not None:
             self.scheduler_core.run_forever()
+
+    def keep_alive_forever(self):
+        runtime_conf = (self.core_conf.get_config() or {}).get("runtime", {}) or {}
+        watch_conf = (runtime_conf.get("config_watch", {}) or {})
+        watch_enabled = watch_conf.get("enable", True)
+        poll_seconds = float(watch_conf.get("poll_seconds", 2))
+        config_path = Path(self.core_conf.filepath)
+        self._config_watch_signature = _file_signature(config_path) if watch_enabled else None
+
+        self.logger.info("Keep-alive active (no scheduler). Waiting for config changes or manual stop.")
+        try:
+            while True:
+                time.sleep(poll_seconds if watch_enabled else 10)
+                if not watch_enabled:
+                    continue
+                current_sig = _file_signature(config_path)
+                if current_sig != self._config_watch_signature:
+                    self.logger.warning(f"Detected config change in {config_path}. Restarting process...")
+                    os.execv(sys.executable, [sys.executable, *sys.argv])
+        except (KeyboardInterrupt, SystemExit):
+            self.logger.info("Keep-alive stopped")
 
     def get_all_datasources(self):
         return self.sources_conf or None
