@@ -760,7 +760,8 @@ class DBRepository(DbConfiguration):
                         )
                     )
 
-                    # 2️⃣ Drop indexes (except PK)
+                    # 2️⃣ Drop indexes that are NOT owned by constraints
+                    # (PK/UNIQUE/EXCLUSION constraints own backing indexes and must not be dropped directly)
                     conn.execute(
                         text(
                             f"""
@@ -768,11 +769,15 @@ class DBRepository(DbConfiguration):
                                     DECLARE r RECORD;
                                     BEGIN
                                         FOR r IN (
-                                            SELECT indexname
-                                            FROM pg_indexes
-                                            WHERE schemaname = '{schema_name}'
-                                              AND tablename = '{table_name}'
-                                              AND indexname NOT LIKE '%_pkey'
+                                            SELECT i.relname AS indexname
+                                            FROM pg_class t
+                                            JOIN pg_namespace ns ON ns.oid = t.relnamespace
+                                            JOIN pg_index ix ON ix.indrelid = t.oid
+                                            JOIN pg_class i ON i.oid = ix.indexrelid
+                                            LEFT JOIN pg_constraint c ON c.conindid = i.oid
+                                            WHERE ns.nspname = '{schema_name}'
+                                              AND t.relname = '{table_name}'
+                                              AND c.oid IS NULL
                                         ) LOOP
                                             EXECUTE format(
                                                 'DROP INDEX IF EXISTS "{schema_name}".%I',
