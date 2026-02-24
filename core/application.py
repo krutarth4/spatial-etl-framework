@@ -1,3 +1,6 @@
+import hashlib
+import os
+import sys
 import time
 import threading
 from pathlib import Path
@@ -11,6 +14,15 @@ from log_manager.logger_manager import LoggerManager
 from main_core.core_config import CoreConfig
 from main_core.data_source_mapper import DataSourceMapper
 from metadata.data_source_metadata_service import DataSourceMetadataService
+
+
+def _file_signature(path: Path) -> tuple[int, str] | None:
+    try:
+        stat = path.stat()
+        content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        return stat.st_mtime_ns, content_hash
+    except FileNotFoundError:
+        return None
 
 
 class Application:
@@ -146,6 +158,13 @@ class Application:
         self._config_watch_signature = _file_signature(config_path) if watch_enabled else None
 
         self.logger.info("Keep-alive active (no scheduler). Waiting for config changes or manual stop.")
+        if watch_enabled:
+            self.logger.info(
+                f"Config watch enabled: path={config_path.resolve()} poll_seconds={poll_seconds} "
+                f"signature={self._config_watch_signature}"
+            )
+        else:
+            self.logger.info("Config watch disabled in keep-alive")
         try:
             while True:
                 time.sleep(poll_seconds if watch_enabled else 10)

@@ -55,8 +55,9 @@ def _start_config_watcher(runtime_conf: dict | None):
 
 if __name__ == "__main__":
     core_conf = CoreConfig()
-    _start_config_watcher(core_conf.get_config().get("runtime"))
     conf = core_conf.get_value("server")
+    if conf.get("enable"):
+        _start_config_watcher(core_conf.get_config().get("runtime"))
     if conf.get("enable"):
         uvicorn.run(conf["app_type"], host=conf["host"], port=conf["port"], reload=conf["reload"])
     else:
