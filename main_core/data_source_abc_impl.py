@@ -51,6 +51,7 @@ class TriggerTypeEnum(Enum):
 
 @safe_class
 class DataSourceABCImpl(DataSourceABC):
+    _default_max_workers_cap = 3
 
     def __init__(self, data_source_conf: DataSourceDTO, db_instance: DbInstance | None, scheduler_core: InitScheduler,
                  base_graph_conf, metadata_service):
@@ -411,15 +412,11 @@ class DataSourceABCImpl(DataSourceABC):
     def transform(self, path):
         result = self.read_files(path)
         self.logger.info(f"result contains currently {len(result)}")
-
-        # self.source_result = result
-        # print(self.source_result)
+        self.before_filter_pipeline(result, path)
         self.pre_filter_processing(result)
-        # 1.1 filter from the results in case needs to be filtered
         result = self.source_filter(result)
-
-        # 1.2 post processing filter
         self.post_filter_processing(result)
+        self.after_filter_pipeline(result, path)
         return result
 
     def load(self, data):
@@ -432,9 +429,11 @@ class DataSourceABCImpl(DataSourceABC):
             else:
                 if self.db is not None:
                     self.logger.warning("found new data hence continuing with db upsert")
+                    self.before_load(data)
                     self.pre_database_processing()
                     self.db.bulk_insert(self.raw_staging_table, self.raw_staging_schema
                                         , data, True)
+                    self.after_load(data)
 
 
         except Exception as e:
@@ -455,6 +454,7 @@ class DataSourceABCImpl(DataSourceABC):
         self.logger.info(f"Processing file {path}")
 
         try:
+            self.before_process_file(path)
             t0 = time.monotonic()
             transformed_data = self.transform(path)
             self.logger.info(
@@ -463,7 +463,7 @@ class DataSourceABCImpl(DataSourceABC):
                 f"time={time.monotonic() - t0:.2f}s"
             )
 
-            if not transformed_data:
+            if not self.should_load_transformed_data(transformed_data, path):
                 self.logger.info(
                     f"[THREAD SKIP] name={thread.name} no data"
                 )
@@ -475,8 +475,10 @@ class DataSourceABCImpl(DataSourceABC):
                 f"[THREAD LOAD DONE] name={thread.name} "
                 f"time={time.monotonic() - t1:.2f}s"
             )
+            self.after_process_file(path, transformed_data)
 
         except Exception as e:
+            self.on_process_file_error(path, e)
             self.logger.error(
                 f"[THREAD ERROR] name={thread.name} file={path}"
             )
@@ -497,64 +499,87 @@ class DataSourceABCImpl(DataSourceABC):
 
     def run(self):
         self.start_execution()
-
+        run_succeeded = False
+        run_error: Exception | None = None
         try:
-            # 1 Extract
-            paths = self.extract()
-            # # Testing scalability with small dataset from elevation  # TODO: Remove later
-            # paths = ['tmp/elevation_zips/data_elevation_DGM1_368_5808.zip_2025-12-18T16-15-40.zip',
-            #           'tmp/elevation_zips/data_elevation_DGM1_370_5806.zip_2025-12-18T16-15-41.zip']
-
-            if not DataSourceABCImpl.is_file_available(paths):
-                return self.run_job_response("No files available")
-            # Create tables if not exist
-
-            self.create_data_tables()
-            max_workers = min(3, os.cpu_count() * 2)
-            self.logger.critical(f"Starting with {max_workers} workers")
-            with ThreadPoolExecutor(
-                    max_workers=max_workers,
-                    thread_name_prefix="ETLWorker"
-            ) as executor:
-                futures = [
-                    executor.submit(self.process_file, path)
-                    for path in paths
-                ]
-
-                for future in as_completed(futures):
-                    # surfaces exceptions immediately
-                    future.result()
-
-            # for i, path in enumerate(paths):
-            #     self.logger.info(f"Reading file {i + 1} -> {path}")
-            #     transformed_data = self.transform(path)
-            #
-            #     if self.check_before_update():
-            #         self.load(transformed_data)
-            #
-            #     else:
-            #         self.logger.warning(f"No new data available for {self.data_source_config.name}")
-            #         return self.run_job_response(f"No new data available for {self.data_source_config.name}")
-            # add indexes for the newly formed table for faster inserts and transactions
-
-            self.post_database_processing()
-
-            res = self.sync_raw_to_staging()
-
-            self.execute_on_staging()
-
-            self.sync_staging_to_enrichment()
-            self.execute_on_enrichment()
-
-            self.map_to_base()
-            self.trigger_materialized_views()
-            # delete fully if the staging sync is successful
-            self.clean_raw_staging_table(not res.get("success"))
-            self.recreate_table_indexes()
+            result = self.execute_run_pipeline()
+            run_succeeded = True
+            return result
         except Exception as e:
-            self.logger.error(f"Error occurred in run {e}")
+            run_error = e
+            self.on_run_error(e)
+            return self.run_job_response("Job failed")
+        finally:
+            self.run_end_cleanup(run_succeeded, run_error)
 
+    def execute_run_pipeline(self):
+        paths = self.extract()
+        if not self.is_run_input_available(paths):
+            return self.run_job_response("No files available")
+
+        self.prepare_run_resources(paths)
+        self.process_extracted_paths(paths)
+        self.finalize_after_file_processing()
         return self.run_job_response("Job finished Successfully !!!")
+
+    def is_run_input_available(self, paths: list | None) -> bool:
+        return DataSourceABCImpl.is_file_available(paths)
+
+    def prepare_run_resources(self, paths: list[str]):
+        self.create_data_tables()
+
+    def process_extracted_paths(self, paths: list[str]):
+        self.run_file_processing_stage(paths)
+
+    def run_file_processing_stage(self, paths: list[str]):
+        backend = self.get_process_file_backend()
+        if backend == "threadpool":
+            self.run_threadpool_file_processing(paths)
+            return
+        raise ValueError(f"Unsupported process_file backend: {backend}")
+
+    def get_process_file_backend(self) -> str:
+        return "threadpool"
+
+    def get_process_file_worker_count(self) -> int:
+        cpu_count = os.cpu_count() or 1
+        return min(self._default_max_workers_cap, cpu_count * 2)
+
+    def run_threadpool_file_processing(self, paths: list[str]):
+        max_workers = self.get_process_file_worker_count()
+        self.logger.critical(f"Starting with {max_workers} workers")
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ETLWorker") as executor:
+            futures = [executor.submit(self.process_file, path) for path in paths]
+            for future in as_completed(futures):
+                future.result()
+
+    def finalize_after_file_processing(self):
+        self.post_database_processing()
+        sync_result = self.sync_raw_to_staging()
+        self.execute_on_staging()
+        self.sync_staging_to_enrichment()
+        self.execute_on_enrichment()
+        self.map_to_base()
+        self.after_datasource_success()
+        self.cleanup_after_finalize(sync_result)
+
+    def after_datasource_success(self):
+        self.trigger_materialized_views()
+
+    def cleanup_after_finalize(self, sync_result: dict | None):
+        backup_raw = not (sync_result or {}).get("success")
+        self.clean_raw_staging_table(backup_raw)
+        self.recreate_table_indexes()
+
+    def on_run_error(self, error: Exception):
+        self.logger.error(f"Error occurred in run {error}")
+
+    def run_end_cleanup(self, succeeded: bool, error: Exception | None = None):
+        """
+        Final hook executed once at the very end of datasource processing
+        (success or failure). Override in mappers for temp-file cleanup, cache cleanup, etc.
+        """
+        pass
 
     def trigger_materialized_views(self):
         if self.db is None:
@@ -603,6 +628,30 @@ class DataSourceABCImpl(DataSourceABC):
             conf = self.data_source_config.post_filter_processing
             if conf is not None and conf.save:
                 self.post_filter_processing_save_data(conf,data)
+
+    def before_filter_pipeline(self, data, path):
+        pass
+
+    def after_filter_pipeline(self, data, path):
+        pass
+
+    def before_load(self, data):
+        pass
+
+    def after_load(self, data):
+        pass
+
+    def before_process_file(self, path: str):
+        pass
+
+    def after_process_file(self, path: str, transformed_data):
+        pass
+
+    def on_process_file_error(self, path: str, error: Exception):
+        pass
+
+    def should_load_transformed_data(self, transformed_data, path: str) -> bool:
+        return bool(transformed_data)
 
     def run_job_response(self, message: str):
         end_timer = time.perf_counter()
