@@ -1,0 +1,2 @@
+from materialized_views.manager import MaterializedViewManager
+

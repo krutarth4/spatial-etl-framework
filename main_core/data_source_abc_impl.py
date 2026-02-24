@@ -20,10 +20,12 @@ from database.db_instancce import DbInstance
 from handlers.file_handler import FileHandler
 from handlers.http_handler import HttpHandler
 from log_manager.logger_manager import LoggerManager
+from main_core.core_config import CoreConfig
 from main_core.data_source_abc import DataSourceABC
 from data_config_dtos.data_source_config_dto import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, \
     SourceInputDTO, SourceDTO
 from main_core.safe_class import safe_class
+from materialized_views.manager import MaterializedViewManager
 from utils.execution_time import format_duration
 
 
@@ -545,6 +547,7 @@ class DataSourceABCImpl(DataSourceABC):
             self.execute_on_enrichment()
 
             self.map_to_base()
+            self.trigger_materialized_views()
             # delete fully if the staging sync is successful
             self.clean_raw_staging_table(not res.get("success"))
             self.recreate_table_indexes()
@@ -552,6 +555,16 @@ class DataSourceABCImpl(DataSourceABC):
             self.logger.error(f"Error occurred in run {e}")
 
         return self.run_job_response("Job finished Successfully !!!")
+
+    def trigger_materialized_views(self):
+        if self.db is None:
+            return
+        try:
+            conf = CoreConfig().get_config()
+            mv_conf = (conf or {}).get("materialized_views", {})
+            MaterializedViewManager(self.db, mv_conf).on_datasource_success(self.data_source_name)
+        except Exception as e:
+            self.logger.error(f"Materialized view trigger failed for datasource {self.data_source_name}: {e}")
 
     def sync_staging_to_enrichment(self):
         self.db.sync_staging_to_enrichment(self.data_source_config.storage.staging.table_schema,

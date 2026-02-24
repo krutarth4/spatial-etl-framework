@@ -311,6 +311,16 @@ class DBRepository(DbConfiguration):
                 sql, {"schema": schema, "index": index_name}
             ).scalar() is not None
 
+    def materialized_view_exists(self, view_name: str, schema: str) -> bool:
+        sql = text("""
+            SELECT 1
+            FROM pg_matviews
+            WHERE schemaname = :schema
+              AND matviewname = :view_name
+        """)
+        with self.engine.connect() as conn:
+            return conn.execute(sql, {"schema": schema, "view_name": view_name}).scalar() is not None
+
     @measure_time(label="create indexes")
     def create_indexes(self, table_name: str, schema: str = None):
         try:
@@ -1171,7 +1181,7 @@ class DBRepository(DbConfiguration):
             }
 
     @measure_time(label= "SQL execution time: ")
-    def call_sql(self, sql: str, params: Any = None):
+    def call_sql(self, sql: str, params: Any = None, raise_on_error: bool = False):
         """
         Execute raw SQL using the session_scope().
         Ensures the same transactional behavior as ORM operations.
@@ -1188,6 +1198,8 @@ class DBRepository(DbConfiguration):
             # return result
         except Exception as e:
             self.logger.error(f"SQL execution failed: {e}")
+            if raise_on_error:
+                raise
 
 
 
