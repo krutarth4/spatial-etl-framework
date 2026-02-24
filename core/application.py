@@ -1,4 +1,5 @@
 import time
+import threading
 
 from core.globalconstants import GlobalConstants
 from core.init_graph import InitGraph
@@ -23,6 +24,8 @@ class Application:
     _base_graph = "base"
 
     def __init__(self):
+        self._pipeline_lock = threading.Lock()
+        self._pipeline_executed = False
         self.base_graph_conf = None
         self.metadata_service: DataSourceMetadataService | None = None
         self.graph: InitGraph | None = None
@@ -96,6 +99,36 @@ class Application:
             self.logger.warning("Fallback mechanism activated for keeping thread alive.")
             # self.end_execution()
 
+    def run_pipeline(self):
+        with self._pipeline_lock:
+            if self._pipeline_executed:
+                self.logger.warning("Pipeline logic already executed. Skipping duplicate run.")
+                return
+            self._pipeline_executed = True
+
+        sources = self.get_all_datasources()
+
+        # check if the base graph is ready or not
+        if self.graph is not None:
+            self.graph.update_graph_source()
+            self.graph.ingest_graph_data()
+            # Wait till the new ways_base_graph has been created
+            while not self.graph.is_base_graph_ready():
+                self.logger.warning("Base graph is not ready")
+                time.sleep(10)
+
+        if sources is not None and self.graph is not None and self.graph.is_base_graph_ready():
+            mappers = DataSourceMapper(sources, self.db_instance, self.scheduler_core, self.base_graph_conf,
+                                       self.metadata_service)
+            mappers.start_execution()
+        else:
+            self.logger.warning("No data sources available or the base graph is not ready and have problems")
+
+    def run_standalone(self):
+        self.start_application()
+        self.run_pipeline()
+        self.end_execution()
+
     def end_execution(self):
         if self.scheduler_core is not None:
             self.scheduler_core.run_forever()
@@ -111,28 +144,4 @@ class Application:
 
 if __name__ == "__main__":
     app = Application()
-    app.start_application()
-
-    sources = app.get_all_datasources()
-
-    # check if the base graph is ready or not
-    if app.graph is not None:
-        app.graph.update_graph_source()
-        app.graph.ingest_graph_data()
-        #             Wait till the new ways_base_graph has been created
-        while not app.graph.is_base_graph_ready():
-            app.logger.warning("Base graph is not ready  ")
-            time.sleep(10)
-
-    # breakpoint for base graph as it will be ready
-
-    if sources is not None and app.graph.is_base_graph_ready():
-
-        # TODO:  app.graph is not None and app.graph.get_is_base_graph_ready()
-        mappers = DataSourceMapper(sources, app.db_instance, app.scheduler_core, app.base_graph_conf,
-                                   app.metadata_service)
-        mappers.start_execution()
-    else:
-        app.logger.warning("No data sources available or the base graph is not ready and have problems ")
-
-    app.end_execution()
+    app.run_standalone()

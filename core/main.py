@@ -1,96 +1,55 @@
+import threading
+
+from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
-from NotUsed.db_inst import DBInst
-from main_core.core_config import CoreConfig
-from fastapi import FastAPI
-from dataclasses import dataclass
+from core.application import Application
+from log_manager.logger_manager import LoggerManager
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:4200"],
+)
 
-app.add_middleware(CORSMiddleware,
-                allow_origins = ["http://localhost:4200"]
-            )
+logger = LoggerManager("CoreMain").get_logger()
+_pipeline_app: Application | None = None
+_pipeline_thread: threading.Thread | None = None
+_pipeline_lock = threading.Lock()
+
+
+def _pipeline_bootstrap():
+    global _pipeline_app
+    try:
+        _pipeline_app = Application()
+        _pipeline_app.start_application()
+        _pipeline_app.run_pipeline()
+    except Exception as exc:
+        logger.error(f"Pipeline bootstrap failed in server mode: {exc}")
+
+
+@app.on_event("startup")
+def startup_pipeline():
+    global _pipeline_thread
+    with _pipeline_lock:
+        if _pipeline_thread is not None and _pipeline_thread.is_alive():
+            logger.info("Pipeline thread already running")
+            return
+        _pipeline_thread = threading.Thread(target=_pipeline_bootstrap, daemon=True, name="pipeline-bootstrap")
+        _pipeline_thread.start()
+        logger.info("Pipeline bootstrap thread started")
 
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Debug server is running"}
 
 
-@app.get("/hello/{name}")
-async def say_hello(name: str):
-    return {"message": f"Hello {name}"}
-
-@dataclass
-class Coordinate:
-    lat: int
-    lng: int
-
-
-# def get_db():
-#     conf = CoreConfig()
-#     db2 = DbConf(conf.get_value("db")).session()
-#     try:
-#         yield db2
-#     finally:
-#         db2.close()
-#
-# db = DBInstance(CoreConfig().get_value("db"))
-# @app.get("/route/")
-# async def get_route(startLon: float, startLat: float,endLon: float,endLat: float):
-#     print(f"start {startLon} , {startLat}")
-#     print(f"start {endLon} , {endLat}")
-#
-#     start_time = time.perf_counter()
-#
-#
-#     result =  db.get_route(startLon, startLat,endLon,endLat)
-#     end_time = time.perf_counter()
-#     duration = end_time -start_time
-#     print(f"route generation took {duration}")
-#     return result
-
-#TODO: implement directly in the main resource manager
-# @app.on_event("startup")
-# def start_scheduler():
-#     scheduler = SchedulerManager()
-#     scheduler.add_job(update_config_job, "config_updater", minutes=30)
-#     print("[FastAPI] Scheduler started.")
-#
-# @app.on_event("shutdown")
-# def stop_scheduler():
-#     SchedulerManager().shutdown()
-if __name__ == "__main__":
-    # check the core config and read the attributes
-    config = CoreConfig()
-
-    db= DBInst(config.get_value("db"))
-    # a = db.get_nearest_node(13.3231919715,52.5109321435)
-    a = db.get_route(13.3231919715,52.5109321435, 13.324586511, 52.51260044 )
-    print(f"{a} id")
-
-
-
-
-# read all the files from the data source directory
-
-    # all_files = DirectoryReader(config.get_source_directory()).get_all_files()
-    # osm_conf=None
-    # for file_path in all_files:
-    #     print(f"Reading config file {file_path}")
-    #     if file_path.endswith("osm.yaml"):
-    #         print(f"Reading with yaml reader {file_path}")
-    #         # TODO: stop the execution
-    #         # p=ProcessSf(file_path)
-    #
-    #     else:
-    #         print(f"Skipping file {file_path}")
-
-    # get the last state with the help of db
-
-    # check all the data sources configuration -> update if it needs to be changed
-
-
-        # check last state of the data and update it according to the new configuration
-            # Extraction layer can start simultaneously for each data_source
-            # do the mapping for the given config
+@app.get("/health")
+async def health():
+    alive = _pipeline_thread is not None and _pipeline_thread.is_alive()
+    return {
+        "server": "up",
+        "pipeline_thread_alive": alive,
+        "pipeline_initialized": _pipeline_app is not None,
+    }

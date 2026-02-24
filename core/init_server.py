@@ -24,10 +24,14 @@ class InitServer:
         if not self.conf.enable:
             self.logger.warning("Fast API server enable set to False. Continue...")
             return
-        # TODO: remove from the constructor
-        self.initialize_uvicorn_server()
 
     def initialize_uvicorn_server(self):
 
         # self.logger.info("Fast Api server up and running ")
         uvicorn.run(self.conf.app_type, host=self.conf.host, port=self.conf.port, reload=self.conf.reload)
+
+    def start(self):
+        if not self.conf.enable:
+            self.logger.warning("Fast API server start skipped because enable=False")
+            return
+        self.initialize_uvicorn_server()
