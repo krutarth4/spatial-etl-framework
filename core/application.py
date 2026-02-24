@@ -51,6 +51,10 @@ class Application:
         self.db_url = None
         self.logger = LoggerManager(type(self).__name__).get_logger()
         self.core_conf = CoreConfig()
+        try:
+            self._config_watch_signature = _file_signature(Path(self.core_conf.filepath))
+        except Exception:
+            self._config_watch_signature = None
 
     def initialize_fast_api_uvicorn_server(self, server_conf):
         self.logger.info("Initializing debug FastAPI server ....")
@@ -155,7 +159,8 @@ class Application:
         watch_enabled = watch_conf.get("enable", True)
         poll_seconds = float(watch_conf.get("poll_seconds", 2))
         config_path = Path(self.core_conf.filepath)
-        self._config_watch_signature = _file_signature(config_path) if watch_enabled else None
+        if watch_enabled and self._config_watch_signature is None:
+            self._config_watch_signature = _file_signature(config_path)
 
         self.logger.info("Keep-alive active (no scheduler). Waiting for config changes or manual stop.")
         if watch_enabled:
