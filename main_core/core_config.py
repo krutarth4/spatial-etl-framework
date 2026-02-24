@@ -1,9 +1,11 @@
+from pathlib import Path
+
 from log_manager.logger_manager import LoggerManager
 from readers.yaml_reader import YamlReader
 
 class CoreConfig(YamlReader):
 
-    filepath = "../config.yaml"
+    filepath = str(Path(__file__).resolve().parents[1] / "config.yaml")
 
     def __init__(self,filepath= filepath):
         super().__init__(filepath)
@@ -27,4 +29,3 @@ class CoreConfig(YamlReader):
 
 if __name__ == "__main__":
     config = CoreConfig()
-
