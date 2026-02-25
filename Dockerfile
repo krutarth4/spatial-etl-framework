@@ -3,7 +3,9 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libexpat1 \
+    && apt-get install -y --no-install-recommends \
+        libexpat1 \
+        osm2pgrouting \
     && rm -rf /var/lib/apt/lists/*
 
 # Optional system deps (enable only if a Python package build fails)
