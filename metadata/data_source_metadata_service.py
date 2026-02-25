@@ -75,6 +75,7 @@ class DataSourceMetadataService:
                            or "unknown",
             "file_path": self._extract_source_paths(source_conf),
             "is_active": bool(getattr(data_source_conf, "enable", True)),
+            "current_run_status": "idle" if bool(getattr(data_source_conf, "enable", True)) else "disabled",
             "config_hash": config_hash,
             "config_snapshot": config_snapshot,
         }
@@ -83,16 +84,24 @@ class DataSourceMetadataService:
     def mark_run_started(self, source_key: str, message: str | None = None):
         if not source_key:
             return None
-        return self.update_run_status(source_key, "running", message or "Run started", success=False)
+        return self.update(
+            source_key,
+            {
+                "current_run_status": "running",
+                "last_run_message": message or "Run started",
+                "last_checked_at": datetime.utcnow(),
+            },
+        )
 
     def mark_run_finished(self, source_key: str, success: bool, message: str | None = None):
         if not source_key:
             return None
         status = "success" if success else "failed"
         self.update_run_status(source_key, status, message, success=success)
+        finish_updates = {"current_run_status": "idle"}
         if success:
-            return self.update(source_key, {"last_ingested_at": datetime.utcnow()})
-        return None
+            finish_updates["last_ingested_at"] = datetime.utcnow()
+        return self.update(source_key, finish_updates)
 
     def update_runtime_file_paths(self, source_key: str, paths) -> None:
         if not source_key or paths is None:
@@ -108,10 +117,8 @@ class DataSourceMetadataService:
             return None
 
         self._ensure_table_ready()
-        existing = self.metadata_repository.get_metadata(source_key)
-        existing_paths = []
-        if existing is not None and getattr(existing, "file_path", None):
-            existing_paths = [self._trim_path_for_metadata(p) for p in (existing.file_path or []) if p]
+        existing_paths_raw = self.metadata_repository.get_metadata_file_paths(source_key) or []
+        existing_paths = [self._trim_path_for_metadata(p) for p in existing_paths_raw if p]
 
         merged = list(existing_paths)
         for path in new_paths:

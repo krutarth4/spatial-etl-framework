@@ -32,6 +32,7 @@ class DataSourceMetadata(Base):
 
     # --- status
     is_active = Column(Boolean, default=True)
+    current_run_status = Column(String, default="idle")
     last_run_status = Column(String)
     last_run_message = Column(Text)
 
@@ -80,6 +81,14 @@ class DataSourceMetadataRepository:
         with self.db.session_scope() as session:
             stmt = (
                 select(DataSourceMetadata)
+                .where(DataSourceMetadata.source_key == source_key)
+            )
+            return session.execute(stmt).scalar_one_or_none()
+
+    def get_metadata_file_paths(self, source_key: str) -> list[str] | None:
+        with self.db.session_scope() as session:
+            stmt = (
+                select(DataSourceMetadata.file_path)
                 .where(DataSourceMetadata.source_key == source_key)
             )
             return session.execute(stmt).scalar_one_or_none()

@@ -110,7 +110,11 @@ class WeatherStationMapper(DataSourceABCImpl):
                         en.point::geography
                     )
                 LIMIT 1
-            ) s ON TRUE;
+            ) s ON TRUE
+            ON CONFLICT (way_id) DO UPDATE SET
+                dwd_station_id = EXCLUDED.dwd_station_id,
+                distance = EXCLUDED.distance,
+                bearing_degree = EXCLUDED.bearing_degree;
         
         """
 

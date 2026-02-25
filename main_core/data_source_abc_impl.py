@@ -149,7 +149,8 @@ class DataSourceABCImpl(DataSourceABC):
                                          file_extension=source.response_type)
                 paths.append(path)
             else:
-                paths.append(source.destination)
+                resolved_path = self.resolve_latest_saved_path(source.destination)
+                paths.append(resolved_path or source.destination)
 
         elif source.fetch in FetchTypeEnum.LOCAL.value:
             path = Path(source.file_path)
@@ -160,7 +161,6 @@ class DataSourceABCImpl(DataSourceABC):
         return paths
 
     def check_multi_metadata_before_fetch(self, url, headers, params, path) -> bool:
-        self._append_metadata_runtime_paths(path)
         source = self.data_source_config.source
         current_metadata = HttpHandler().call_remote_metadata(uri=url, headers=headers,
                                                               params=params)
@@ -198,6 +198,18 @@ class DataSourceABCImpl(DataSourceABC):
         suffix = "_".join(parts) if parts else "request"
 
         return f"{base}_{suffix}.{ext}"
+
+    def resolve_latest_saved_path(self, candidate_path: str | Path | None) -> str | None:
+        if not candidate_path:
+            return None
+        try:
+            candidate = Path(candidate_path)
+            file_handler = FileHandler(candidate.parent)
+            latest = file_handler.get_local_file(candidate.name)
+            return str(latest) if latest is not None else None
+        except Exception as e:
+            self.logger.warning(f"Failed to resolve latest saved path for {candidate_path}: {e}")
+            return None
 
     def process_multi_fetch_expand_list(self, source, urls) -> list[str]:
         http_handler = HttpHandler()
@@ -243,7 +255,7 @@ class DataSourceABCImpl(DataSourceABC):
                                                          headers=source.headers, params=param,
                                                          file_extension=source.response_type)
                             else:
-                                path = f"{path}"
+                                path = self.resolve_latest_saved_path(path) or f"{path}"
                             #     read from the file
                             paths.append(path)
                         # return paths
@@ -265,9 +277,12 @@ class DataSourceABCImpl(DataSourceABC):
 
                             if self.check_multi_metadata_before_fetch(url=url, headers=source.headers,
                                                                       params=source.params, path=path):
-                                http_handler.call(uri=url, destination_path=path, stream=source.stream,
-                                                  headers=source.headers, params=source.params,
-                                                  file_extension=source.response_type)
+                                path = http_handler.call(uri=url, destination_path=path, stream=source.stream,
+                                                         headers=source.headers, params=source.params,
+                                                         file_extension=source.response_type)
+                            else:
+                                path = self.resolve_latest_saved_path(path) or path
+                            paths[-1] = path
 
                     elif multi_fetch.strategy == SourceMultiFetchStrategy.EXPLICIT_URL_LIST.value:
                         if isinstance(multi_fetch.urls, list):
@@ -366,7 +381,6 @@ class DataSourceABCImpl(DataSourceABC):
     def is_metadata_for_single_fetch_changed(self) -> bool:
 
         source = self.data_source_config.source
-        self._append_metadata_runtime_paths(source.destination)
         current_metadata = HttpHandler().call_remote_metadata(uri=source.url, headers=source.headers,
                                                               params=source.params)
         # read a file from last meta output

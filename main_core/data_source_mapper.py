@@ -46,6 +46,7 @@ class DataSourceMapper:
                         dto.name,
                         {
                             "is_active": False,
+                            "current_run_status": "disabled",
                             "last_run_status": "disabled",
                             "last_run_message": "Datasource disabled in config",
                         },
