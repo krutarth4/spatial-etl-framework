@@ -9,6 +9,7 @@ from core.globalconstants import GlobalConstants
 from core.init_graph import InitGraph
 from core.init_scheduler import InitScheduler
 from core.init_server import InitServer
+from communication.comm_service import CommService
 from database.db_instancce import DbInstance
 from log_manager.logger_manager import LoggerManager
 from main_core.core_config import CoreConfig
@@ -42,6 +43,7 @@ class Application:
         self._config_watch_signature = None
         self.base_graph_conf = None
         self.metadata_service: DataSourceMetadataService | None = None
+        self.comm_service: CommService | None = None
         self.graph: InitGraph | None = None
         self.graph_conf = None
         self.sources_conf = None
@@ -89,9 +91,15 @@ class Application:
         # create metadata table if not exist
 
         self.metadata_service = DataSourceMetadataService(self.db_instance,metadata)
+        comm_schema = None
+        if isinstance(metadata, dict):
+            comm_schema = metadata.get("table_schema")
+        self.comm_service = CommService(self.db_instance, comm_schema)
 
         if self.metadata_service is not None:
             self.metadata_service.create_table()
+        if self.comm_service is not None:
+            self.comm_service.create_table()
 
         # start scheduler and server
         server = self.core_conf.get_value(self._server)
@@ -110,8 +118,8 @@ class Application:
         # core graph logic for the base table
         self.graph_conf = self.core_conf.get_value(self._graph)
         self.base_graph_conf = self.core_conf.get_value(self._base_graph)
-        self.graph = InitGraph(self.graph_conf, self.base_graph_conf,self.metadata_service,
-                               self.db_instance, self.scheduler_core)
+        self.graph = InitGraph(self.graph_conf, self.base_graph_conf, self.metadata_service, self.db_instance,
+                               self.comm_service, self.scheduler_core)
 
         if not server["enable"] and scheduler["enable"]:
             self.logger.warning("Fallback mechanism activated for keeping thread alive.")

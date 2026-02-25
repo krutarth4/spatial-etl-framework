@@ -1,4 +1,5 @@
 import subprocess
+import time
 from dataclasses import dataclass
 from os.path import exists
 from typing import List, Mapping, Any, Optional
@@ -9,6 +10,7 @@ from core.base_graph import BaseGraph
 from core.command_runner import CommandRunner
 from core.custom_graph_loader import CustomGraphLoader
 from core.init_scheduler import InitScheduler
+from communication.comm_service import CommService
 from data_config_dtos.data_source_config_dto import GraphConfDTO
 from database.db_instancce import DbInstance
 from log_manager.logger_manager import LoggerManager
@@ -24,17 +26,20 @@ import custom_graph_base_tables
 class InitGraph:
 
     def __init__(self, graph_conf, base_graph_conf, metadata_service, db: DbInstance | None,
+                 comm_service: CommService | None,
                  scheduler_core: InitScheduler | None):
         self.graph_loader = None
         self.graph_configuration = from_dict(GraphConfDTO, graph_conf)
         self.logger = LoggerManager(type(self).__name__)
         self.is_raw_graph_ready = False
         self.metadata_service = metadata_service
+        self.comm_service = comm_service
         self.scheduler_core = scheduler_core
         self.db = db
         self.base_graph_conf = base_graph_conf
         self.base_graph = BaseGraph(db, base_graph_conf)
         self.base_graph.create_base_graph_tables()
+        self._ensure_default_comm_tasks()
         if not self.graph_configuration.enable:
             self.logger.warning("Base graph DISABLED")
             return
@@ -86,6 +91,7 @@ class InitGraph:
             self.logger.error("Graph tool {} not supported".format(tool))
             raise Exception("Graph tool {} not supported".format(tool))
     def execute_external_ingest(self):
+        self._wait_for_coupled_router_if_enabled()
 
 
         #     check if the table is present
@@ -118,6 +124,85 @@ class InitGraph:
             self.logger.warning(f"Table {table_conf.table_name} does not exist")
             self.logger.warning(f"Make sure the schema and tablename are correct in config file"
                                 f". If the issue still presist check if external ingestion of table in database was successful")
+
+    def _wait_for_coupled_router_if_enabled(self):
+        coupled = getattr(self.graph_configuration, "coupled", None)
+        if coupled is None or str(coupled).lower() not in {"router", "true", "enabled"}:
+            return
+        if self.comm_service is None:
+            self.logger.warning("graph.coupled is enabled but CommService is not initialized")
+            return
+
+        task_key = self._resolve_coupled_task_key()
+        poll_seconds = float(getattr(self.graph_configuration, "coupled_poll_seconds", 5.0) or 5.0)
+        timeout_seconds = getattr(self.graph_configuration, "coupled_timeout_seconds", None)
+        timeout_seconds = float(timeout_seconds) if timeout_seconds is not None else None
+
+        # Register/mark that pipeline is waiting for router task visibility.
+        try:
+            self.comm_service.update_status(
+                f"pipeline_wait_{task_key}",
+                owner="pipeline",
+                current_status="waiting",
+                last_run_status="waiting",
+                last_run_message=f"Waiting for router task '{task_key}'",
+            )
+        except Exception as e:
+            self.logger.warning(f"Unable to update comm wait status for coupled router task: {e}")
+
+        ok = self.comm_service.wait_for_task(
+            task_key,
+            success_statuses={"success", "completed", "done"},
+            fail_statuses={"failed", "error"},
+            running_statuses={"running", "queued", "pending", "waiting"},
+            poll_seconds=poll_seconds,
+            timeout_seconds=timeout_seconds,
+        )
+
+        try:
+            self.comm_service.update_status(
+                f"pipeline_wait_{task_key}",
+                owner="pipeline",
+                current_status="idle" if ok else "failed",
+                last_run_status="success" if ok else "failed",
+                last_run_message=(
+                    f"Router task '{task_key}' completed"
+                    if ok else f"Router task '{task_key}' failed or timed out"
+                ),
+                success=ok,
+            )
+        except Exception as e:
+            self.logger.warning(f"Unable to update pipeline wait comm status: {e}")
+
+        if not ok:
+            raise RuntimeError(f"Coupled router task '{task_key}' did not finish successfully")
+
+    def _resolve_coupled_task_key(self) -> str:
+        explicit = getattr(self.graph_configuration, "coupled_task_key", None)
+        if explicit:
+            return explicit
+        datasources = getattr(self.graph_configuration, "datasource", None) or []
+        if datasources:
+            first = datasources[0]
+            name = getattr(first, "name", None) if not isinstance(first, dict) else first.get("name")
+            if name:
+                return str(name)
+        return "osm_graph"
+
+    def _ensure_default_comm_tasks(self):
+        if self.comm_service is None:
+            return
+        task_defaults = [
+            ("read_osm_file", "router"),
+            ("main_ways_table", "router"),
+            ("ways_base_table", "pipeline"),
+            ("osm_file_update", "router"),
+        ]
+        try:
+            for task_key, owner in task_defaults:
+                self.comm_service.ensure_task(task_key, owner=owner, current_status="idle")
+        except Exception as e:
+            self.logger.warning(f"Failed to ensure default comm tasks: {e}")
 
 
     def execute_custom_strategy(self):

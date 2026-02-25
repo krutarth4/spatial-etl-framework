@@ -193,6 +193,10 @@ class GraphConfDTO:
     cmd: Optional[List[str | Any]]
     env: Mapping[str, str]
     datasource: List[DataSourceDTO]
+    coupled: Optional[Union[str, bool]] = None
+    coupled_task_key: Optional[str] = None
+    coupled_poll_seconds: Optional[float] = 5.0
+    coupled_timeout_seconds: Optional[float] = None
 
 
 @dataclass
