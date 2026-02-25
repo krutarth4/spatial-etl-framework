@@ -39,12 +39,55 @@ class MapperSqlMethodStrategy:
         datasource.map_to_links()
 
 
+class SqlTemplateMappingStrategy:
+    name = "sql_template"
+
+    def execute(self, datasource: "DataSourceABCImpl") -> None:
+        mapping_conf = getattr(datasource.data_source_config, "mapping", None)
+        config = getattr(mapping_conf, "config", None) or {}
+        sql = config.get("sql")
+        if not sql:
+            raise ValueError(
+                f"Mapping strategy 'sql_template' requires mapping.config.sql "
+                f"for datasource {datasource.data_source_name}"
+            )
+
+        sql = self._render_sql(sql, datasource)
+        datasource.execute_query("Mapping", sql)
+
+    def _render_sql(self, sql: str, datasource: "DataSourceABCImpl") -> str:
+        """
+        Best-effort placeholder formatting. If SQL contains no placeholders or uses
+        literal braces for other reasons, it is returned unchanged on format errors.
+        """
+        mapping = datasource.data_source_config.mapping
+        storage = datasource.data_source_config.storage
+        base = mapping.base_table
+        values = {
+            "datasource_name": datasource.data_source_name,
+            "mapping_table": mapping.table_name,
+            "mapping_schema": mapping.table_schema,
+            "staging_table": storage.staging.table_name,
+            "staging_schema": storage.staging.table_schema,
+            "enrichment_table": storage.enrichment.table_name,
+            "enrichment_schema": storage.enrichment.table_schema,
+            "base_table": base.table_name,
+            "base_schema": base.table_schema,
+            "joins_on": mapping.joins_on,
+        }
+        try:
+            return sql.format(**values)
+        except Exception:
+            return sql
+
+
 class MappingStrategyRegistry:
     def __init__(self):
         self.logger = LoggerManager(type(self).__name__)
         self._strategies: dict[str, MappingStrategy] = {}
         self.register(NoopMappingStrategy())
         self.register(MapperSqlMethodStrategy())
+        self.register(SqlTemplateMappingStrategy())
 
     def register(self, strategy: MappingStrategy) -> None:
         self._strategies[str(strategy.name).lower()] = strategy

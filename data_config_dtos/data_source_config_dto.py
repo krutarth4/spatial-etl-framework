@@ -54,6 +54,7 @@ class MappingStrategyDTO(str, Enum):
     URL_TEMPLATE = "url_template"
     EXPLICIT_URL_LIST = "explicit_url_list"
     MAPPER_SQL = "mapper_sql"
+    SQL_TEMPLATE = "sql_template"
     NONE = "none"
     CUSTOM = "custom"
 
