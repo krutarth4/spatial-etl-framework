@@ -92,6 +92,7 @@ class InitGraph:
             raise Exception("Graph tool {} not supported".format(tool))
     def execute_external_ingest(self):
         self._wait_for_coupled_router_if_enabled()
+        self._wait_for_main_ways_table_before_base_checks()
 
 
         #     check if the table is present
@@ -124,6 +125,51 @@ class InitGraph:
             self.logger.warning(f"Table {table_conf.table_name} does not exist")
             self.logger.warning(f"Make sure the schema and tablename are correct in config file"
                                 f". If the issue still presist check if external ingestion of table in database was successful")
+
+    def _wait_for_main_ways_table_before_base_checks(self):
+        if self.comm_service is None:
+            return
+
+        task_key = "main_ways_table"
+        try:
+            self.comm_service.ensure_task("ways_base_table", owner="mdp", current_status="idle", is_completed=False)
+            self.comm_service.update_status(
+                "ways_base_table",
+                owner="mdp",
+                current_status="waiting",
+                last_run_status="waiting",
+                last_run_message=f"Waiting for '{task_key}' before ways_base_table checks",
+                is_completed=False,
+            )
+        except Exception as e:
+            self.logger.warning(f"Unable to update ways_base_table wait state in comm: {e}")
+
+        ok = self.comm_service.wait_for_task(
+            task_key,
+            success_statuses={"success", "completed", "done"},
+            fail_statuses={"failed", "error"},
+            running_statuses={"running", "queued", "pending", "waiting", "idle"},
+            poll_seconds=5.0,
+            timeout_seconds=None,
+        )
+
+        try:
+            self.comm_service.update_status(
+                "ways_base_table",
+                owner="mdp",
+                current_status="idle" if ok else "failed",
+                last_run_status="waiting_done" if ok else "failed",
+                last_run_message=(
+                    f"'{task_key}' finished. Continuing ways_base_table checks"
+                    if ok else f"'{task_key}' failed while waiting"
+                ),
+                is_completed=False,
+            )
+        except Exception as e:
+            self.logger.warning(f"Unable to update ways_base_table post-wait state in comm: {e}")
+
+        if not ok:
+            raise RuntimeError(f"Required comm task '{task_key}' did not finish successfully")
 
     def _wait_for_coupled_router_if_enabled(self):
         coupled = getattr(self.graph_configuration, "coupled", None)
