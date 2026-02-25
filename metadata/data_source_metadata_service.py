@@ -73,7 +73,7 @@ class DataSourceMetadataService:
             "source_type": getattr(data_source_conf, "data_type", None)
                            or getattr(source_conf, "fetch", None)
                            or "unknown",
-            "file_path": str(getattr(source_conf, "file_path", "") or getattr(source_conf, "destination", "") or "") or None,
+            "file_path": self._extract_source_paths(source_conf),
             "is_active": bool(getattr(data_source_conf, "enable", True)),
             "config_hash": config_hash,
             "config_snapshot": config_snapshot,
@@ -110,6 +110,37 @@ class DataSourceMetadataService:
                 self.create_table()
         except Exception as e:
             self.logger.error(f"Failed ensuring metadata table exists: {e}")
+
+    def _extract_source_paths(self, source_conf) -> list[str] | None:
+        if source_conf is None:
+            return None
+
+        paths: list[str] = []
+
+        file_path = getattr(source_conf, "file_path", None)
+        destination = getattr(source_conf, "destination", None)
+        if file_path:
+            paths.append(str(file_path))
+        if destination and str(destination) not in paths:
+            paths.append(str(destination))
+
+        multi_fetch = getattr(source_conf, "multi_fetch", None)
+        urls = getattr(multi_fetch, "urls", None) if multi_fetch is not None else None
+        if isinstance(urls, list):
+            for item in urls:
+                if item is None:
+                    continue
+                item_s = str(item)
+                if item_s not in paths:
+                    paths.append(item_s)
+        else:
+            multi_input = getattr(urls, "input", None) if urls is not None else None
+            if multi_input:
+                multi_input_s = str(multi_input)
+                if multi_input_s not in paths:
+                    paths.append(multi_input_s)
+
+        return paths or None
 
     def _to_jsonable(self, value):
         if value is None:

@@ -1,6 +1,7 @@
 from database.db_instancce import DbInstance
 
 from sqlalchemy import String, DateTime, Column, Integer, Text, Boolean, JSON, func, select
+from sqlalchemy.dialects.postgresql import ARRAY
 
 from database.base import Base
 from log_manager.logger_manager import LoggerManager
@@ -20,7 +21,7 @@ class DataSourceMetadata(Base):
     source_type = Column(String, nullable=False)
     # e.g. "osm_pbf", "csv", "api", "geojson"
 
-    file_path = Column(String)
+    file_path = Column(ARRAY(String))
     file_checksum = Column(String)
     file_size_bytes = Column(Integer)
 
