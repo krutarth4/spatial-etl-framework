@@ -24,6 +24,7 @@ from main_core.core_config import CoreConfig
 from main_core.data_source_abc import DataSourceABC
 from data_config_dtos.data_source_config_dto import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, \
     SourceInputDTO, SourceDTO
+from main_core.mapping_strategy import mapping_strategy_registry
 from main_core.safe_class import safe_class
 from materialized_views.manager import MaterializedViewManager
 from utils.execution_time import format_duration
@@ -712,6 +713,26 @@ class DataSourceABCImpl(DataSourceABC):
         query = self.mapping_db_query()
         self.execute_query("Mapping", query)
 
+    def get_mapping_strategy_name(self) -> str | None:
+        mapping_conf = getattr(self.data_source_config, "mapping", None)
+        strategy = getattr(mapping_conf, "strategy", None)
+        return str(strategy) if strategy else None
+
+    def get_custom_mapping_strategy(self):
+        """
+        Override in mapper classes to return a custom strategy object implementing:
+        `name` and `execute(datasource)`.
+        """
+        return None
+
+    def execute_mapping_strategy(self):
+        strategy = mapping_strategy_registry.resolve(self)
+        self.logger.info(
+            f"Executing mapping strategy '{getattr(strategy, 'name', type(strategy).__name__)}' "
+            f"for datasource {self.data_source_name}"
+        )
+        strategy.execute(self)
+
     def mapping_db_query(self) -> None | str:
         sql_query = None
         return sql_query
@@ -751,7 +772,7 @@ class DataSourceABCImpl(DataSourceABC):
                     mapped_ways_count = self.db.get_table_count(self.data_source_config.mapping.table_name,
                                                                 self.data_source_config.mapping.table_schema)
                     if mapped_ways_count != total_ways_count:
-                        self.map_to_links()
+                        self.execute_mapping_strategy()
                     else:
                         self.logger.info(f"Skipping mapping as all ways geometry mapped....")
             except Exception as e:

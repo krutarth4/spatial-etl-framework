@@ -53,6 +53,9 @@ class MappingStrategyDTO(str, Enum):
     EXPAND_PARAMS = "expand_params"
     URL_TEMPLATE = "url_template"
     EXPLICIT_URL_LIST = "explicit_url_list"
+    MAPPER_SQL = "mapper_sql"
+    NONE = "none"
+    CUSTOM = "custom"
 
     @classmethod
     def has_value(cls, value):
@@ -102,11 +105,12 @@ class BaseDataMappingSourceDTO:
 @dataclass
 class MappingDTO:
     joins_on: Optional[str]
-    strategy: Optional[MappingStrategyDTO]
+    strategy: Optional[Union[MappingStrategyDTO, str]]
     table_name: Optional[str]
     table_schema: Optional[str]
     enable: bool
     base_table: BaseDataMappingSourceDTO
+    config: Optional[Mapping[str, Any]] = None
 
 
 @dataclass
