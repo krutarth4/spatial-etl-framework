@@ -74,6 +74,39 @@ class DBRepository(DbConfiguration):
         self.logger = LoggerManager(type(self).__name__)
         self.table_index_map = {}
 
+    @contextmanager
+    def _sql_execution_heartbeat(self, sql: str, interval_seconds: int = 5):
+        """
+        Emit periodic logs while a blocking SQL call is still executing.
+        Useful for long-running INSERT/UPDATE/CTE/PostGIS queries.
+        """
+        if interval_seconds <= 0:
+            yield
+            return
+
+        stop_event = threading.Event()
+        started_at = time.perf_counter()
+        sql_preview = " ".join((sql or "").strip().split())
+        if len(sql_preview) > 220:
+            sql_preview = f"{sql_preview[:220]}..."
+
+        def _heartbeat():
+            # First tick after interval to avoid noise for fast queries.
+            while not stop_event.wait(interval_seconds):
+                elapsed = time.perf_counter() - started_at
+                self.logger.info(
+                    f"SQL still executing... elapsed={elapsed:.1f}s | query={sql_preview}"
+                )
+
+        thread = threading.Thread(target=_heartbeat, name="sql-heartbeat", daemon=True)
+        thread.start()
+        try:
+            yield
+        finally:
+            stop_event.set()
+            # Short join so the daemon thread can exit cleanly without blocking shutdown.
+            thread.join(timeout=0.2)
+
     def get_table_count(
             self,
             table_name: str,
@@ -261,11 +294,16 @@ class DBRepository(DbConfiguration):
 
             if not self.table_exists(table_name, table_schema):
                 original_indexes = set(table.indexes)
+                schema = table_schema or self.schema
+
+                # If a previous CREATE TABLE failed midway, PostgreSQL can be left
+                # with orphaned index names. Clear only indexes this table would create.
+                self._drop_orphan_table_indexes(table, schema)
 
                 if create_without_indexes:
                     self.table_index_map[table_name] = original_indexes
                     table.indexes.clear()
-                table.schema = table_schema or self.schema
+                table.schema = schema
                 self.base.metadata.create_all(bind=self.engine, tables=[table], checkfirst=True)
                 self.logger.info(f"Table '{table_name}' created successfully.")
             else:
@@ -277,6 +315,17 @@ class DBRepository(DbConfiguration):
                     self.logger.info("Table exists, skipping the creation of the table")
         except Exception as e:
             self.logger.error(f"error creating table {table_name} : {e}")
+
+    def _drop_orphan_table_indexes(self, table, schema: str) -> None:
+        for idx in list(table.indexes):
+            if not idx.name:
+                continue
+            if self.index_exists(idx.name, schema):
+                self.logger.warning(
+                    f"Dropping stale index before table create: {schema}.{idx.name}"
+                )
+                with self.session_scope() as session:
+                    session.execute(text(f'DROP INDEX IF EXISTS "{schema}"."{idx.name}"'))
 
     @staticmethod
     def get_staging_table_name(name) -> str:
@@ -1189,11 +1238,13 @@ class DBRepository(DbConfiguration):
         # self.logger.debug(f"Executing SQL:\n{sql}")
 
         try:
-            with self.session_scope() as session:
-                if params:
-                    session.execute(text(sql), params=params)
-                else:
-                    session.execute(text(sql))
+            self.logger.info("Starting SQL execution...")
+            with self._sql_execution_heartbeat(sql):
+                with self.session_scope() as session:
+                    if params:
+                        session.execute(text(sql), params=params)
+                    else:
+                        session.execute(text(sql))
             self.logger.info("SQL execution completed.")
             # return result
         except Exception as e:

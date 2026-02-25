@@ -41,7 +41,9 @@ class DataSourceMapper:
     def run_data_source_mapper(self):
         for source in self.data_sources:
             data = source
-            class_name = data.class_name
+            class_name = (data.class_name or "").strip()
+            if class_name.endswith("Mapper"):
+                class_name = class_name[:-6]
 
             try:
                 module_path = f"{self._prefix_path}.{class_name}Mapper"
