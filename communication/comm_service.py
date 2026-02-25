@@ -28,10 +28,15 @@ class CommService:
         owner: str | None = None,
         current_status: str = "idle",
         is_completed: bool = False,
+        overwrite_existing: bool = False,
     ):
         if self.repository is None or not task_key:
             return None
         self.create_table()
+        if not overwrite_existing:
+            existing = self.repository.get_task_status(task_key)
+            if existing is not None:
+                return existing
         return self.repository.upsert_task(
             task_key,
             {

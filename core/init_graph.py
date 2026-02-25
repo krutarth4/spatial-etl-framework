@@ -40,6 +40,7 @@ class InitGraph:
         self.base_graph = BaseGraph(db, base_graph_conf)
         self.base_graph.create_base_graph_tables()
         self._ensure_default_comm_tasks()
+        self._sync_osm_download_task_for_graph_datasource_state()
         if not self.graph_configuration.enable:
             self.logger.warning("Base graph DISABLED")
             return
@@ -250,6 +251,32 @@ class InitGraph:
                 self.comm_service.ensure_task(task_key, owner=owner, current_status="idle", is_completed=False)
         except Exception as e:
             self.logger.warning(f"Failed to ensure default comm tasks: {e}")
+
+    def _sync_osm_download_task_for_graph_datasource_state(self):
+        if self.comm_service is None:
+            return
+        try:
+            graph_sources = getattr(self.graph_configuration, "datasource", None) or []
+            if not graph_sources:
+                return
+            graph_source = graph_sources[0]
+            is_enabled = bool(getattr(graph_source, "enable", True))
+            if is_enabled:
+                return
+
+            # Graph download datasource disabled: mark download task as completed/skipped so
+            # dependent orchestration can continue with existing data.
+            self.comm_service.update_status(
+                "osm_file_download",
+                owner="mdp",
+                current_status="disabled",
+                last_run_status="skipped",
+                last_run_message="Graph download datasource disabled; using existing OSM data",
+                is_completed=True,
+                success=True,
+            )
+        except Exception as e:
+            self.logger.warning(f"Failed to sync osm_file_download task for graph datasource state: {e}")
 
 
     def execute_custom_strategy(self):
