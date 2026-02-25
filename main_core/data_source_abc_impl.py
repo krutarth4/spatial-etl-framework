@@ -160,6 +160,7 @@ class DataSourceABCImpl(DataSourceABC):
         return paths
 
     def check_multi_metadata_before_fetch(self, url, headers, params, path) -> bool:
+        self._append_metadata_runtime_paths(path)
         source = self.data_source_config.source
         current_metadata = HttpHandler().call_remote_metadata(uri=url, headers=headers,
                                                               params=params)
@@ -365,6 +366,7 @@ class DataSourceABCImpl(DataSourceABC):
     def is_metadata_for_single_fetch_changed(self) -> bool:
 
         source = self.data_source_config.source
+        self._append_metadata_runtime_paths(source.destination)
         current_metadata = HttpHandler().call_remote_metadata(uri=source.url, headers=source.headers,
                                                               params=source.params)
         # read a file from last meta output
@@ -520,6 +522,7 @@ class DataSourceABCImpl(DataSourceABC):
 
     def execute_run_pipeline(self):
         paths = self.extract()
+        self._update_metadata_runtime_paths(paths)
         if not self.is_run_input_available(paths):
             return self.run_job_response("No files available")
 
@@ -608,6 +611,22 @@ class DataSourceABCImpl(DataSourceABC):
             self.metadata_service.mark_run_finished(self.data_source_name, succeeded, message)
         except Exception as e:
             self.logger.error(f"Failed to update metadata run status for {self.data_source_name}: {e}")
+
+    def _update_metadata_runtime_paths(self, paths):
+        if self.metadata_service is None:
+            return
+        try:
+            self.metadata_service.update_runtime_file_paths(self.data_source_name, paths)
+        except Exception as e:
+            self.logger.error(f"Failed to update runtime file paths in metadata for {self.data_source_name}: {e}")
+
+    def _append_metadata_runtime_paths(self, paths):
+        if self.metadata_service is None:
+            return
+        try:
+            self.metadata_service.append_runtime_file_paths(self.data_source_name, paths)
+        except Exception as e:
+            self.logger.error(f"Failed to append runtime file paths in metadata for {self.data_source_name}: {e}")
 
     def run_end_cleanup(self, succeeded: bool, error: Exception | None = None):
         """

@@ -94,6 +94,32 @@ class DataSourceMetadataService:
             return self.update(source_key, {"last_ingested_at": datetime.utcnow()})
         return None
 
+    def update_runtime_file_paths(self, source_key: str, paths) -> None:
+        if not source_key or paths is None:
+            return None
+        normalized = self._normalize_runtime_paths(paths)
+        return self.update(source_key, {"file_path": normalized})
+
+    def append_runtime_file_paths(self, source_key: str, paths) -> None:
+        if not source_key or paths is None or self.metadata_repository is None:
+            return None
+        new_paths = self._normalize_runtime_paths(paths)
+        if not new_paths:
+            return None
+
+        self._ensure_table_ready()
+        existing = self.metadata_repository.get_metadata(source_key)
+        existing_paths = []
+        if existing is not None and getattr(existing, "file_path", None):
+            existing_paths = [self._trim_path_for_metadata(p) for p in (existing.file_path or []) if p]
+
+        merged = list(existing_paths)
+        for path in new_paths:
+            if path not in merged:
+                merged.append(path)
+
+        return self.update(source_key, {"file_path": merged})
+
     def _hash_config(self, payload: dict | list | None) -> str | None:
         if payload is None:
             return None
@@ -111,6 +137,20 @@ class DataSourceMetadataService:
         except Exception as e:
             self.logger.error(f"Failed ensuring metadata table exists: {e}")
 
+    def _normalize_runtime_paths(self, paths) -> list[str]:
+        if isinstance(paths, (str, Path)):
+            return [self._trim_path_for_metadata(paths)]
+
+        result: list[str] = []
+        if isinstance(paths, (list, tuple, set)):
+            for path in paths:
+                if path is None:
+                    continue
+                path_s = self._trim_path_for_metadata(path)
+                if path_s not in result:
+                    result.append(path_s)
+        return result
+
     def _extract_source_paths(self, source_conf) -> list[str] | None:
         if source_conf is None:
             return None
@@ -120,9 +160,10 @@ class DataSourceMetadataService:
         file_path = getattr(source_conf, "file_path", None)
         destination = getattr(source_conf, "destination", None)
         if file_path:
-            paths.append(str(file_path))
-        if destination and str(destination) not in paths:
-            paths.append(str(destination))
+            paths.append(self._trim_path_for_metadata(file_path))
+        destination_path = self._trim_path_for_metadata(destination) if destination else None
+        if destination_path and destination_path not in paths:
+            paths.append(destination_path)
 
         multi_fetch = getattr(source_conf, "multi_fetch", None)
         urls = getattr(multi_fetch, "urls", None) if multi_fetch is not None else None
@@ -130,17 +171,30 @@ class DataSourceMetadataService:
             for item in urls:
                 if item is None:
                     continue
-                item_s = str(item)
+                item_s = self._trim_path_for_metadata(item)
                 if item_s not in paths:
                     paths.append(item_s)
         else:
             multi_input = getattr(urls, "input", None) if urls is not None else None
             if multi_input:
-                multi_input_s = str(multi_input)
+                multi_input_s = self._trim_path_for_metadata(multi_input)
                 if multi_input_s not in paths:
                     paths.append(multi_input_s)
 
         return paths or None
+
+    def _trim_path_for_metadata(self, path) -> str:
+        path_s = str(path)
+        normalized = path_s.replace("\\", "/")
+        tmp_marker = "/tmp/"
+        idx = normalized.find(tmp_marker)
+        if idx >= 0:
+            return normalized[idx + 1:]
+        if normalized.startswith("tmp/"):
+            return normalized
+        if normalized.startswith("./tmp/"):
+            return normalized[2:]
+        return normalized
 
     def _to_jsonable(self, value):
         if value is None:
