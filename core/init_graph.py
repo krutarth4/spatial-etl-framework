@@ -195,12 +195,13 @@ class InitGraph:
         task_defaults = [
             ("read_osm_file", "router"),
             ("main_ways_table", "router"),
-            ("ways_base_table", "pipeline"),
-            ("osm_file_update", "router"),
+            ("ways_base_table", "mdp"),
+            ("osm_file_update", "mdp"),
+            ("osm_file_download", "mdp"),
         ]
         try:
             for task_key, owner in task_defaults:
-                self.comm_service.ensure_task(task_key, owner=owner, current_status="idle")
+                self.comm_service.ensure_task(task_key, owner=owner, current_status="idle", is_completed=False)
         except Exception as e:
             self.logger.warning(f"Failed to ensure default comm tasks: {e}")
 

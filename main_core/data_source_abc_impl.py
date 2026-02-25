@@ -70,6 +70,7 @@ class DataSourceABCImpl(DataSourceABC):
         self.end_timer = None
         self.raw_staging_table = None
         self.raw_staging_schema = None
+        self._last_fetch_performed_download: bool | None = None
         self._register_datasource_metadata()
 
         if scheduler_core is not None:
@@ -139,20 +140,24 @@ class DataSourceABCImpl(DataSourceABC):
     def fetch(self):
         source = self.data_source_config.source
         paths: list[str] = []
+        self._last_fetch_performed_download = None
         if source.fetch in (FetchTypeEnum.HTTP.value, FetchTypeEnum.HTTPS.value):
             # check the metadata here if same then no call just file path otherwise new http request
             check = self.is_metadata_for_single_fetch_changed()
             if check:
+                self._last_fetch_performed_download = True
                 http_handler = HttpHandler()
                 path = http_handler.call(uri=source.url, destination_path=source.destination, stream=source.stream,
                                          headers=source.headers, params=source.params,
                                          file_extension=source.response_type)
                 paths.append(path)
             else:
+                self._last_fetch_performed_download = False
                 resolved_path = self.resolve_latest_saved_path(source.destination)
                 paths.append(resolved_path or source.destination)
 
         elif source.fetch in FetchTypeEnum.LOCAL.value:
+            self._last_fetch_performed_download = False
             path = Path(source.file_path)
             paths.append(path)
         else:
@@ -231,6 +236,7 @@ class DataSourceABCImpl(DataSourceABC):
         source = self.data_source_config.source
         multi_fetch = source.multi_fetch
         paths: list[str] = []
+        any_downloaded = False
 
         if source.fetch in (FetchTypeEnum.HTTP.value or FetchTypeEnum.HTTPS.value):
             if multi_fetch.enable:
@@ -254,6 +260,7 @@ class DataSourceABCImpl(DataSourceABC):
                                 path = http_handler.call(uri=source.url, destination_path=path, stream=source.stream,
                                                          headers=source.headers, params=param,
                                                          file_extension=source.response_type)
+                                any_downloaded = True
                             else:
                                 path = self.resolve_latest_saved_path(path) or f"{path}"
                             #     read from the file
@@ -280,6 +287,7 @@ class DataSourceABCImpl(DataSourceABC):
                                 path = http_handler.call(uri=url, destination_path=path, stream=source.stream,
                                                          headers=source.headers, params=source.params,
                                                          file_extension=source.response_type)
+                                any_downloaded = True
                             else:
                                 path = self.resolve_latest_saved_path(path) or path
                             paths[-1] = path
@@ -323,6 +331,8 @@ class DataSourceABCImpl(DataSourceABC):
 
         else:
             self.logger.error(f"Not valid multi fetch type strategy: {multi_fetch.strategy}")
+        if paths:
+            self._last_fetch_performed_download = any_downloaded
         return paths
 
     def read_file_content(self, path):

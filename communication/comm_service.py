@@ -22,7 +22,13 @@ class CommService:
             return
         self.repository.create_table()
 
-    def ensure_task(self, task_key: str, owner: str | None = None, current_status: str = "idle"):
+    def ensure_task(
+        self,
+        task_key: str,
+        owner: str | None = None,
+        current_status: str = "idle",
+        is_completed: bool = False,
+    ):
         if self.repository is None or not task_key:
             return None
         self.create_table()
@@ -31,6 +37,7 @@ class CommService:
             {
                 "owner": owner,
                 "current_status": current_status,
+                "is_completed": is_completed,
             },
         )
 
@@ -43,6 +50,7 @@ class CommService:
         last_run_message: str | None = None,
         success: bool = False,
         owner: str | None = None,
+        is_completed: bool | None = None,
     ):
         if self.repository is None or not task_key:
             return None
@@ -55,6 +63,8 @@ class CommService:
             updates["owner"] = owner
         if current_status is not None:
             updates["current_status"] = current_status
+        if is_completed is not None:
+            updates["is_completed"] = bool(is_completed)
         if last_run_status is not None:
             updates["last_run_status"] = last_run_status
         if last_run_message is not None:

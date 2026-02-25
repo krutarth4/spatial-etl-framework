@@ -1,7 +1,7 @@
 from database.base import Base
 from database.db_instancce import DbInstance
 from log_manager.logger_manager import LoggerManager
-from sqlalchemy import Column, DateTime, Integer, String, Text, func, select
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, func, select
 
 
 class CommTask(Base):
@@ -11,6 +11,7 @@ class CommTask(Base):
     task_key = Column(String, nullable=False, unique=True)
     owner = Column(String, nullable=True)  # e.g. router / pipeline
     current_status = Column(String, default="idle")
+    is_completed = Column(Boolean, default=False)
     last_run_status = Column(String)
     last_run_message = Column(Text)
     last_checked_at = Column(DateTime)
@@ -53,6 +54,7 @@ class CommRepository:
                     CommTask.task_key,
                     CommTask.owner,
                     CommTask.current_status,
+                    CommTask.is_completed,
                     CommTask.last_run_status,
                     CommTask.last_run_message,
                     CommTask.last_checked_at,
