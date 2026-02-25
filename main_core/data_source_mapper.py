@@ -20,20 +20,47 @@ class DataSourceMapper:
         self.metadata_service = metadata_service
         self.base_graph_conf = base_graph_conf
         self.logger.info(f"Found {len(self.data_sources)} data sources")
+        self._register_all_datasource_metadata()
         self.data_sources = self.check_enable_data_sources()
         self.logger.info(f"Enable Found {len(self.data_sources)} data sources")
+
+    @staticmethod
+    def _to_datasource_dto(source) -> DataSourceDTO | None:
+        if isinstance(source, DataSourceDTO):
+            return source
+        if isinstance(source, dict):
+            return from_dict(DataSourceDTO, data=source, config=Config(cast=[dict]))
+        return None
+
+    def _register_all_datasource_metadata(self):
+        if self.metadata_service is None:
+            return
+        for source in self.data_sources or []:
+            try:
+                dto = self._to_datasource_dto(source)
+                if dto is None:
+                    continue
+                self.metadata_service.register_data_source(dto)
+                if not dto.enable:
+                    self.metadata_service.update(
+                        dto.name,
+                        {
+                            "is_active": False,
+                            "last_run_status": "disabled",
+                            "last_run_message": "Datasource disabled in config",
+                        },
+                    )
+            except Exception as e:
+                source_name = source.get("name") if isinstance(source, dict) else getattr(source, "name", "unknown")
+                self.logger.error(f"Metadata registration failed for datasource {source_name}: {e}")
 
     def check_enable_data_sources(self):
         try:
             result = []
             for source in self.data_sources:
-                if isinstance(source, dict):
-                    if source["enable"]:
-                        data = from_dict(DataSourceDTO, data=source, config=Config(cast=[dict]))
-                        result.append(data)
-                elif isinstance(source, DataSourceDTO):
-                    if source.enable:
-                        result.append(source)
+                data = self._to_datasource_dto(source)
+                if data is not None and data.enable:
+                    result.append(data)
             return result
         except Exception as e:
             self.logger.error(f"Error loading data sources for {source.get('name')} {e}")
