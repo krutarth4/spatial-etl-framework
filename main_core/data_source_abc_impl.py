@@ -69,6 +69,7 @@ class DataSourceABCImpl(DataSourceABC):
         self.end_timer = None
         self.raw_staging_table = None
         self.raw_staging_schema = None
+        self._register_datasource_metadata()
 
         if scheduler_core is not None:
             self.scheduler = scheduler_core
@@ -499,10 +500,13 @@ class DataSourceABCImpl(DataSourceABC):
 
     def run(self):
         self.start_execution()
+        self._mark_metadata_run_started()
         run_succeeded = False
         run_error: Exception | None = None
+        run_result = None
         try:
             result = self.execute_run_pipeline()
+            run_result = result
             run_succeeded = True
             return result
         except Exception as e:
@@ -510,6 +514,7 @@ class DataSourceABCImpl(DataSourceABC):
             self.on_run_error(e)
             return self.run_job_response("Job failed")
         finally:
+            self._mark_metadata_run_finished(run_succeeded, run_result, run_error)
             self.run_end_cleanup(run_succeeded, run_error)
 
     def execute_run_pipeline(self):
@@ -573,6 +578,35 @@ class DataSourceABCImpl(DataSourceABC):
 
     def on_run_error(self, error: Exception):
         self.logger.error(f"Error occurred in run {error}")
+
+    def _register_datasource_metadata(self):
+        if self.metadata_service is None:
+            return
+        try:
+            self.metadata_service.register_data_source(self.data_source_config)
+        except Exception as e:
+            self.logger.error(f"Datasource metadata registration failed for {self.data_source_name}: {e}")
+
+    def _mark_metadata_run_started(self):
+        if self.metadata_service is None:
+            return
+        try:
+            self.metadata_service.mark_run_started(self.data_source_name)
+        except Exception as e:
+            self.logger.error(f"Failed to mark metadata run start for {self.data_source_name}: {e}")
+
+    def _mark_metadata_run_finished(self, succeeded: bool, run_result=None, error: Exception | None = None):
+        if self.metadata_service is None:
+            return
+        try:
+            message = None
+            if isinstance(run_result, dict):
+                message = run_result.get("message")
+            if error is not None:
+                message = str(error)
+            self.metadata_service.mark_run_finished(self.data_source_name, succeeded, message)
+        except Exception as e:
+            self.logger.error(f"Failed to update metadata run status for {self.data_source_name}: {e}")
 
     def run_end_cleanup(self, succeeded: bool, error: Exception | None = None):
         """

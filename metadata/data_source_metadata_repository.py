@@ -52,11 +52,24 @@ class DataSourceMetadataRepository:
         self.db = db
         self.schema = schema
         self.logger = LoggerManager(type(self).__name__)
+        self._bind_model_schema()
+
+    def _bind_model_schema(self) -> None:
+        # Queries use the ORM model directly, so bind its table schema dynamically
+        # to the configured metadata schema (otherwise SQL defaults to public).
+        if self.schema:
+            DataSourceMetadata.__table__.schema = self.schema
 
     def is_metadata_table_present(self) -> bool:
         return self.db.table_exists(self.table_name, self.schema)
 
     def create_metadata_table(self) -> None:
+        # Ensure target schema exists before creating the table.
+        try:
+            self.db.create_schema_if_not_exists()
+        except Exception:
+            # Fall back to create_table_if_not_exist error handling/logging.
+            pass
         self.db.create_table_if_not_exist(self.table_name, self.schema)
 
     def delete_metadata_table(self, schema: str = None) -> None:

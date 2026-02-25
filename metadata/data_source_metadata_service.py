@@ -1,3 +1,10 @@
+import hashlib
+import json
+from dataclasses import asdict, is_dataclass
+from datetime import date, datetime
+from enum import Enum
+from pathlib import Path
+
 from dacite import from_dict
 
 from data_config_dtos.data_source_config_dto import MetadataConfDTO
@@ -8,23 +15,117 @@ from metadata.data_source_metadata_repository import DataSourceMetadataRepositor
 
 class DataSourceMetadataService:
     def __init__(self, db: DbInstance, metadata_conf):
-        if db is None:
+        self.metadata_conf = None
+        self.metadata_repository = None
+        self.logger = LoggerManager(type(self).__name__)
+        if db is None or metadata_conf is None:
             return
         self.metadata_conf = from_dict(MetadataConfDTO, metadata_conf)
         self.metadata_repository = DataSourceMetadataRepository(db, self.metadata_conf.table_schema)
-        self.logger = LoggerManager(type(self).__name__)
 
     def create_table(self):
+        if self.metadata_repository is None:
+            self.logger.warning("Metadata repository not initialized. Skipping metadata table creation")
+            return
         if self.metadata_exist():
             self.logger.info("Metadata table already exists")
             return
         self.metadata_repository.create_metadata_table()
 
     def metadata_exist(self) -> bool:
+        if self.metadata_repository is None:
+            return False
         return self.metadata_repository.is_metadata_table_present()
 
-    def update(self,key:str, value:dict):
-        pass
+    def update(self, key: str, value: dict):
+        if self.metadata_repository is None:
+            return None
+        self._ensure_table_ready()
+        return self.metadata_repository.update_metadata(key, **(value or {}))
 
-    def upsert(self,key:str, value:dict):
-        pass
+    def upsert(self, key: str, value: dict):
+        if self.metadata_repository is None:
+            return None
+        self._ensure_table_ready()
+        return self.metadata_repository.upsert_metadata(key, value or {})
+
+    def update_run_status(self, source_key: str, status: str, message: str | None = None, success: bool = False):
+        if self.metadata_repository is None:
+            return None
+        self._ensure_table_ready()
+        return self.metadata_repository.update_run_status(source_key, status, message, success)
+
+    def register_data_source(self, data_source_conf):
+        if self.metadata_repository is None or data_source_conf is None:
+            return None
+
+        source_key = getattr(data_source_conf, "name", None)
+        if not source_key:
+            return None
+
+        config_snapshot = self._to_jsonable(data_source_conf)
+        config_hash = self._hash_config(config_snapshot)
+        source_conf = getattr(data_source_conf, "source", None)
+
+        payload = {
+            "source_name": source_key,
+            "description": getattr(data_source_conf, "description", None),
+            "source_type": getattr(data_source_conf, "data_type", None)
+                           or getattr(source_conf, "fetch", None)
+                           or "unknown",
+            "file_path": str(getattr(source_conf, "file_path", "") or getattr(source_conf, "destination", "") or "") or None,
+            "is_active": bool(getattr(data_source_conf, "enable", True)),
+            "config_hash": config_hash,
+            "config_snapshot": config_snapshot,
+        }
+        return self.upsert(source_key, payload)
+
+    def mark_run_started(self, source_key: str, message: str | None = None):
+        if not source_key:
+            return None
+        return self.update_run_status(source_key, "running", message or "Run started", success=False)
+
+    def mark_run_finished(self, source_key: str, success: bool, message: str | None = None):
+        if not source_key:
+            return None
+        status = "success" if success else "failed"
+        self.update_run_status(source_key, status, message, success=success)
+        if success:
+            return self.update(source_key, {"last_ingested_at": datetime.utcnow()})
+        return None
+
+    def _hash_config(self, payload: dict | list | None) -> str | None:
+        if payload is None:
+            return None
+        try:
+            serialized = json.dumps(payload, sort_keys=True, default=str)
+            return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+        except Exception as e:
+            self.logger.error(f"Unable to hash datasource config: {e}")
+            return None
+
+    def _ensure_table_ready(self):
+        try:
+            if not self.metadata_exist():
+                self.create_table()
+        except Exception as e:
+            self.logger.error(f"Failed ensuring metadata table exists: {e}")
+
+    def _to_jsonable(self, value):
+        if value is None:
+            return None
+        if is_dataclass(value):
+            return self._to_jsonable(asdict(value))
+        if isinstance(value, dict):
+            return {str(k): self._to_jsonable(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            return [self._to_jsonable(v) for v in value]
+        if isinstance(value, Enum):
+            return value.value
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+        if isinstance(value, (str, int, float, bool)):
+            return value
+        return str(value)
