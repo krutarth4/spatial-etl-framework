@@ -31,6 +31,7 @@ class GraphMapper(DataSourceABCImpl):
         try:
             paths = self.extract()
             self._update_metadata_runtime_paths(paths)
+            self._publish_metadata_before_comm_signal(paths)
             downloaded = self._last_fetch_performed_download
             if comm_service is not None:
                 if downloaded is True:
@@ -59,4 +60,25 @@ class GraphMapper(DataSourceABCImpl):
                     last_run_message=str(e),
                     is_completed=False,
                 )
+            raise
+
+    def _publish_metadata_before_comm_signal(self, paths):
+        if self.metadata_service is None:
+            return
+        try:
+            # Ensure router sees the newest file path + a successful metadata state
+            # before it reacts to the comm completion flag.
+            self.metadata_service.update_runtime_file_paths(self.data_source_name, paths)
+            self.metadata_service.update_run_status(
+                self.data_source_name,
+                "success",
+                "OSM file metadata path updated; ready for router",
+                success=True,
+            )
+            self.metadata_service.update(
+                self.data_source_name,
+                {"current_run_status": "idle"},
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to publish metadata before comm signal for {self.data_source_name}: {e}")
             raise

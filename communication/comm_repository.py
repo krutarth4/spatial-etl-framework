@@ -1,7 +1,7 @@
 from database.base import Base
 from database.db_instancce import DbInstance
 from log_manager.logger_manager import LoggerManager
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, func, select
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, func, select, update
 
 
 class CommTask(Base):
@@ -92,3 +92,9 @@ class CommRepository:
                     setattr(task, field, value)
             session.flush()
             return task
+
+    def reset_all_task_completion_flags(self) -> int:
+        with self.db.session_scope() as session:
+            result = session.execute(update(CommTask).values(is_completed=False))
+            session.flush()
+            return int(result.rowcount or 0)

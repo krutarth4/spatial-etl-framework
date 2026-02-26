@@ -87,6 +87,14 @@ class CommService:
         self.create_table()
         return self.repository.get_task_status(task_key)
 
+    def reset_all_task_completion_flags(self) -> int:
+        if self.repository is None:
+            return 0
+        self.create_table()
+        count = self.repository.reset_all_task_completion_flags()
+        self.logger.info(f"Reset is_completed=false for {count} comm task(s)")
+        return count
+
     def wait_for_task(
         self,
         task_key: str,
@@ -96,6 +104,7 @@ class CommService:
         running_statuses: set[str] | None = None,
         poll_seconds: float = 5.0,
         timeout_seconds: float | None = None,
+        require_is_completed: bool = False,
     ) -> bool:
         """
         Wait for an external task (e.g. router) to finish. Returns True on success terminal state.
@@ -113,19 +122,32 @@ class CommService:
         while True:
             task = self.get_task_status(task_key)
             if task:
+                is_completed = bool(task.get("is_completed"))
+                if is_completed:
+                    self.logger.info(f"Comm task '{task_key}' marked completed (is_completed=true)")
+                    return True
                 current_status = str(task.get("current_status") or "").lower()
                 last_run_status = str(task.get("last_run_status") or "").lower()
-                if current_status in success_statuses or last_run_status in success_statuses:
-                    self.logger.info(f"Comm task '{task_key}' reached success state")
-                    return True
-                if current_status in fail_statuses or last_run_status in fail_statuses:
-                    self.logger.warning(f"Comm task '{task_key}' reached failure state")
-                    return False
-                if current_status in running_statuses:
+                if require_is_completed:
+                    if current_status in fail_statuses or last_run_status in fail_statuses:
+                        self.logger.warning(f"Comm task '{task_key}' reached failure state")
+                        return False
                     self.logger.info(
-                        f"Comm task '{task_key}' still running "
-                        f"(current={current_status}, last={last_run_status})"
+                        f"Comm task '{task_key}' waiting for is_completed=true "
+                        f"(current={current_status}, last={last_run_status}, is_completed={is_completed})"
                     )
+                else:
+                    if current_status in success_statuses or last_run_status in success_statuses:
+                        self.logger.info(f"Comm task '{task_key}' reached success state")
+                        return True
+                    if current_status in fail_statuses or last_run_status in fail_statuses:
+                        self.logger.warning(f"Comm task '{task_key}' reached failure state")
+                        return False
+                    if current_status in running_statuses:
+                        self.logger.info(
+                            f"Comm task '{task_key}' still running "
+                            f"(current={current_status}, last={last_run_status})"
+                        )
             else:
                 self.logger.info(f"Comm task '{task_key}' not found yet")
 

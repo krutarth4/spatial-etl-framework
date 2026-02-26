@@ -165,7 +165,7 @@ class DbConfiguration:
         """Provide a transactional scope around a series of operations."""
         session = self.scoped_session()
         try:
-            self.logger.info(f"Session opened")
+            # self.logger.info(f"Session opened")
             yield session
             session.commit()
         except KeyboardInterrupt:
@@ -188,7 +188,7 @@ class DbConfiguration:
             # session.remove()
             # TODO: check if the session should be removed or just closed as we are creating new session each time
             # TODO : Evaluate
-            self.logger.info(f"Session closed")
+            # self.logger.info(f"Session closed")
             session.close()
             self.scoped_session.remove()
 

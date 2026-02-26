@@ -100,6 +100,8 @@ class Application:
             self.metadata_service.create_table()
         if self.comm_service is not None:
             self.comm_service.create_table()
+            # Reset completion flags on every app startup so comm-based checks re-run.
+            self.comm_service.reset_all_task_completion_flags()
 
         # start scheduler and server
         server = self.core_conf.get_value(self._server)

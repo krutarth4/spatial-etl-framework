@@ -38,9 +38,9 @@ class InitGraph:
         self.db = db
         self.base_graph_conf = base_graph_conf
         self.base_graph = BaseGraph(db, base_graph_conf)
-        self.base_graph.create_base_graph_tables()
         self._ensure_default_comm_tasks()
         self._sync_osm_download_task_for_graph_datasource_state()
+        self.base_graph.create_base_graph_tables()
         if not self.graph_configuration.enable:
             self.logger.warning("Base graph DISABLED")
             return
@@ -152,6 +152,7 @@ class InitGraph:
             running_statuses={"running", "queued", "pending", "waiting", "idle"},
             poll_seconds=5.0,
             timeout_seconds=None,
+            require_is_completed=True,
         )
 
         try:
