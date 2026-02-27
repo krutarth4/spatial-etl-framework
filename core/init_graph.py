@@ -47,6 +47,21 @@ class InitGraph:
         if db is None:
             self.logger.warning("Base graph can not be checked with database as disabled")
 
+    def _get_comm_config(self) -> dict:
+        conf = getattr(self.graph_configuration, "communication", None)
+        return conf if isinstance(conf, dict) else {}
+
+    def _is_comm_enabled(self) -> bool:
+        conf = self._get_comm_config()
+        return bool(conf.get("enable", True))
+
+    def _get_comm_wait_config(self, key: str) -> dict:
+        waits = self._get_comm_config().get("waits", {})
+        if not isinstance(waits, dict):
+            return {}
+        wait_conf = waits.get(key, {})
+        return wait_conf if isinstance(wait_conf, dict) else {}
+
     def check_if_raw_graph_present(self) -> bool:
         return self.db.table_exists(self.graph_configuration.table_name, self.graph_configuration.schema)
 
@@ -128,10 +143,23 @@ class InitGraph:
                                 f". If the issue still presist check if external ingestion of table in database was successful")
 
     def _wait_for_main_ways_table_before_base_checks(self):
+        if not self._is_comm_enabled():
+            self.logger.info("Skipping main ways wait because graph.communication.enable is false")
+            return
         if self.comm_service is None:
             return
 
-        task_key = "main_ways_table"
+        wait_conf = self._get_comm_wait_config("main_ways_before_base")
+        if not wait_conf.get("enable", True):
+            self.logger.info("Skipping main ways wait because graph.communication.waits.main_ways_before_base.enable is false")
+            return
+
+        task_key = str(wait_conf.get("task_key") or "main_ways_table")
+        poll_seconds = float(wait_conf.get("poll_seconds", 5.0) or 5.0)
+        timeout_seconds = wait_conf.get("timeout_seconds", None)
+        timeout_seconds = float(timeout_seconds) if timeout_seconds is not None else None
+        require_is_completed = bool(wait_conf.get("require_is_completed", True))
+
         try:
             self.comm_service.ensure_task("ways_base_table", owner="mdp", current_status="idle", is_completed=False)
             self.comm_service.update_status(
@@ -150,9 +178,9 @@ class InitGraph:
             success_statuses={"success", "completed", "done"},
             fail_statuses={"failed", "error"},
             running_statuses={"running", "queued", "pending", "waiting", "idle"},
-            poll_seconds=5.0,
-            timeout_seconds=None,
-            require_is_completed=True,
+            poll_seconds=poll_seconds,
+            timeout_seconds=timeout_seconds,
+            require_is_completed=require_is_completed,
         )
 
         try:
@@ -174,16 +202,25 @@ class InitGraph:
             raise RuntimeError(f"Required comm task '{task_key}' did not finish successfully")
 
     def _wait_for_coupled_router_if_enabled(self):
+        if not self._is_comm_enabled():
+            self.logger.info("Skipping router-coupled wait because graph.communication.enable is false")
+            return
         coupled = getattr(self.graph_configuration, "coupled", None)
-        if coupled is None or str(coupled).lower() not in {"router", "true", "enabled"}:
+        wait_conf = self._get_comm_wait_config("router_coupled")
+        wait_enabled = wait_conf.get("enable", None)
+        if wait_enabled is None:
+            wait_enabled = coupled is not None and str(coupled).lower() in {"router", "true", "enabled"}
+        if not wait_enabled:
             return
         if self.comm_service is None:
-            self.logger.warning("graph.coupled is enabled but CommService is not initialized")
+            self.logger.warning("Router-coupled wait is enabled but CommService is not initialized")
             return
 
         task_key = self._resolve_coupled_task_key()
-        poll_seconds = float(getattr(self.graph_configuration, "coupled_poll_seconds", 5.0) or 5.0)
-        timeout_seconds = getattr(self.graph_configuration, "coupled_timeout_seconds", None)
+        poll_seconds = float(
+            wait_conf.get("poll_seconds", getattr(self.graph_configuration, "coupled_poll_seconds", 5.0)) or 5.0
+        )
+        timeout_seconds = wait_conf.get("timeout_seconds", getattr(self.graph_configuration, "coupled_timeout_seconds", None))
         timeout_seconds = float(timeout_seconds) if timeout_seconds is not None else None
 
         # Register/mark that pipeline is waiting for router task visibility.
@@ -226,7 +263,8 @@ class InitGraph:
             raise RuntimeError(f"Coupled router task '{task_key}' did not finish successfully")
 
     def _resolve_coupled_task_key(self) -> str:
-        explicit = getattr(self.graph_configuration, "coupled_task_key", None)
+        wait_conf = self._get_comm_wait_config("router_coupled")
+        explicit = wait_conf.get("task_key", getattr(self.graph_configuration, "coupled_task_key", None))
         if explicit:
             return explicit
         datasources = getattr(self.graph_configuration, "datasource", None) or []
@@ -238,22 +276,42 @@ class InitGraph:
         return "osm_graph"
 
     def _ensure_default_comm_tasks(self):
+        if not self._is_comm_enabled():
+            self.logger.info("Skipping comm task setup because graph.communication.enable is false")
+            return
         if self.comm_service is None:
             return
-        task_defaults = [
-            ("read_osm_file", "router"),
-            ("main_ways_table", "router"),
-            ("ways_base_table", "mdp"),
-            ("osm_file_update", "mdp"),
-            ("osm_file_download", "mdp"),
-        ]
+        task_defaults = self._get_comm_config().get("tasks", [])
+        if not isinstance(task_defaults, list) or not task_defaults:
+            task_defaults = [
+                {"key": "read_osm_file", "owner": "router", "status": "idle", "is_completed": False},
+                {"key": "main_ways_table", "owner": "router", "status": "idle", "is_completed": False},
+                {"key": "ways_base_table", "owner": "mdp", "status": "idle", "is_completed": False},
+                {"key": "osm_file_update", "owner": "mdp", "status": "idle", "is_completed": False},
+                {"key": "osm_file_download", "owner": "mdp", "status": "idle", "is_completed": False},
+            ]
         try:
-            for task_key, owner in task_defaults:
-                self.comm_service.ensure_task(task_key, owner=owner, current_status="idle", is_completed=False)
+            for task in task_defaults:
+                if not isinstance(task, dict):
+                    continue
+                task_key = task.get("key")
+                if not task_key:
+                    continue
+                owner = task.get("owner")
+                status = task.get("status", "idle")
+                is_completed = bool(task.get("is_completed", False))
+                self.comm_service.ensure_task(
+                    str(task_key),
+                    owner=owner,
+                    current_status=str(status),
+                    is_completed=is_completed,
+                )
         except Exception as e:
             self.logger.warning(f"Failed to ensure default comm tasks: {e}")
 
     def _sync_osm_download_task_for_graph_datasource_state(self):
+        if not self._is_comm_enabled():
+            return
         if self.comm_service is None:
             return
         try:

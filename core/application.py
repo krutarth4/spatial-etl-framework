@@ -91,10 +91,11 @@ class Application:
         # create metadata table if not exist
 
         self.metadata_service = DataSourceMetadataService(self.db_instance,metadata)
-        comm_schema = None
-        if isinstance(metadata, dict):
-            comm_schema = metadata.get("table_schema")
-        self.comm_service = CommService(self.db_instance, comm_schema)
+        self.graph_conf = self.core_conf.get_value(self._graph)
+        comm_conf = (self.graph_conf or {}).get("communication", {}) if isinstance(self.graph_conf, dict) else {}
+        comm_enabled = bool(comm_conf.get("enable", True))
+        comm_schema = metadata.get("table_schema") if isinstance(metadata, dict) else None
+        self.comm_service = CommService(self.db_instance, comm_schema) if comm_enabled else None
 
         if self.metadata_service is not None:
             self.metadata_service.create_table()
@@ -102,6 +103,8 @@ class Application:
             self.comm_service.create_table()
             # Reset completion flags on every app startup so comm-based checks re-run.
             self.comm_service.reset_all_task_completion_flags()
+        else:
+            self.logger.info("Communication service disabled by graph.communication.enable=false")
 
         # start scheduler and server
         server = self.core_conf.get_value(self._server)
@@ -118,7 +121,6 @@ class Application:
         self.sources_conf = self.core_conf.get_value(self._datasources)
 
         # core graph logic for the base table
-        self.graph_conf = self.core_conf.get_value(self._graph)
         self.base_graph_conf = self.core_conf.get_value(self._base_graph)
         self.graph = InitGraph(self.graph_conf, self.base_graph_conf, self.metadata_service, self.db_instance,
                                self.comm_service, self.scheduler_core)
