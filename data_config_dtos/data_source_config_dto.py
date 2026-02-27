@@ -104,9 +104,23 @@ class BaseDataMappingSourceDTO:
 
 
 @dataclass
+class MappingStrategyLinkDTO:
+    mapping_column: Optional[str] = None
+    base_column: Optional[str] = None
+    basis: Optional[str] = None
+
+
+@dataclass
+class MappingStrategyConfigDTO:
+    name: Optional[Union[MappingStrategyDTO, str]] = None
+    type: Optional[str] = None
+    link_on: Optional[MappingStrategyLinkDTO] = None
+
+
+@dataclass
 class MappingDTO:
     joins_on: Optional[str]
-    strategy: Optional[Union[MappingStrategyDTO, str]]
+    strategy: Optional[Union[MappingStrategyDTO, str, MappingStrategyConfigDTO]]
     table_name: Optional[str]
     table_schema: Optional[str]
     enable: bool

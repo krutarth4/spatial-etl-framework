@@ -759,7 +759,54 @@ class DataSourceABCImpl(DataSourceABC):
     def get_mapping_strategy_name(self) -> str | None:
         mapping_conf = getattr(self.data_source_config, "mapping", None)
         strategy = getattr(mapping_conf, "strategy", None)
-        return str(strategy) if strategy else None
+        if strategy is None:
+            return None
+        if isinstance(strategy, str):
+            return strategy
+        name = getattr(strategy, "name", None)
+        if name is not None:
+            return str(name)
+        # Backward fallback for dict-like payloads if any mapper bypasses DTO conversion.
+        if isinstance(strategy, dict):
+            raw_name = strategy.get("name")
+            return str(raw_name) if raw_name else None
+        return str(strategy)
+
+    def get_mapping_strategy_type(self) -> str | None:
+        mapping_conf = getattr(self.data_source_config, "mapping", None)
+        strategy = getattr(mapping_conf, "strategy", None)
+        if strategy is None:
+            return None
+        if isinstance(strategy, dict):
+            value = strategy.get("type")
+            return str(value) if value else None
+        value = getattr(strategy, "type", None)
+        return str(value) if value else None
+
+    def get_mapping_strategy_link_fields(self) -> dict[str, str | None]:
+        mapping_conf = getattr(self.data_source_config, "mapping", None)
+        joins_on = getattr(mapping_conf, "joins_on", None) if mapping_conf else None
+        strategy = getattr(mapping_conf, "strategy", None) if mapping_conf else None
+        link_on = None
+        if isinstance(strategy, dict):
+            link_on = strategy.get("link_on")
+        elif strategy is not None:
+            link_on = getattr(strategy, "link_on", None)
+
+        if isinstance(link_on, dict):
+            mapping_column = link_on.get("mapping_column")
+            base_column = link_on.get("base_column")
+            basis = link_on.get("basis")
+        else:
+            mapping_column = getattr(link_on, "mapping_column", None) if link_on is not None else None
+            base_column = getattr(link_on, "base_column", None) if link_on is not None else None
+            basis = getattr(link_on, "basis", None) if link_on is not None else None
+
+        return {
+            "mapping_column": str(mapping_column) if mapping_column else str(joins_on) if joins_on else None,
+            "base_column": str(base_column) if base_column else None,
+            "basis": str(basis) if basis else None,
+        }
 
     def get_custom_mapping_strategy(self):
         """

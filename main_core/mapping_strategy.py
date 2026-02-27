@@ -63,6 +63,8 @@ class SqlTemplateMappingStrategy:
         mapping = datasource.data_source_config.mapping
         storage = datasource.data_source_config.storage
         base = mapping.base_table
+        link_fields = datasource.get_mapping_strategy_link_fields()
+        strategy_type = datasource.get_mapping_strategy_type()
         values = {
             "datasource_name": datasource.data_source_name,
             "mapping_table": mapping.table_name,
@@ -74,6 +76,10 @@ class SqlTemplateMappingStrategy:
             "base_table": base.table_name,
             "base_schema": base.table_schema,
             "joins_on": mapping.joins_on,
+            "strategy_type": strategy_type,
+            "link_mapping_column": link_fields.get("mapping_column"),
+            "link_base_column": link_fields.get("base_column"),
+            "link_basis": link_fields.get("basis"),
         }
         try:
             return sql.format(**values)
