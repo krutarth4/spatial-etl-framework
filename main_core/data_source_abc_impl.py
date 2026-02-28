@@ -85,10 +85,10 @@ class DataSourceABCImpl(DataSourceABC):
             self.logger.info(f"Creating table")
             storage_data = self.data_source_config.storage
             force_create = storage_data.force_create
-            if storage_data.staging.table_name:
+            if storage_data.staging:
                 self.create_staging_tables(storage_data.staging.table_name, storage_data.staging.table_schema,
                                            force_create)
-            if storage_data.enrichment.table_name:
+            if storage_data.enrichment:
                 self.create_enrichment_tables(storage_data.enrichment.table_name, storage_data.enrichment.table_schema,
                                               force_create)
             if self.data_source_config.mapping.table_name and self.data_source_config.mapping.enable:
@@ -670,11 +670,12 @@ class DataSourceABCImpl(DataSourceABC):
             self.logger.error(f"Materialized view trigger failed for datasource {self.data_source_name}: {e}")
 
     def sync_staging_to_enrichment(self):
-        self.db.sync_staging_to_enrichment(self.data_source_config.storage.staging.table_schema,
-                                           self.data_source_config.storage.staging.table_name,
-                                           self.data_source_config.storage.enrichment.table_schema,
-                                           self.data_source_config.storage.enrichment.table_name
-                                           )
+        if self.data_source_config.storage.enrichment:
+            self.db.sync_staging_to_enrichment(self.data_source_config.storage.staging.table_schema,
+                                               self.data_source_config.storage.staging.table_name,
+                                               self.data_source_config.storage.enrichment.table_schema,
+                                               self.data_source_config.storage.enrichment.table_name
+                                               )
 
     def sync_raw_to_staging(self)  :
         return self.db.sync_source_to_target_table(self.raw_staging_schema, self.raw_staging_table
@@ -687,10 +688,10 @@ class DataSourceABCImpl(DataSourceABC):
 
     def recreate_table_indexes(self):
         if self.db is not None and self.data_source_config.storage.persistent:
-            if self.data_source_config.storage.enrichment.table_name:
+            if self.data_source_config.storage.enrichment:
                 self.db.create_indexes(self.data_source_config.storage.enrichment.table_name,
                                        self.data_source_config.storage.enrichment.table_schema)
-            if self.data_source_config.storage.staging.table_name:
+            if self.data_source_config.storage.staging:
                 self.db.create_indexes(self.data_source_config.storage.staging.table_name,
                                        self.data_source_config.storage.staging.table_schema)
             if self.data_source_config.mapping.table_name and self.data_source_config.mapping.enable:

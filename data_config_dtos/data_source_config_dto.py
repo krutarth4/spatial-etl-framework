@@ -81,9 +81,9 @@ class EnrichmentConfDTO:
 
 @dataclass
 class StorageDTO:
-    enrichment: EnrichmentConfDTO
+    enrichment: Optional[EnrichmentConfDTO]
     persistent: bool
-    staging: StagingConfDTO
+    staging: Optional[StagingConfDTO]
     expires_after: Optional[str]
     force_create: Optional[bool] = False
 
