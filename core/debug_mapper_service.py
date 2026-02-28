@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.sql import text
 
 from database.db_instancce import DbInstance
 
@@ -97,6 +98,149 @@ class DebugMapperService:
             "rows": [self._to_jsonable(dict(r)) for r in rows],
         }
 
+    def fetch_mapping_visualization(
+        self,
+        mapper_endpoint: str,
+        limit: int = 100,
+        way_id: int | None = None,
+    ) -> dict[str, Any]:
+        if self.db is None:
+            raise ValueError("Database is not initialized.")
+        if limit <= 0:
+            raise ValueError("limit must be > 0")
+
+        ds = self._resolve_datasource(mapper_endpoint)
+        mapping = ds.get("mapping") or {}
+        if not mapping.get("enable", False):
+            raise ValueError(f"Mapping is disabled for datasource '{ds.get('name')}'.")
+
+        mapping_table_name = mapping.get("table_name")
+        mapping_schema = mapping.get("table_schema")
+        if not mapping_table_name:
+            raise ValueError(f"No mapping table configured for datasource '{ds.get('name')}'.")
+
+        mapping_table = self.db.get_table(mapping_table_name, mapping_schema)
+        if mapping_table is None:
+            raise ValueError(f"Mapping table '{mapping_schema}.{mapping_table_name}' does not exist.")
+
+        base_table_conf = mapping.get("base_table") or {}
+        base_table_name = base_table_conf.get("table_name")
+        base_table_schema = base_table_conf.get("table_schema")
+        enrichment = (ds.get("storage") or {}).get("enrichment") or {}
+        enrichment_table_name = enrichment.get("table_name")
+        enrichment_table_schema = enrichment.get("table_schema")
+
+        base_table = self.db.get_table(base_table_name, base_table_schema) if base_table_name else None
+        enrichment_table = (
+            self.db.get_table(enrichment_table_name, enrichment_table_schema) if enrichment_table_name else None
+        )
+
+        strategy = mapping.get("strategy")
+        link_on = strategy.get("link_on") if isinstance(strategy, dict) else {}
+        mapping_column = link_on.get("mapping_column") or mapping.get("joins_on")
+        basis = link_on.get("basis")
+        strategy_name = strategy.get("name") if isinstance(strategy, dict) else strategy
+        strategy_type = strategy.get("type") if isinstance(strategy, dict) else None
+
+        features: list[dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
+        visualization_mode = "table_only"
+
+        base_geom_col = self._guess_geom_col(base_table, ["geometry", "geom", "line_geometry"])
+        enrich_geom_col = self._guess_geom_col(enrichment_table, ["point", "geometry", "geom"])
+        can_spatial_join = (
+            base_table is not None
+            and enrichment_table is not None
+            and base_geom_col is not None
+            and enrich_geom_col is not None
+            and mapping_column in mapping_table.c
+            and mapping_column in enrichment_table.c
+            and "way_id" in mapping_table.c
+        )
+
+        if can_spatial_join:
+            sql = f"""
+                SELECT
+                    m.way_id,
+                    m.{self._quote_ident(mapping_column)} AS mapped_value,
+                    COALESCE(
+                        m.distance,
+                        ST_Distance(
+                            b.{self._quote_ident(base_geom_col)}::geography,
+                            e.{self._quote_ident(enrich_geom_col)}::geography
+                        )
+                    ) AS distance_meters,
+                    ST_AsGeoJSON(b.{self._quote_ident(base_geom_col)}) AS base_geometry,
+                    ST_AsGeoJSON(e.{self._quote_ident(enrich_geom_col)}) AS mapped_geometry,
+                    ST_AsGeoJSON(
+                        ST_ShortestLine(
+                            b.{self._quote_ident(base_geom_col)},
+                            e.{self._quote_ident(enrich_geom_col)}
+                        )
+                    ) AS link_geometry
+                FROM "{mapping_schema}"."{mapping_table_name}" m
+                JOIN "{base_table_schema}"."{base_table_name}" b
+                    ON b.id = m.way_id
+                LEFT JOIN "{enrichment_table_schema}"."{enrichment_table_name}" e
+                    ON e.{self._quote_ident(mapping_column)} = m.{self._quote_ident(mapping_column)}
+                WHERE (:way_id IS NULL OR m.way_id = :way_id)
+                LIMIT :limit
+            """
+            with self.db.session_scope() as session:
+                query_result = session.execute(text(sql), {"way_id": way_id, "limit": limit}).mappings().all()
+
+            rows = [self._to_jsonable(dict(r)) for r in query_result]
+            visualization_mode = "spatial_line_to_point"
+            for row in rows:
+                reason = (
+                    f"Mapped by strategy={strategy_name or 'none'}"
+                    f", type={strategy_type or 'default'}"
+                    f", basis={basis or 'config_not_provided'}"
+                    f", distance_meters={row.get('distance_meters')}"
+                )
+                feature = {
+                    "type": "Feature",
+                    "geometry": self._try_json_load(row.get("link_geometry")),
+                    "properties": {
+                        "way_id": row.get("way_id"),
+                        "mapped_value": row.get("mapped_value"),
+                        "distance_meters": row.get("distance_meters"),
+                        "strategy_name": strategy_name,
+                        "strategy_type": strategy_type,
+                        "basis": basis,
+                        "reason": reason,
+                        "base_geometry": self._try_json_load(row.get("base_geometry")),
+                        "mapped_geometry": self._try_json_load(row.get("mapped_geometry")),
+                    },
+                }
+                features.append(feature)
+        else:
+            with self.db.session_scope() as session:
+                query_result = session.execute(select(mapping_table).limit(limit)).mappings().all()
+            rows = [self._to_jsonable(dict(r)) for r in query_result]
+
+        return {
+            "mapper_endpoint": mapper_endpoint,
+            "datasource": ds.get("name"),
+            "visualization_mode": visualization_mode,
+            "strategy": {
+                "name": strategy_name,
+                "type": strategy_type,
+                "basis": basis,
+                "link_on": link_on,
+            },
+            "count": len(rows),
+            "rows": rows,
+            "geojson": {
+                "type": "FeatureCollection",
+                "features": features,
+            },
+            "notes": {
+                "why_mapping_explanation": "Use each feature.properties.reason directly in the frontend tooltip.",
+                "fallback": "If spatial fields are missing, API returns mapping rows only (table_only mode).",
+            },
+        }
+
     def _resolve_datasource(self, mapper_endpoint: str) -> dict[str, Any]:
         key = self._normalize_endpoint_key(mapper_endpoint)
         ds = self._endpoint_index.get(key)
@@ -174,6 +318,32 @@ class DebugMapperService:
     def _normalize_endpoint_key(value: str) -> str:
         cleaned = (value or "").strip().strip("/")
         return cleaned
+
+    @staticmethod
+    def _quote_ident(value: str) -> str:
+        escaped = str(value).replace('"', '""')
+        return f'"{escaped}"'
+
+    @staticmethod
+    def _guess_geom_col(table, candidates: list[str]) -> str | None:
+        if table is None:
+            return None
+        col_names = {c.name.lower(): c.name for c in table.columns}
+        for c in candidates:
+            if c.lower() in col_names:
+                return col_names[c.lower()]
+        return None
+
+    @staticmethod
+    def _try_json_load(value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        try:
+            import json
+
+            return json.loads(value)
+        except Exception:
+            return value
 
     def _to_jsonable(self, value: Any) -> Any:
         if value is None:

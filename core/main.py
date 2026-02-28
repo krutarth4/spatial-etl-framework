@@ -78,3 +78,12 @@ async def debug_mapper_data(mapper_endpoint: str, target: str, limit: int = 100)
         return service.fetch(mapper_endpoint=mapper_endpoint, target=target, limit=limit)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/debug/mappers/{mapper_endpoint}/mapping-visualization")
+async def debug_mapping_visualization(mapper_endpoint: str, limit: int = 100, way_id: int | None = None):
+    try:
+        service = _get_debug_service()
+        return service.fetch_mapping_visualization(mapper_endpoint=mapper_endpoint, limit=limit, way_id=way_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
