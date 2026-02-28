@@ -1,9 +1,10 @@
 import threading
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from starlette.middleware.cors import CORSMiddleware
 
 from core.application import Application
+from core.debug_mapper_service import DebugMapperService
 from log_manager.logger_manager import LoggerManager
 
 app = FastAPI()
@@ -53,3 +54,27 @@ async def health():
         "pipeline_thread_alive": alive,
         "pipeline_initialized": _pipeline_app is not None,
     }
+
+
+def _get_debug_service() -> DebugMapperService:
+    if _pipeline_app is None:
+        raise HTTPException(status_code=503, detail="Pipeline is not initialized yet.")
+    return DebugMapperService(_pipeline_app.get_all_datasources(), _pipeline_app.db_instance)
+
+
+@app.get("/debug/mappers")
+async def debug_mappers():
+    service = _get_debug_service()
+    return {
+        "mappers": service.list_endpoints(),
+        "targets": ["staging", "enrichment", "mapping"],
+    }
+
+
+@app.get("/debug/mappers/{mapper_endpoint}/{target}")
+async def debug_mapper_data(mapper_endpoint: str, target: str, limit: int = 100):
+    try:
+        service = _get_debug_service()
+        return service.fetch(mapper_endpoint=mapper_endpoint, target=target, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
