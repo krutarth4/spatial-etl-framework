@@ -2,7 +2,7 @@ import math
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import Column, Integer, Float, String, BigInteger, DateTime, func, Text, UniqueConstraint
+from sqlalchemy import Column, Integer, Float, String, BigInteger, DateTime, func, Text, UniqueConstraint, Index
 
 from database_tables.staging_table import StagingTable
 from main_core.data_source_abc_impl import DataSourceABCImpl
@@ -36,6 +36,11 @@ class PleasantStagingTable(StagingTable):
     created_at = Column(DateTime(timezone=True), default=func.now())
     __table_args__ = (
         UniqueConstraint("connection_id", "interval_start", "interval_end"),
+        Index(
+            None,
+            "geometry",
+            postgresql_using="gist"
+        )
     )
 
 
