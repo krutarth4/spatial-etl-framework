@@ -88,7 +88,7 @@ class DBRepository(DbConfiguration):
         started_at = time.perf_counter()
         sql_preview = " ".join((sql or "").strip().split())
         if len(sql_preview) > 220:
-            sql_preview = f"{sql_preview[:220]}..."
+            sql_preview = f"{sql_preview[:100]}..."
 
         def _heartbeat():
             # First tick after interval to avoid noise for fast queries.

@@ -1,9 +1,15 @@
 import math
 from pathlib import Path
 
+from geoalchemy2 import Geometry
 import pandas as pd
+from pyproj import Transformer
+from shapely import wkt as shapely_wkt
+from shapely.ops import transform as shp_transform
 from sqlalchemy import Column, Integer, Float, String, BigInteger, DateTime, func, Text, UniqueConstraint, Index
 
+from database_tables.enrichment_table import EnrichmentTable
+from database_tables.mapping_table import MappingTable
 from database_tables.staging_table import StagingTable
 from main_core.data_source_abc_impl import DataSourceABCImpl
 
@@ -31,20 +37,77 @@ class PleasantStagingTable(StagingTable):
     lane_id = Column(String, nullable=True, index=True)
     edge_id = Column(String, nullable=True, index=True)
     geometry = Column(Text, nullable=True)
+    geometry_25833 = Column(Geometry("Linestring", srid=25833), nullable=True)
     join_status = Column(String, nullable=False, default="matched")
 
     created_at = Column(DateTime(timezone=True), default=func.now())
     __table_args__ = (
         UniqueConstraint("connection_id", "interval_start", "interval_end"),
-        Index(
-            None,
-            "geometry",
-            postgresql_using="gist"
-        )
+        Index(None, "geometry_25833", postgresql_using="gist"),
+
+    )
+
+
+class PleasantMappingTable(MappingTable):
+    __tablename__ = "pleasant_mapping"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    connection_id = Column(String, nullable=True, index=True)
+    distance_m = Column(Float, nullable=True)
+
+
+class PleasantEnrichmentTable(EnrichmentTable):
+    __tablename__ = "pleasant_enrichment"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    connection_id = Column(String, nullable=False, index=True)
+    interval_start = Column(BigInteger, nullable=True)
+    interval_end = Column(BigInteger, nullable=True)
+
+    avg_temporal_mean_speed = Column(Float, nullable=True)
+    avg_spatial_mean_speed = Column(Float, nullable=True)
+    avg_naive_mean_speed = Column(Float, nullable=True)
+    avg_speed_performance_index = Column(Float, nullable=True)
+    sample_count = Column(Integer, nullable=True)
+
+    lane_id = Column(String, nullable=True, index=True)
+    edge_id = Column(String, nullable=True, index=True)
+    geometry_25833 = Column(Geometry("GEOMETRY", srid=25833), nullable=True)
+    join_status = Column(String, nullable=False, default="matched")
+
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    __table_args__ = (
+        UniqueConstraint("connection_id", "interval_start", "interval_end"),
+        Index(None, "geometry_25833", postgresql_using="gist"),
     )
 
 
 class PleasantBicyclingMapper(DataSourceABCImpl):
+    _to_25833 = Transformer.from_crs(4326, 25833, always_xy=True).transform
+
+    def mapping_db_query(self) -> None | str:
+        enrichment = self.data_source_config.storage.enrichment
+        mapping = self.data_source_config.mapping
+        base = self.data_source_config.mapping.base_table
+        query = f"""
+                           INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, connection_id, distance_m)
+                           SELECT 
+                       w.id as way_id,
+                       o.id as connection_id,
+                       ST_Distance(w.geometry_25833, o.geometry_25833) AS distance
+                   FROM {base.table_schema}.{base.table_name} w
+                   JOIN LATERAL (
+                       SELECT id,lane_id, geometry_25833
+                       FROM {enrichment.table_schema}.{enrichment.table_name}
+                       WHERE ST_DWithin(w.geometry_25833, geometry_25833, 20)
+                       ORDER BY w.geometry_25833 <-> geometry_25833
+                       LIMIT 1
+                   ) o ON true;
+                   """
+
+        return query
+
     @staticmethod
     def _normalize_connection_id(value) -> str | None:
         if value is None:
@@ -71,6 +134,16 @@ class PleasantBicyclingMapper(DataSourceABCImpl):
         if isinstance(value, float) and math.isnan(value):
             return None
         return float(value)
+
+    def _to_ewkt_25833(self, geom_wkt: str | None) -> str | None:
+        if not geom_wkt:
+            return None
+        try:
+            geom = shapely_wkt.loads(geom_wkt)
+            geom_25833 = shp_transform(self._to_25833, geom)
+            return f"SRID=25833;{geom_25833.wkt}"
+        except Exception:
+            return None
 
     def _read_lanes_dataframe(self, lanes_path: Path) -> pd.DataFrame:
         if gpd is not None:
@@ -184,6 +257,7 @@ class PleasantBicyclingMapper(DataSourceABCImpl):
                 "lane_id": row.get("lane_id"),
                 "edge_id": row.get("edge_id"),
                 "geometry": row.get("geometry_wkt"),
+                "geometry_25833": self._to_ewkt_25833(row.get("geometry_wkt")),
                 "join_status": status_map.get(row.get("_merge"), "unknown"),
             }
             records.append(cleaned)

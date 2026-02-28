@@ -104,11 +104,11 @@ class DataSourceABCImpl(DataSourceABC):
 
     def create_enrichment_tables(self, table_name: str, schema: str, force_create: bool):
         self.db.create_table_if_not_exist(table_name, table_schema=schema or None,
-                                          force_create=force_create, create_without_indexes=False)
+                                          force_create=force_create, create_without_indexes=True)
 
     def create_mapping_tables(self, table_name: str, schema: str, force_create: bool):
         self.db.create_table_if_not_exist(table_name, table_schema=schema or None,
-                                          force_create=force_create, create_without_indexes=False)
+                                          force_create=force_create, create_without_indexes=True)
 
     def check_before_update(self) -> bool:
         """
@@ -589,10 +589,13 @@ class DataSourceABCImpl(DataSourceABC):
     def finalize_after_file_processing(self):
         self.post_database_processing()
         sync_result = self.sync_raw_to_staging()
+        self.create_indexes_for_table("staging")
         self.execute_on_staging()
         self.sync_staging_to_enrichment()
+        self.create_indexes_for_table("enrichment")
         self.execute_on_enrichment()
         self.map_to_base()
+        self.create_indexes_for_table("mapping")
         self.after_datasource_success()
         self.cleanup_after_finalize(sync_result)
 
@@ -602,7 +605,6 @@ class DataSourceABCImpl(DataSourceABC):
     def cleanup_after_finalize(self, sync_result: dict | None):
         backup_raw = not (sync_result or {}).get("success")
         self.clean_raw_staging_table(backup_raw)
-        self.recreate_table_indexes()
 
     def on_run_error(self, error: Exception):
         self.logger.error(f"Error occurred in run {error}")
@@ -697,6 +699,30 @@ class DataSourceABCImpl(DataSourceABC):
             if self.data_source_config.mapping.table_name and self.data_source_config.mapping.enable:
                 self.db.create_indexes(self.data_source_config.mapping.table_name,
                                        self.data_source_config.mapping.table_schema)
+
+    def create_indexes_for_table(self, table_kind: str):
+        if self.db is None or not self.data_source_config.storage.persistent:
+            return
+
+        try:
+            if table_kind == "staging" and self.data_source_config.storage.staging:
+                table_name = self.data_source_config.storage.staging.table_name
+                table_schema = self.data_source_config.storage.staging.table_schema
+            elif table_kind == "enrichment" and self.data_source_config.storage.enrichment:
+                table_name = self.data_source_config.storage.enrichment.table_name
+                table_schema = self.data_source_config.storage.enrichment.table_schema
+            elif table_kind == "mapping" and self.data_source_config.mapping.enable and self.data_source_config.mapping.table_name:
+                table_name = self.data_source_config.mapping.table_name
+                table_schema = self.data_source_config.mapping.table_schema
+            else:
+                return
+
+            # Indexes are deferred when table is created with create_without_indexes=True.
+            # Only create if currently tracked as deferred.
+            if table_name in getattr(self.db, "table_index_map", {}):
+                self.db.create_indexes(table_name, table_schema)
+        except Exception as e:
+            self.logger.error(f"Failed creating {table_kind} indexes for datasource {self.data_source_name}: {e}")
 
     def post_filter_processing_save_data(self, conf, data):
         file_handler = FileHandler(conf.destination)

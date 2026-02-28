@@ -103,6 +103,7 @@ class ElevationMapper(DataSourceABCImpl):
 
     def sync_staging_to_enrichment(self):
         return
+
     def mapping_db_query(self) -> str:
         self.logger.info("Mapping Elevation to links (insert into mapping table)")
 
