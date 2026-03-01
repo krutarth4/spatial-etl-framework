@@ -84,3 +84,110 @@ NOTE: Alternatively use Imposum 3 as it is way faster and effecient
 # For osmium CLi tool -> to extract a small area from berlin osm file
 
 `osmium extract -b 13.30760,52.50644,13.33860,52.51802 --strategy=complete_ways -o ernst_extract.osm berlin.osm`
+
+
+## Datasource `run()` ETL flow
+
+Source: `main_core/data_source_abc_impl.py`
+
+### Core process stages
+
+1. Start run timer and mark datasource run as started in metadata.
+2. Extract input file paths from source config (`single` or `multi` fetch mode, metadata-aware download skip).
+3. Stop early if no input files are available.
+4. Create/prepare persistence tables (staging, enrichment, mapping, raw staging clone).
+5. Process files in parallel (threadpool):
+   - transform each file (read -> pre/post filter hooks -> filter),
+   - load transformed data to raw staging.
+6. Finalize database pipeline:
+   - sync raw staging -> staging,
+   - run staging SQL hook,
+   - sync staging -> enrichment,
+   - run enrichment SQL hook,
+   - run mapping strategy to base (if enabled),
+   - trigger materialized view refresh flow,
+   - cleanup raw staging table.
+7. Mark metadata run as finished (success/failure), run end cleanup hook, return job response.
+
+### Sequence diagram
+
+```mermaid
+sequenceDiagram
+    participant S as Scheduler/Caller
+    participant D as DataSourceABCImpl.run()
+    participant M as metadata_service
+    participant H as HttpHandler/FileHandler
+    participant T as ThreadPool (process_file)
+    participant DB as Database
+    participant BG as BaseGraph/Mapping
+    participant MV as MaterializedViewManager
+
+    S->>D: run()
+    D->>D: start_execution()
+    D->>M: mark_run_started()
+
+    D->>D: execute_run_pipeline()
+    D->>D: extract()
+    D->>D: source()
+
+    alt SINGLE mode
+        D->>H: metadata check (remote vs saved)
+        alt changed
+            D->>H: download file
+        else unchanged
+            D->>H: resolve latest saved local file
+        end
+    else MULTI mode
+        loop each param/url variant
+            D->>H: metadata check
+            alt changed
+                D->>H: download variant file
+            else unchanged
+                D->>H: use latest saved variant file
+            end
+        end
+    end
+
+    D->>M: update_runtime_file_paths(paths)
+
+    alt no paths
+        D->>D: run_job_response("No files available")
+    else has paths
+        D->>DB: create_data_tables() + raw_staging clone
+        D->>T: run_threadpool_file_processing(paths)
+
+        par each file path
+            T->>D: process_file(path)
+            D->>D: transform(path)
+            D->>H: read_files()
+            D->>D: before/pre/source_filter/post/after hooks
+            alt transformed_data exists
+                D->>DB: bulk_insert(raw_staging, data)
+            else empty
+                D->>D: skip load
+            end
+        end
+
+        D->>DB: post_database_processing()
+        D->>DB: sync raw_staging -> staging
+        D->>DB: create staging indexes (if deferred)
+        D->>DB: execute_on_staging() SQL hook
+        D->>DB: sync staging -> enrichment
+        D->>DB: create enrichment indexes (if deferred)
+        D->>DB: execute_on_enrichment() SQL hook
+        D->>BG: map_to_base() / execute mapping strategy
+        D->>DB: create mapping indexes (if deferred)
+        D->>MV: trigger materialized views
+        D->>DB: clean_raw_staging_table(backup_if_sync_failed)
+
+        D->>D: run_job_response("Job finished Successfully !!!")
+    end
+
+    alt exception anywhere in run pipeline
+        D->>D: on_run_error()
+        D->>D: run_job_response("Job failed")
+    end
+
+    D->>M: mark_run_finished(success, message)
+    D->>D: run_end_cleanup(success/error)
+```
