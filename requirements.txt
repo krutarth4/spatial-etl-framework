@@ -24,3 +24,4 @@ typing_extensions==4.15.0
 tzlocal==5.3.1
 uvicorn==0.38.0
 psycopg[binary]==3.2.12
+pyarrow
