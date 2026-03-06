@@ -7,7 +7,7 @@
 ### To change the file format from pbf to osm and the tool described to do it.
 functions in postgis or upload information directly in POSTGIS with GDAL
 
-Follow the steps [currently used for Elevation mapper]
+Follow the steps [currently used for Elevation mapper] has been replaced with local python code
 ```aiignore
 
 ALTER DATABASE <DB_name>
