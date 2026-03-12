@@ -1,5 +1,10 @@
 # Docker container for postgis extension
 
+## Project docs
+
+1. [Configuration README](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/docs/config-README.md)
+2. [Mapper README](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/docs/mapper-README.md)
+
 * TODO: add the hstore, postgis extension to docker container at start
 * TODO: Add for the command line osm2pgrouting
 
