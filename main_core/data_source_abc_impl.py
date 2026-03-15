@@ -72,13 +72,15 @@ class DataSourceABCImpl(DataSourceABC):
         self.raw_staging_schema = None
         self._last_fetch_performed_download: bool | None = None
         self._register_datasource_metadata()
+        self.scheduler = scheduler_core
 
-        if scheduler_core is not None:
-            self.scheduler = scheduler_core
+    def execute(self):
+        if self.scheduler is not None:
             self.create_job()
-        else:
-            self.logger.debug(f"No scheduler found, using default setting")
-            self.run()
+            return
+
+        self.logger.debug("No scheduler found, executing datasource directly")
+        self.run()
 
     def create_data_tables(self):
         if self.data_source_config.storage.persistent and self.db is not None:
