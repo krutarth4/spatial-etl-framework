@@ -12,21 +12,6 @@ from log_manager.logger_manager import LoggerManager
 from main_core.core_config import CoreConfig
 
 
-#
-# class JobConfigurationDTO:
-#     func: Any
-#     trigger = None
-#     args = None
-#     kwargs = None
-#     id = None
-#     name = None
-#     misfire_grace_time = undefined
-#     coalesce = undefined,
-#     max_instances = u
-#     next_run_time = undefined
-#     jobstore = "default",
-#     executor = "default",
-#     replace_existing = False,
 
 @dataclass
 class SchedulerConfDTO:
@@ -98,8 +83,9 @@ class InitScheduler:
             self.logger.error("Scheduler Stopped")
 
     def add_job(self, job_conf: dict, job_name: str):
-        self.scheduler.add_job(**job_conf, id=job_name, coalesce=True, misfire_grace_time=10)
-        self.logger.info("Job added to scheduler")
+        job = self.scheduler.add_job(**job_conf, id=job_name, coalesce=True, misfire_grace_time=10)
+        next_run_time = job.next_run_time.isoformat() if job.next_run_time else "No next run scheduled"
+        self.logger.info(f"Job '{job_name}' added to scheduler. Next run: {next_run_time}")
 
     @staticmethod
     def my_listener(event):
@@ -150,4 +136,3 @@ if __name__ == "__main__":
     scheduler.scheduler.add_job(job2, 'date', run_date=run_time)
 
     scheduler.run_forever()
-
