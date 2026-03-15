@@ -59,7 +59,27 @@ async def health():
 def _get_debug_service() -> DebugMapperService:
     if _pipeline_app is None:
         raise HTTPException(status_code=503, detail="Pipeline is not initialized yet.")
-    return DebugMapperService(_pipeline_app.get_all_datasources(), _pipeline_app.db_instance)
+    metadata_schema = None
+    if _pipeline_app.metadata_service is not None and _pipeline_app.metadata_service.metadata_conf is not None:
+        metadata_schema = _pipeline_app.metadata_service.metadata_conf.table_schema
+    return DebugMapperService(_pipeline_app.get_all_datasources(), _pipeline_app.db_instance, metadata_schema)
+
+
+@app.get("/debug/datasources")
+async def debug_datasources():
+    service = _get_debug_service()
+    return {
+        "datasources": service.list_datasources(),
+    }
+
+
+@app.get("/debug/datasources/{mapper_endpoint}")
+async def debug_datasource_dashboard(mapper_endpoint: str):
+    try:
+        service = _get_debug_service()
+        return service.fetch_datasource_dashboard(mapper_endpoint=mapper_endpoint)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/debug/mappers")

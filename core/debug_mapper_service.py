@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.sql import text
 
 from database.db_instancce import DbInstance
+from metadata.data_source_metadata_repository import DataSourceMetadataRepository
 
 
 class TableTarget:
@@ -33,9 +34,10 @@ class DebugMapperService:
     3. path fragment from datasource.source.url (e.g. "/weather")
     """
 
-    def __init__(self, datasources: list[dict] | None, db: DbInstance | None):
+    def __init__(self, datasources: list[dict] | None, db: DbInstance | None, metadata_schema: str | None = None):
         self.datasources = datasources or []
         self.db = db
+        self.metadata_schema = metadata_schema
         self._endpoint_index = self._build_endpoint_index(self.datasources)
 
     def list_endpoints(self) -> list[dict[str, Any]]:
@@ -47,10 +49,57 @@ class DebugMapperService:
                     "name": ds.get("name"),
                     "class_name": ds.get("class_name"),
                     "enabled": ds.get("enable", True),
+                    "primary_endpoint": self._primary_endpoint_key(ds),
                     "endpoint_keys": endpoint_keys,
                 }
             )
         return items
+
+    def list_datasources(self) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for ds in self.datasources:
+            source_name = ds.get("name")
+            items.append(
+                {
+                    "name": source_name,
+                    "description": ds.get("description"),
+                    "class_name": ds.get("class_name"),
+                    "enabled": ds.get("enable", True),
+                    "data_type": ds.get("data_type"),
+                    "primary_endpoint": self._primary_endpoint_key(ds),
+                    "endpoint_keys": sorted(self._extract_endpoint_keys(ds)),
+                    "source": {
+                        "fetch": (ds.get("source") or {}).get("fetch"),
+                        "url": (ds.get("source") or {}).get("url"),
+                    },
+                    "metadata": self._fetch_metadata_row(source_name),
+                    "tables": self._build_table_overview(ds),
+                }
+            )
+        return items
+
+    def fetch_datasource_dashboard(self, mapper_endpoint: str) -> dict[str, Any]:
+        ds = self._resolve_datasource(mapper_endpoint)
+        source_name = ds.get("name")
+        metadata = self._fetch_metadata_row(source_name)
+
+        return {
+            "mapper_endpoint": mapper_endpoint,
+            "datasource": {
+                "name": source_name,
+                "description": ds.get("description"),
+                "class_name": ds.get("class_name"),
+                "enabled": ds.get("enable", True),
+                "data_type": ds.get("data_type"),
+                "primary_endpoint": self._primary_endpoint_key(ds),
+                "endpoint_keys": sorted(self._extract_endpoint_keys(ds)),
+                "source": ds.get("source") or {},
+                "storage": ds.get("storage") or {},
+                "mapping": ds.get("mapping") or {},
+            },
+            "metadata": metadata,
+            "tables": self._build_table_overview(ds),
+        }
 
     def fetch(
         self,
@@ -280,6 +329,72 @@ class DebugMapperService:
                 "note": "Use way_id to connect mapping rows to base table geometry for map visualization.",
             },
         }
+
+    def _build_table_overview(self, ds: dict[str, Any]) -> dict[str, Any]:
+        storage = ds.get("storage") or {}
+        return {
+            TableTarget.STAGING: self._table_status(storage.get("staging")),
+            TableTarget.ENRICHMENT: self._table_status(storage.get("enrichment")),
+            TableTarget.MAPPING: self._table_status((ds.get("mapping") or {})),
+        }
+
+    def _table_status(self, table_ref: dict[str, Any] | None) -> dict[str, Any]:
+        table_ref = table_ref or {}
+        table_name = table_ref.get("table_name")
+        table_schema = table_ref.get("table_schema")
+        enabled = table_ref.get("enable", True)
+        exists = False
+        row_count = None
+
+        if self.db is not None and table_name and table_schema:
+            exists = self.db.table_exists(table_name, table_schema)
+            if exists:
+                try:
+                    row_count = self.db.get_table_count(table_name, table_schema)
+                except Exception:
+                    row_count = None
+
+        return {
+            "enabled": enabled,
+            "schema": table_schema,
+            "name": table_name,
+            "exists": exists,
+            "row_count": row_count,
+        }
+
+    def _fetch_metadata_row(self, source_key: str | None) -> dict[str, Any] | None:
+        if self.db is None or not source_key:
+            return None
+
+        table = self.db.get_table(DataSourceMetadataRepository.table_name, self.metadata_schema)
+        if table is None or "source_key" not in table.c:
+            return None
+
+        with self.db.session_scope() as session:
+            row = session.execute(
+                select(table).where(table.c.source_key == source_key).limit(1)
+            ).mappings().first()
+
+        return self._to_jsonable(dict(row)) if row is not None else None
+
+    def _primary_endpoint_key(self, ds: dict[str, Any]) -> str | None:
+        debug = ds.get("debug") or {}
+        debug_endpoint = debug.get("endpoint") if isinstance(debug, dict) else None
+        if isinstance(debug_endpoint, str) and debug_endpoint.strip():
+            return debug_endpoint.strip()
+
+        name = ds.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+
+        source_url = (ds.get("source") or {}).get("url")
+        if isinstance(source_url, str) and source_url.strip():
+            path = urlparse(source_url).path.strip("/")
+            if path:
+                return path.split("/")[-1]
+            return source_url.strip()
+
+        return None
 
     def _build_endpoint_index(self, datasources: list[dict]) -> dict[str, dict]:
         index: dict[str, dict] = {}
