@@ -24,6 +24,8 @@ from main_core.core_config import CoreConfig
 from main_core.data_source_abc import DataSourceABC
 from data_config_dtos.data_source_config_dto import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, \
     SourceInputDTO, SourceDTO
+from main_core.mapping_sql_builder import MappingInsertBuilder, MappingInsertSpec, \
+    mapping_select_sql_strategy_registry
 from main_core.mapping_strategy import mapping_strategy_registry
 from main_core.safe_class import safe_class
 from materialized_views.manager import MaterializedViewManager
@@ -117,19 +119,7 @@ class DataSourceABCImpl(DataSourceABC):
         After the fetch define some criteria to check if the new data is available or not , if not then return otherwise continue with the run method as usual
 
         """
-        # get the data from the raw file that we always save / or from the database metadata
 
-        # if same metadta then let it be otherwise continue with the job
-
-        # found_new_data = True
-        # if self.data_source_config.check_before_update:
-        #     if self.db is not None and self.data_source_config.storage.persistent:
-        #         self.logger.info(f"Checking for changes before update {self.data_source_config.name} ......")
-        #         old_data = self.db.fetch_columns_with_limits(self.data_source_config.storage.table_name)
-        #         found_new_data = DataSourceABCImpl.check_before_update_condition(old_data, self.source_result)
-        # else:
-        #     self.logger.warning(f"Check on the file disabled  {self.data_source_config.name}")
-        # return found_new_data
         return True
 
     @staticmethod
@@ -837,6 +827,55 @@ class DataSourceABCImpl(DataSourceABC):
             "basis": str(basis) if basis else None,
         }
 
+    def get_mapping_config(self) -> dict[str, Any]:
+        mapping_conf = getattr(self.data_source_config, "mapping", None)
+        config = getattr(mapping_conf, "config", None) if mapping_conf else None
+        if isinstance(config, dict):
+            return config
+        return {}
+
+    def get_custom_mapping_select_strategy(self):
+        """
+        Override in mapper classes to return a SQL select strategy object implementing:
+        `name` and `build_select(datasource)`.
+        """
+        return None
+
+    def get_mapping_select_strategy(self):
+        custom_strategy = self.get_custom_mapping_select_strategy()
+        if custom_strategy is not None:
+            return custom_strategy
+
+        return mapping_select_sql_strategy_registry.get(self.get_mapping_strategy_type())
+
+    def get_mapping_insert_spec(self) -> MappingInsertSpec | None:
+        insert_conf = self.get_mapping_config().get("insert")
+        if not isinstance(insert_conf, dict):
+            return None
+
+        columns = insert_conf.get("columns") or []
+        conflict_columns = insert_conf.get("conflict_columns")
+        update_columns = insert_conf.get("update_columns")
+
+        return MappingInsertSpec(
+            columns=[str(column) for column in columns],
+            conflict_columns=[str(column) for column in conflict_columns] if conflict_columns else None,
+            update_columns=[str(column) for column in update_columns] if update_columns else None,
+        )
+
+    def build_mapping_db_query(self) -> str | None:
+        select_strategy = self.get_mapping_select_strategy()
+        if select_strategy is None:
+            return None
+
+        select_sql = select_strategy.build_select(self)
+        insert_spec = self.get_mapping_insert_spec()
+        if insert_spec is None:
+            return select_sql
+
+        builder = MappingInsertBuilder()
+        return builder.build_insert(self.data_source_config.mapping, select_sql, insert_spec)
+
     def get_custom_mapping_strategy(self):
         """
         Override in mapper classes to return a custom strategy object implementing:
@@ -853,8 +892,7 @@ class DataSourceABCImpl(DataSourceABC):
         strategy.execute(self)
 
     def mapping_db_query(self) -> None | str:
-        sql_query = None
-        return sql_query
+        return self.build_mapping_db_query()
 
     def execute_on_staging(self):
         query = self.staging_db_query()

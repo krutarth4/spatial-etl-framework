@@ -2,6 +2,7 @@ from geoalchemy2 import Geometry
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint, ForeignKeyConstraint
 
 from core.globalconstants import GlobalConstants
+from main_core.mapping_sql_builder import MappingInsertSpec
 from database_tables.enrichment_table import EnrichmentTable
 from database_tables.mapping_table import MappingTable
 from database_tables.staging_table import StagingTable
@@ -73,50 +74,11 @@ class WeatherStationMapper(DataSourceABCImpl):
               """
 
         return sql
-    def mapping_db_query(self) -> str:
-        self.logger.info("Mapping DWD stations to links (insert into mapping table)")
 
-        base = self.data_source_config.mapping.base_table
-        enrichment = self.data_source_config.storage.enrichment
-        mapping = self.data_source_config.mapping
-
-        sql = f"""
-            INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, dwd_station_id, distance, bearing_degree)
-            SELECT
-                w.id AS way_id,
-                s.dwd_station_id AS dwd_station_id,
-                ST_Distance(
-                    w.geometry::geography,
-                    s.point::geography
-                ) AS distance,
-                MOD(
-                    (DEGREES(
-                      ST_Azimuth(
-                        ST_StartPoint(w.geometry),
-                        ST_EndPoint(w.geometry)
-                      )
-                    ) + 360)::NUMERIC,
-                    360
-                  ) AS bearing_degree
-            FROM {base.table_schema}.{base.table_name} w
-            JOIN LATERAL (
-                SELECT
-                    en.uid,
-                    en.dwd_station_id,
-                    en.point
-                FROM {enrichment.table_schema}.{enrichment.table_name} en
-                ORDER BY
-                    ST_Distance(
-                        w.geometry::geography,
-                        en.point::geography
-                    )
-                LIMIT 1
-            ) s ON TRUE
-            ON CONFLICT (way_id) DO UPDATE SET
-                dwd_station_id = EXCLUDED.dwd_station_id,
-                distance = EXCLUDED.distance,
-                bearing_degree = EXCLUDED.bearing_degree;
-        
-        """
-
-        return sql
+    def get_mapping_insert_spec(self) -> MappingInsertSpec:
+        self.logger.info("Mapping DWD stations to links using strategy-backed SQL builder")
+        return MappingInsertSpec(
+            columns=["way_id", "dwd_station_id", "distance", "bearing_degree"],
+            conflict_columns=["way_id"],
+            update_columns=["dwd_station_id", "distance", "bearing_degree"],
+        )
