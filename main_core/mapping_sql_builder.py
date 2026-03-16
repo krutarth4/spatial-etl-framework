@@ -304,8 +304,8 @@ class IntersectionMappingSelectStrategy(SpatialRelationshipMappingSelectStrategy
 
 
 class NearestStationMappingSelectStrategy:
-    name = "nearest_station"
-    aliases = ("knn",)
+    name = "knn"
+    aliases = ("nearest_station",)
 
     def build_select(self, datasource: "DataSourceABCImpl") -> str:
         base = datasource.data_source_config.mapping.base_table
