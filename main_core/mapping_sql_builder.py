@@ -312,36 +312,36 @@ class NearestStationMappingSelectStrategy:
         enrichment = datasource.data_source_config.storage.enrichment
 
         return f"""
-SELECT
-    w.id AS way_id,
-    s.dwd_station_id AS dwd_station_id,
-    ST_Distance(
-        w.geometry::geography,
-        s.point::geography
-    ) AS distance,
-    MOD(
-        (DEGREES(
-          ST_Azimuth(
-            ST_StartPoint(w.geometry),
-            ST_EndPoint(w.geometry)
-          )
-        ) + 360)::NUMERIC,
-        360
-      ) AS bearing_degree
-FROM {base.table_schema}.{base.table_name} w
-JOIN LATERAL (
-    SELECT
-        en.uid,
-        en.dwd_station_id,
-        en.point
-    FROM {enrichment.table_schema}.{enrichment.table_name} en
-    ORDER BY
-        ST_Distance(
-            w.geometry::geography,
-            en.point::geography
-        )
-    LIMIT 1
-) s ON TRUE
+                SELECT
+                    w.id AS way_id,
+                    s.dwd_station_id AS dwd_station_id,
+                    ST_Distance(
+                        w.geometry::geography,
+                        s.point::geography
+                    ) AS distance,
+                    MOD(
+                        (DEGREES(
+                          ST_Azimuth(
+                            ST_StartPoint(w.geometry),
+                            ST_EndPoint(w.geometry)
+                          )
+                        ) + 360)::NUMERIC,
+                        360
+                      ) AS bearing_degree
+                FROM {base.table_schema}.{base.table_name} w
+                JOIN LATERAL (
+                    SELECT
+                        en.uid,
+                        en.dwd_station_id,
+                        en.point
+                    FROM {enrichment.table_schema}.{enrichment.table_name} en
+                    ORDER BY
+                        ST_Distance(
+                            w.geometry::geography,
+                            en.point::geography
+                        )
+                    LIMIT 1
+                ) s ON TRUE
 """
 
 

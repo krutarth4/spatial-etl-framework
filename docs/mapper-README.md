@@ -200,15 +200,17 @@ These are the main extension points in `DataSourceABCImpl`.
 
 Built-in mapping modes in [data_source_abc_impl.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py):
 
-1. `mapper_sql`
+1. `custom`
 2. `sql_template`
 3. `none`
+4. registry-backed spatial types such as `nearest_neighbour`, `within_distance`, `intersection`, `knn`
 
 Behavior:
 
-1. `mapper_sql`: calls `mapping_db_query()`
+1. `custom`: calls `mapping_db_query()`
 2. `sql_template`: reads `mapping.config.sql` from config and formats placeholders
 3. `none`: skips mapping
+4. registry-backed spatial types: generate SQL from `strategy.type` and `mapping.config`
 
 ## Recommended order when writing a new mapper
 
@@ -221,7 +223,7 @@ Use this order when adding a new datasource mapper:
 5. Define staging and enrichment SQLAlchemy table classes if persistence is enabled.
 6. Add `staging_db_query()` if staging needs normalization SQL.
 7. Add `enrichment_db_query()` if enrichment needs derived columns or geometry logic.
-8. Add `mapping_db_query()` or configure `mapping.strategy.name: sql_template` if mapping to `ways_base` is required.
+8. Add `mapping_db_query()` with `mapping.strategy.type: custom`, or configure `mapping.strategy.type: sql_template` if mapping to `ways_base` is required.
 9. Add `run_end_cleanup()` if files or temporary artifacts must be removed.
 10. Add the datasource block in `config.yaml`.
 11. Enable it only after the table names and mapping strategy are valid.

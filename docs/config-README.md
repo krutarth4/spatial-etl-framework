@@ -282,18 +282,19 @@ Supported strategies in code:
 | `base_table.table_schema` | Target base schema | Any schema |
 | `base_table.column_name` | Base table column to write/use | Any column |
 | `base_table.column_type` | Semantic type hint | Any string |
-| `strategy.name` | Mapping strategy | `mapper_sql`, `sql_template`, `none` |
-| `strategy.type` | Optional strategy variant | Any string |
+| `strategy.type` | Mapping strategy type | `custom`, `sql_template`, `none`, `nearest_neighbour`, `within_distance`, `intersection`, `knn` |
+| `strategy.description` | Human-readable mapping note | Any string |
 | `strategy.link_on.mapping_column` | Mapping-side join column | Any column |
 | `strategy.link_on.base_column` | Base-side join column | Any column |
 | `strategy.link_on.basis` | Join basis metadata | Any string |
-| `config.sql` | SQL template used by `sql_template` strategy | Any SQL string |
+| `config.sql` | SQL template used by `sql_template` type | Any SQL string |
 
 Built-in runtime strategies:
 
-1. `mapper_sql`
+1. `custom`
 2. `sql_template`
 3. `none`
+4. spatial registry types such as `nearest_neighbour`, `within_distance`, `intersection`, `knn`
 
 ### `storage`
 
@@ -340,7 +341,7 @@ These are the main extension points the current code already supports, even if n
 1. `source.fetch: https`
 2. `source.mode: multi` with `expand_params`, `url_template`, or `explicit_url_list`
 3. `job.trigger.type.name: cron`, `date`, `calendar_interval`, `run_once`
-4. `mapping.strategy.name: sql_template`
+4. `mapping.strategy.type: sql_template`
 5. custom mapping strategies via mapper override
 6. custom materialized view handlers via `handler_module` and `handler_class`
 7. local-file datasources by setting `fetch: local` and `file_path`

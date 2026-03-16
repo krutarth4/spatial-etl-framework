@@ -50,13 +50,15 @@ class SourceMultiFetchStrategy(str, Enum):
 
 
 class MappingStrategyDTO(str, Enum):
-    EXPAND_PARAMS = "expand_params"
-    URL_TEMPLATE = "url_template"
-    EXPLICIT_URL_LIST = "explicit_url_list"
-    MAPPER_SQL = "mapper_sql"
+    CUSTOM = "custom"
     SQL_TEMPLATE = "sql_template"
     NONE = "none"
-    CUSTOM = "custom"
+    NEAREST_NEIGHBOUR = "nearest_neighbour"
+    WITHIN_DISTANCE = "within_distance"
+    INTERSECTION = "intersection"
+    KNN = "knn"
+    NEAREST_STATION = "nearest_station"
+    MAPPER_SQL = "mapper_sql"
 
     @classmethod
     def has_value(cls, value):
@@ -112,8 +114,8 @@ class MappingStrategyLinkDTO:
 
 @dataclass
 class MappingStrategyConfigDTO:
-    name: Optional[Union[MappingStrategyDTO, str]] = None
     type: Optional[str] = None
+    description: Optional[str] = None
     link_on: Optional[MappingStrategyLinkDTO] = None
 
 

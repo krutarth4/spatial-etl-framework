@@ -774,32 +774,24 @@ class DataSourceABCImpl(DataSourceABC):
         query = self.mapping_db_query()
         self.execute_query("Mapping", query)
 
-    def get_mapping_strategy_name(self) -> str | None:
+    def get_mapping_strategy_type(self) -> str | None:
         mapping_conf = getattr(self.data_source_config, "mapping", None)
         strategy = getattr(mapping_conf, "strategy", None)
         if strategy is None:
             return None
         if isinstance(strategy, str):
             return strategy
-        name = getattr(strategy, "name", None)
-        if name is not None:
-            return str(name)
-        # Backward fallback for dict-like payloads if any mapper bypasses DTO conversion.
-        if isinstance(strategy, dict):
-            raw_name = strategy.get("name")
-            return str(raw_name) if raw_name else None
-        return str(strategy)
-
-    def get_mapping_strategy_type(self) -> str | None:
-        mapping_conf = getattr(self.data_source_config, "mapping", None)
-        strategy = getattr(mapping_conf, "strategy", None)
-        if strategy is None:
-            return None
         if isinstance(strategy, dict):
             value = strategy.get("type")
-            return str(value) if value else None
+            if value:
+                return str(value)
+            legacy_value = strategy.get("name")
+            return str(legacy_value) if legacy_value else None
         value = getattr(strategy, "type", None)
-        return str(value) if value else None
+        if value is not None:
+            return str(value)
+        legacy_value = getattr(strategy, "name", None)
+        return str(legacy_value) if legacy_value else None
 
     def get_mapping_strategy_link_fields(self) -> dict[str, str | None]:
         mapping_conf = getattr(self.data_source_config, "mapping", None)
@@ -917,26 +909,34 @@ class DataSourceABCImpl(DataSourceABC):
         }
 
     def execute_mapping_strategy(self):
-        strategy_name = (self.get_mapping_strategy_name() or "mapper_sql").lower()
+        strategy_type = (self.get_mapping_strategy_type() or "custom").lower()
         self.logger.info(
-            f"Executing mapping strategy '{strategy_name}' for datasource {self.data_source_name}"
+            f"Executing mapping strategy type '{strategy_type}' for datasource {self.data_source_name}"
         )
 
-        if strategy_name == "none":
-            self.logger.info("Mapping strategy 'none': skipping mapping step")
+        if strategy_type == "none":
+            self.logger.info("Mapping strategy type 'none': skipping mapping step")
             return
 
-        if strategy_name == "sql_template":
+        if strategy_type == "sql_template":
             self.execute_mapping_sql_template()
             return
 
-        if strategy_name != "mapper_sql":
+        if strategy_type in {"custom", "mapper_sql"}:
+            self.map_to_links()
+            return
+
+        select_strategy = self.get_mapping_select_strategy()
+        if select_strategy is None:
             self.logger.warning(
-                f"Unknown mapping strategy '{strategy_name}' for datasource "
+                f"Unknown mapping strategy type '{strategy_type}' for datasource "
                 f"{self.data_source_name}. Falling back to mapper SQL."
             )
+            self.map_to_links()
+            return
 
-        self.map_to_links()
+        query = self.build_mapping_db_query()
+        self.execute_query("Mapping", query)
 
     def mapping_db_query(self) -> None | str:
         return self.build_mapping_db_query()
