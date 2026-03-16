@@ -187,15 +187,7 @@ class ElevationPythonMapper(DataSourceABCImpl):
                 pts = [clipped.interpolate(d) for d in distances]
                 coords = np.array([[p.x, p.y] for p in pts], dtype=np.float32)
 
-            # build sample points (utm)
-            # pts = [clipped.interpolate(d) for d in distances]
-            # coords = np.array([[p.x, p.y] for p in pts], dtype=np.float32)
 
-            # if len(coords) == 0:
-            #     self._missing_inside.add(way_id)
-            #     continue
-
-        # ➕ DEBUG: Single-sample detection
             if len(coords) == 1:
                 self._single_sample.add(way_id)
                 coords = np.array([

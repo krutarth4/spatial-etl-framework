@@ -55,6 +55,7 @@ class WeatherStationMapper(DataSourceABCImpl):
 
         self.logger.info(f"Filtered {len(data)} → {len(filtered)} rows")
         return filtered
+
     def enrichment_db_query(self) -> None | str:
         staging = self.data_source_config.storage.staging
         enrichment = self.data_source_config.storage.enrichment
