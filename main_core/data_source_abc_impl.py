@@ -26,7 +26,6 @@ from data_config_dtos.data_source_config_dto import DataSourceDTO, SourceFetchMo
     SourceInputDTO, SourceDTO
 from main_core.mapping_sql_builder import MappingInsertBuilder, MappingInsertSpec, \
     mapping_select_sql_strategy_registry
-from main_core.mapping_strategy import mapping_strategy_registry
 from main_core.safe_class import safe_class
 from materialized_views.manager import MaterializedViewManager
 from utils.execution_time import format_duration
@@ -876,20 +875,68 @@ class DataSourceABCImpl(DataSourceABC):
         builder = MappingInsertBuilder()
         return builder.build_insert(self.data_source_config.mapping, select_sql, insert_spec)
 
-    def get_custom_mapping_strategy(self):
-        """
-        Override in mapper classes to return a custom strategy object implementing:
-        `name` and `execute(datasource)`.
-        """
-        return None
+    def execute_mapping_sql_template(self):
+        mapping_conf = getattr(self.data_source_config, "mapping", None)
+        config = getattr(mapping_conf, "config", None) or {}
+        sql = config.get("sql")
+        if not sql:
+            raise ValueError(
+                f"Mapping strategy 'sql_template' requires mapping.config.sql "
+                f"for datasource {self.data_source_name}"
+            )
+
+        try:
+            sql = sql.format(**self.get_mapping_template_context())
+        except Exception:
+            pass
+
+        self.execute_query("Mapping", sql)
+
+    def get_mapping_template_context(self) -> dict[str, str | None]:
+        mapping = self.data_source_config.mapping
+        storage = self.data_source_config.storage
+        base = mapping.base_table
+        link_fields = self.get_mapping_strategy_link_fields()
+        strategy_type = self.get_mapping_strategy_type()
+
+        return {
+            "datasource_name": self.data_source_name,
+            "mapping_table": mapping.table_name,
+            "mapping_schema": mapping.table_schema,
+            "staging_table": storage.staging.table_name,
+            "staging_schema": storage.staging.table_schema,
+            "enrichment_table": storage.enrichment.table_name,
+            "enrichment_schema": storage.enrichment.table_schema,
+            "base_table": base.table_name,
+            "base_schema": base.table_schema,
+            "joins_on": mapping.joins_on,
+            "strategy_type": strategy_type,
+            "link_mapping_column": link_fields.get("mapping_column"),
+            "link_base_column": link_fields.get("base_column"),
+            "link_basis": link_fields.get("basis"),
+        }
 
     def execute_mapping_strategy(self):
-        strategy = mapping_strategy_registry.resolve(self)
+        strategy_name = (self.get_mapping_strategy_name() or "mapper_sql").lower()
         self.logger.info(
-            f"Executing mapping strategy '{getattr(strategy, 'name', type(strategy).__name__)}' "
-            f"for datasource {self.data_source_name}"
+            f"Executing mapping strategy '{strategy_name}' for datasource {self.data_source_name}"
         )
-        strategy.execute(self)
+
+        if strategy_name == "none":
+            self.logger.info("Mapping strategy 'none': skipping mapping step")
+            return
+
+        if strategy_name == "sql_template":
+            self.execute_mapping_sql_template()
+            return
+
+        if strategy_name != "mapper_sql":
+            self.logger.warning(
+                f"Unknown mapping strategy '{strategy_name}' for datasource "
+                f"{self.data_source_name}. Falling back to mapper SQL."
+            )
+
+        self.map_to_links()
 
     def mapping_db_query(self) -> None | str:
         return self.build_mapping_db_query()

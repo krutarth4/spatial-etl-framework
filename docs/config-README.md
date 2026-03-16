@@ -282,7 +282,7 @@ Supported strategies in code:
 | `base_table.table_schema` | Target base schema | Any schema |
 | `base_table.column_name` | Base table column to write/use | Any column |
 | `base_table.column_type` | Semantic type hint | Any string |
-| `strategy.name` | Mapping strategy | `mapper_sql`, `sql_template`, `none`, custom |
+| `strategy.name` | Mapping strategy | `mapper_sql`, `sql_template`, `none` |
 | `strategy.type` | Optional strategy variant | Any string |
 | `strategy.link_on.mapping_column` | Mapping-side join column | Any column |
 | `strategy.link_on.base_column` | Base-side join column | Any column |
@@ -294,8 +294,6 @@ Built-in runtime strategies:
 1. `mapper_sql`
 2. `sql_template`
 3. `none`
-
-Custom strategies are also possible by overriding `get_custom_mapping_strategy()` in the mapper class.
 
 ### `storage`
 

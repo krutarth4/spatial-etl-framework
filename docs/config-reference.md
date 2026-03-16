@@ -242,14 +242,14 @@ Optional processing hooks in DTO:
 | `base_table.table_schema` | string | Schema | Base graph schema. |
 | `base_table.column_name` | string | Column name | Column to update/use in base. |
 | `base_table.column_type` | string | Any type label | Mapper-defined semantic type. |
-| `strategy.name` | string | `mapper_sql`, `sql_template`, `none`, or custom | Runtime mapping strategy name. |
+| `strategy.name` | string | `mapper_sql`, `sql_template`, `none` | Runtime mapping strategy name. |
 | `strategy.type` | string | Any | Optional strategy variant detail. |
 | `strategy.link_on.mapping_column` | string | Column | Mapping-side column for strategy. |
 | `strategy.link_on.base_column` | string | Column | Base-side column for strategy. |
 | `strategy.link_on.basis` | string | Any, e.g. `nearest_by_distance` | Strategy basis hint. |
 | `config.sql` | string | SQL | Required when `strategy.name: sql_template`. |
 
-Note on enum vs runtime: `MappingStrategyDTO` includes extra values (`expand_params`, `url_template`, `explicit_url_list`) but runtime registry resolves mapping strategies by name and currently registers `mapper_sql`, `sql_template`, and `none` by default.
+Note on enum vs runtime: `MappingStrategyDTO` includes extra values (`expand_params`, `url_template`, `explicit_url_list`) but runtime mapping currently handles `mapper_sql`, `sql_template`, and `none`.
 
 ### `storage` block
 
@@ -363,4 +363,3 @@ datasources:
         table_schema: test_osm_base_graph
         table_class: ExampleEnrichmentTable
 ```
-

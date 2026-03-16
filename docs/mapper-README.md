@@ -6,7 +6,7 @@ Main files:
 
 1. [main_core/data_source_mapper.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_mapper.py)
 2. [main_core/data_source_abc_impl.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py)
-3. [main_core/mapping_strategy.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/mapping_strategy.py)
+3. [main_core/data_source_abc_impl.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py)
 4. [main_core/data_source_abc.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc.py)
 
 ## How mapper loading works
@@ -184,8 +184,6 @@ These are the main extension points in `DataSourceABCImpl`.
 | Function | When to override | What it should do |
 |---|---|---|
 | `mapping_db_query(self)` | Default mapping strategy is SQL from mapper | Return mapping SQL |
-| `get_custom_mapping_strategy(self)` | Built-in strategies are not enough | Return an object with `name` and `execute(datasource)` |
-
 ### Run-level hooks
 
 | Function | When to override | What it should do |
@@ -200,7 +198,7 @@ These are the main extension points in `DataSourceABCImpl`.
 
 ## Mapping strategies
 
-Built-in mapping strategies from [main_core/mapping_strategy.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/mapping_strategy.py):
+Built-in mapping modes in [data_source_abc_impl.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py):
 
 1. `mapper_sql`
 2. `sql_template`
@@ -211,7 +209,6 @@ Behavior:
 1. `mapper_sql`: calls `mapping_db_query()`
 2. `sql_template`: reads `mapping.config.sql` from config and formats placeholders
 3. `none`: skips mapping
-4. custom strategy: returned by `get_custom_mapping_strategy()`
 
 ## Recommended order when writing a new mapper
 
