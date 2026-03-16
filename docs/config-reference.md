@@ -243,11 +243,27 @@ Optional processing hooks in DTO:
 | `base_table.column_name` | string | Column name | Column to update/use in base. |
 | `base_table.column_type` | string | Any type label | Mapper-defined semantic type. |
 | `strategy.name` | string | `mapper_sql`, `sql_template`, `none` | Runtime mapping strategy name. |
-| `strategy.type` | string | Any | Optional strategy variant detail. |
+| `strategy.type` | string | Any, e.g. `nearest_neighbour`, `within_distance`, `intersection`, `nearest_station`, `knn` | Optional strategy variant detail. |
 | `strategy.link_on.mapping_column` | string | Column | Mapping-side column for strategy. |
 | `strategy.link_on.base_column` | string | Column | Base-side column for strategy. |
 | `strategy.link_on.basis` | string | Any, e.g. `nearest_by_distance` | Strategy basis hint. |
 | `config.sql` | string | SQL | Required when `strategy.name: sql_template`. |
+
+Spatial mapper helpers when `strategy.name: mapper_sql` and `strategy.type` is one of the built-in spatial variants:
+
+| Key | Type | What it is for |
+|---|---|---|
+| `config.base_id_column` | string | Base-table id column to expose as `way_id`. Default: `id`. |
+| `config.base_geometry_column` | string | Base geometry column name. Default: `geometry`. |
+| `config.enrichment_geometry_column` | string | Enrichment geometry column name. Default: `geometry`. |
+| `config.distance_alias` | string | Output alias for distance field. Default: `distance`. |
+| `config.distance_sql` | string | Optional custom distance expression using `{base_geometry}` and `{enrichment_geometry}` placeholders. |
+| `config.max_distance` | number/string | Required for `within_distance` unless `config.join_condition_sql` is set. |
+| `config.join_condition_sql` | string | Optional custom join predicate using `{base_geometry}`, `{enrichment_geometry}`, and `{max_distance}`. |
+| `config.order_by_sql` | string | Optional nearest-neighbour ordering expression. |
+| `config.base_filter_sql` | string | Optional base-table `WHERE` clause, with or without the `WHERE` keyword. |
+| `config.enrichment_filter_sql` | string | Optional enrichment-side filter, with or without the `WHERE` keyword. |
+| `config.select_columns` | list | Extra output columns as raw SQL strings or `{ expression, alias }` objects. Strings and expressions may use `{base_alias}`, `{enrichment_alias}`, `{base_geometry_column}`, `{enrichment_geometry_column}`, `{distance_sql}`. |
 
 Note on enum vs runtime: `MappingStrategyDTO` includes extra values (`expand_params`, `url_template`, `explicit_url_list`) but runtime mapping currently handles `mapper_sql`, `sql_template`, and `none`.
 

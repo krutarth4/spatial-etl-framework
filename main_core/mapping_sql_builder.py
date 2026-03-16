@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from data_config_dtos.data_source_config_dto import MappingDTO
@@ -56,8 +56,256 @@ class MappingInsertBuilder:
         )
 
 
+class SpatialRelationshipMappingSelectStrategy:
+    name = ""
+    aliases: tuple[str, ...] = ()
+
+    def build_select(self, datasource: "DataSourceABCImpl") -> str:
+        base = datasource.data_source_config.mapping.base_table
+        enrichment = datasource.data_source_config.storage.enrichment
+        link_fields = datasource.get_mapping_strategy_link_fields()
+        config = datasource.get_mapping_config()
+
+        base_alias = "b"
+        enrichment_alias = "e"
+        base_id_column = str(config.get("base_id_column") or "id")
+        base_geometry_column = str(config.get("base_geometry_column") or "geometry")
+        enrichment_geometry_column = str(config.get("enrichment_geometry_column") or "geometry")
+        mapping_column = link_fields.get("mapping_column") or config.get("mapping_column")
+
+        base_geometry_sql = f"{base_alias}.{base_geometry_column}"
+        enrichment_geometry_sql = f"{enrichment_alias}.{enrichment_geometry_column}"
+        distance_alias = str(config.get("distance_alias") or "distance")
+        distance_sql = self._resolve_distance_sql(
+            config,
+            base_geometry_sql=base_geometry_sql,
+            enrichment_geometry_sql=enrichment_geometry_sql,
+        )
+
+        select_columns = [f"{base_alias}.{base_id_column} AS way_id"]
+        if mapping_column:
+            select_columns.append(f"{enrichment_alias}.{mapping_column} AS {mapping_column}")
+        if self.includes_distance:
+            select_columns.append(f"{distance_sql} AS {distance_alias}")
+        select_columns.extend(
+            self._render_extra_selects(
+                config.get("select_columns"),
+                base_alias=base_alias,
+                enrichment_alias=enrichment_alias,
+                base_geometry_column=base_geometry_column,
+                enrichment_geometry_column=enrichment_geometry_column,
+                distance_sql=distance_sql,
+            )
+        )
+
+        base_filter_sql = self._normalize_where_clause(config.get("base_filter_sql"))
+        join_where_sql = self._normalize_where_clause(config.get("enrichment_filter_sql"))
+
+        return f"""
+SELECT
+    {",\n    ".join(select_columns)}
+FROM {base.table_schema}.{base.table_name} {base_alias}
+{self.build_join_sql(
+    config,
+    base_alias=base_alias,
+    enrichment_alias=enrichment_alias,
+    enrichment_table=f"{enrichment.table_schema}.{enrichment.table_name}",
+    base_geometry_sql=base_geometry_sql,
+    enrichment_geometry_sql=enrichment_geometry_sql,
+    join_where_sql=join_where_sql,
+)}
+{base_filter_sql}
+"""
+
+    @property
+    def includes_distance(self) -> bool:
+        return False
+
+    def build_join_sql(
+        self,
+        config: dict[str, Any],
+        *,
+        base_alias: str,
+        enrichment_alias: str,
+        enrichment_table: str,
+        base_geometry_sql: str,
+        enrichment_geometry_sql: str,
+        join_where_sql: str,
+    ) -> str:
+        raise NotImplementedError
+
+    def _resolve_distance_sql(
+        self,
+        config: dict[str, Any],
+        *,
+        base_geometry_sql: str,
+        enrichment_geometry_sql: str,
+    ) -> str:
+        distance_sql_template = config.get("distance_sql")
+        if distance_sql_template:
+            return str(distance_sql_template).format(
+                base_geometry=base_geometry_sql,
+                enrichment_geometry=enrichment_geometry_sql,
+            )
+        return f"ST_Distance({base_geometry_sql}, {enrichment_geometry_sql})"
+
+    def _normalize_where_clause(self, sql: Any) -> str:
+        if not sql:
+            return ""
+        normalized = str(sql).strip().rstrip(";")
+        if not normalized:
+            return ""
+        if normalized.lower().startswith("where "):
+            return normalized
+        return f"WHERE {normalized}"
+
+    def _render_extra_selects(
+        self,
+        raw_columns: Any,
+        **context: str,
+    ) -> list[str]:
+        if not raw_columns:
+            return []
+
+        rendered: list[str] = []
+        for item in raw_columns:
+            if isinstance(item, str):
+                rendered.append(item.format(**context).strip())
+                continue
+
+            if not isinstance(item, dict):
+                raise ValueError(f"Unsupported select_columns item: {item!r}")
+
+            expression = item.get("expression")
+            alias = item.get("alias")
+            if not expression or not alias:
+                raise ValueError(
+                    "Each mapping.config.select_columns entry must define 'expression' and 'alias'"
+                )
+            rendered.append(f"{str(expression).format(**context)} AS {alias}")
+        return rendered
+
+
+class NearestNeighbourMappingSelectStrategy(SpatialRelationshipMappingSelectStrategy):
+    name = "nearest_neighbour"
+    aliases = ("nearest_neighbor",)
+
+    @property
+    def includes_distance(self) -> bool:
+        return True
+
+    def build_join_sql(
+        self,
+        config: dict[str, Any],
+        *,
+        base_alias: str,
+        enrichment_alias: str,
+        enrichment_table: str,
+        base_geometry_sql: str,
+        enrichment_geometry_sql: str,
+        join_where_sql: str,
+    ) -> str:
+        order_by = str(
+            config.get("order_by_sql")
+            or f"{base_geometry_sql} <-> {enrichment_geometry_sql}"
+        )
+        where_lines = []
+        if join_where_sql:
+            where_lines.append(join_where_sql[6:] if join_where_sql.lower().startswith("where ") else join_where_sql)
+
+        where_sql = ""
+        if where_lines:
+            where_sql = "\n    WHERE " + "\n      AND ".join(where_lines)
+
+        return f"""JOIN LATERAL (
+    SELECT *
+    FROM {enrichment_table} {enrichment_alias}{where_sql}
+    ORDER BY {order_by}
+    LIMIT 1
+) {enrichment_alias} ON TRUE"""
+
+
+class WithinDistanceMappingSelectStrategy(SpatialRelationshipMappingSelectStrategy):
+    name = "within_distance"
+
+    @property
+    def includes_distance(self) -> bool:
+        return True
+
+    def build_join_sql(
+        self,
+        config: dict[str, Any],
+        *,
+        base_alias: str,
+        enrichment_alias: str,
+        enrichment_table: str,
+        base_geometry_sql: str,
+        enrichment_geometry_sql: str,
+        join_where_sql: str,
+    ) -> str:
+        max_distance = config.get("max_distance")
+        join_condition = config.get("join_condition_sql")
+        if join_condition:
+            predicate = str(join_condition).format(
+                base_geometry=base_geometry_sql,
+                enrichment_geometry=enrichment_geometry_sql,
+                max_distance=max_distance,
+            )
+        else:
+            if max_distance is None:
+                raise ValueError(
+                    "Mapping strategy 'within_distance' requires mapping.config.max_distance "
+                    "or mapping.config.join_condition_sql"
+                )
+            predicate = (
+                f"ST_DWithin({base_geometry_sql}, {enrichment_geometry_sql}, {max_distance})"
+            )
+
+        extra_clause = ""
+        if join_where_sql:
+            extra_clause = f"\n    AND {join_where_sql[6:]}" if join_where_sql.lower().startswith("where ") else f"\n    AND {join_where_sql}"
+
+        return (
+            f"JOIN {enrichment_table} {enrichment_alias}\n"
+            f"    ON {predicate}{extra_clause}"
+        )
+
+
+class IntersectionMappingSelectStrategy(SpatialRelationshipMappingSelectStrategy):
+    name = "intersection"
+
+    def build_join_sql(
+        self,
+        config: dict[str, Any],
+        *,
+        base_alias: str,
+        enrichment_alias: str,
+        enrichment_table: str,
+        base_geometry_sql: str,
+        enrichment_geometry_sql: str,
+        join_where_sql: str,
+    ) -> str:
+        predicate = str(
+            config.get("join_condition_sql")
+            or f"ST_Intersects({base_geometry_sql}, {enrichment_geometry_sql})"
+        ).format(
+            base_geometry=base_geometry_sql,
+            enrichment_geometry=enrichment_geometry_sql,
+        )
+
+        extra_clause = ""
+        if join_where_sql:
+            extra_clause = f"\n    AND {join_where_sql[6:]}" if join_where_sql.lower().startswith("where ") else f"\n    AND {join_where_sql}"
+
+        return (
+            f"JOIN {enrichment_table} {enrichment_alias}\n"
+            f"    ON {predicate}{extra_clause}"
+        )
+
+
 class NearestStationMappingSelectStrategy:
     name = "nearest_station"
+    aliases = ("knn",)
 
     def build_select(self, datasource: "DataSourceABCImpl") -> str:
         base = datasource.data_source_config.mapping.base_table
@@ -100,10 +348,17 @@ JOIN LATERAL (
 class MappingSelectSqlStrategyRegistry:
     def __init__(self):
         self._strategies: dict[str, MappingSelectSqlStrategy] = {}
+        self.register(NearestNeighbourMappingSelectStrategy())
+        self.register(WithinDistanceMappingSelectStrategy())
+        self.register(IntersectionMappingSelectStrategy())
         self.register(NearestStationMappingSelectStrategy())
 
     def register(self, strategy: MappingSelectSqlStrategy) -> None:
-        self._strategies[str(strategy.name).lower()] = strategy
+        names = [str(strategy.name).lower()]
+        aliases = getattr(strategy, "aliases", ())
+        names.extend(str(alias).lower() for alias in aliases)
+        for name in names:
+            self._strategies[name] = strategy
 
     def get(self, name: str | None) -> MappingSelectSqlStrategy | None:
         if not name:
