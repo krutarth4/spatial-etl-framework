@@ -90,6 +90,8 @@ class SpatialRelationshipMappingSelectStrategy:
         select_columns.extend(
             self._render_extra_selects(
                 config.get("select_columns"),
+                base_geometry=base_geometry_sql,
+                enrichment_geometry=enrichment_geometry_sql,
                 base_alias=base_alias,
                 enrichment_alias=enrichment_alias,
                 base_geometry_column=base_geometry_column,
@@ -102,20 +104,20 @@ class SpatialRelationshipMappingSelectStrategy:
         join_where_sql = self._normalize_where_clause(config.get("enrichment_filter_sql"))
 
         return f"""
-SELECT
-    {",\n    ".join(select_columns)}
-FROM {base.table_schema}.{base.table_name} {base_alias}
-{self.build_join_sql(
-    config,
-    base_alias=base_alias,
-    enrichment_alias=enrichment_alias,
-    enrichment_table=f"{enrichment.table_schema}.{enrichment.table_name}",
-    base_geometry_sql=base_geometry_sql,
-    enrichment_geometry_sql=enrichment_geometry_sql,
-    join_where_sql=join_where_sql,
-)}
-{base_filter_sql}
-"""
+                    SELECT
+                        {",\n    ".join(select_columns)}
+                    FROM {base.table_schema}.{base.table_name} {base_alias}
+                    {self.build_join_sql(
+                        config,
+                        base_alias=base_alias,
+                        enrichment_alias=enrichment_alias,
+                        enrichment_table=f"{enrichment.table_schema}.{enrichment.table_name}",
+                        base_geometry_sql=base_geometry_sql,
+                        enrichment_geometry_sql=enrichment_geometry_sql,
+                        join_where_sql=join_where_sql,
+                    )}
+                    {base_filter_sql}
+                """
 
     @property
     def includes_distance(self) -> bool:
@@ -128,8 +130,8 @@ FROM {base.table_schema}.{base.table_name} {base_alias}
         base_alias: str,
         enrichment_alias: str,
         enrichment_table: str,
-        base_geometry_sql: str,
-        enrichment_geometry_sql: str,
+        base_geometry_sql: str | None,
+        enrichment_geometry_sql: str | None,
         join_where_sql: str,
     ) -> str:
         raise NotImplementedError
@@ -188,7 +190,7 @@ FROM {base.table_schema}.{base.table_name} {base_alias}
 
 class NearestNeighbourMappingSelectStrategy(SpatialRelationshipMappingSelectStrategy):
     name = "nearest_neighbour"
-    aliases = ("nearest_neighbor",)
+    aliases = ("nearest_neighbor", "knn", "nearest_station")
 
     @property
     def includes_distance(self) -> bool:
@@ -205,10 +207,16 @@ class NearestNeighbourMappingSelectStrategy(SpatialRelationshipMappingSelectStra
         enrichment_geometry_sql: str,
         join_where_sql: str,
     ) -> str:
-        order_by = str(
-            config.get("order_by_sql")
-            or f"{base_geometry_sql} <-> {enrichment_geometry_sql}"
-        )
+        order_by_template = config.get("order_by_sql")
+        if order_by_template:
+            order_by = str(order_by_template).format(
+                base_geometry=base_geometry_sql,
+                enrichment_geometry=enrichment_geometry_sql,
+                base_alias=base_alias,
+                enrichment_alias=enrichment_alias,
+            )
+        else:
+            order_by = f"{base_geometry_sql} <-> {enrichment_geometry_sql}"
         where_lines = []
         if join_where_sql:
             where_lines.append(join_where_sql[6:] if join_where_sql.lower().startswith("where ") else join_where_sql)
@@ -218,11 +226,11 @@ class NearestNeighbourMappingSelectStrategy(SpatialRelationshipMappingSelectStra
             where_sql = "\n    WHERE " + "\n      AND ".join(where_lines)
 
         return f"""JOIN LATERAL (
-    SELECT *
-    FROM {enrichment_table} {enrichment_alias}{where_sql}
-    ORDER BY {order_by}
-    LIMIT 1
-) {enrichment_alias} ON TRUE"""
+                    SELECT *
+                    FROM {enrichment_table} {enrichment_alias}{where_sql}
+                    ORDER BY {order_by}
+                    LIMIT 1
+                ) {enrichment_alias} ON TRUE"""
 
 
 class WithinDistanceMappingSelectStrategy(SpatialRelationshipMappingSelectStrategy):
@@ -303,55 +311,12 @@ class IntersectionMappingSelectStrategy(SpatialRelationshipMappingSelectStrategy
         )
 
 
-class NearestStationMappingSelectStrategy:
-    name = "knn"
-    aliases = ("nearest_station",)
-
-    def build_select(self, datasource: "DataSourceABCImpl") -> str:
-        base = datasource.data_source_config.mapping.base_table
-        enrichment = datasource.data_source_config.storage.enrichment
-
-        return f"""
-                SELECT
-                    w.id AS way_id,
-                    s.dwd_station_id AS dwd_station_id,
-                    ST_Distance(
-                        w.geometry::geography,
-                        s.point::geography
-                    ) AS distance,
-                    MOD(
-                        (DEGREES(
-                          ST_Azimuth(
-                            ST_StartPoint(w.geometry),
-                            ST_EndPoint(w.geometry)
-                          )
-                        ) + 360)::NUMERIC,
-                        360
-                      ) AS bearing_degree
-                FROM {base.table_schema}.{base.table_name} w
-                JOIN LATERAL (
-                    SELECT
-                        en.uid,
-                        en.dwd_station_id,
-                        en.point
-                    FROM {enrichment.table_schema}.{enrichment.table_name} en
-                    ORDER BY
-                        ST_Distance(
-                            w.geometry::geography,
-                            en.point::geography
-                        )
-                    LIMIT 1
-                ) s ON TRUE
-"""
-
-
 class MappingSelectSqlStrategyRegistry:
     def __init__(self):
         self._strategies: dict[str, MappingSelectSqlStrategy] = {}
         self.register(NearestNeighbourMappingSelectStrategy())
         self.register(WithinDistanceMappingSelectStrategy())
         self.register(IntersectionMappingSelectStrategy())
-        self.register(NearestStationMappingSelectStrategy())
 
     def register(self, strategy: MappingSelectSqlStrategy) -> None:
         names = [str(strategy.name).lower()]
