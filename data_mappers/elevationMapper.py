@@ -101,65 +101,6 @@ class ElevationMapper(DataSourceABCImpl):
     def sync_staging_to_enrichment(self):
         return
 
-    def mapping_db_query(self) -> str:
-        self.logger.info("Mapping Elevation to links (insert into mapping table)")
-
-        base = self.data_source_config.mapping.base_table
-        enrichment = self.data_source_config.storage.enrichment
-        mapping = self.data_source_config.mapping
-
-        sql = f"""
-            WITH sampled_points AS (
-                SELECT
-                    w.id AS way_id,
-                    dp.path[1] AS path_idx,
-                    dp.geom AS geom_25833
-                FROM {base.table_schema}.{base.table_name} w
-                CROSS JOIN LATERAL ST_DumpPoints(
-                    ST_Segmentize(
-                        ST_Transform(w.geometry, 25833),
-                        100.0
-                    )
-                ) AS dp
-            ),
-            points_with_elevation AS (
-                SELECT
-                    sp.way_id,
-                    sp.path_idx,
-                    sp.geom_25833,
-                    z_lookup.z
-                FROM sampled_points sp
-                LEFT JOIN LATERAL (
-                    SELECT z
-                    FROM (
-                        SELECT ST_Value(r.rast, sp.geom_25833) AS z
-                        FROM {enrichment.table_schema}.{enrichment.table_name} r
-                        WHERE ST_Intersects(r.footprint_4326, ST_Transform(sp.geom_25833, 4326))
-                    ) sampled_z
-                    WHERE sampled_z.z IS NOT NULL
-                    LIMIT 1
-                ) AS z_lookup ON TRUE
-            )
-            INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, elevation_profile)
-            SELECT
-                p.way_id AS way_id,
-                jsonb_agg(
-                    jsonb_build_object(
-                        'x', ST_X(ST_Transform(p.geom_25833, 4326)),
-                        'y', ST_Y(ST_Transform(p.geom_25833, 4326)),
-                        'z', p.z
-                    )
-                    ORDER BY p.path_idx
-                ) AS elevation_profile
-            FROM points_with_elevation p
-            WHERE p.z IS NOT NULL
-            GROUP BY p.way_id
-            ON CONFLICT (way_id)
-            DO UPDATE SET
-                elevation_profile = EXCLUDED.elevation_profile;
-        """
-
-        return sql
     def enrichment_db_query(self) -> None | str:
         staging = self.data_source_config.storage.staging
         enrichment = self.data_source_config.storage.enrichment

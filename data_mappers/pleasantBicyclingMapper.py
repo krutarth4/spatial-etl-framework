@@ -88,31 +88,6 @@ class PleasantEnrichmentTable(EnrichmentTable):
 class PleasantBicyclingMapper(DataSourceABCImpl):
     _to_25833 = Transformer.from_crs(4326, 25833, always_xy=True).transform
 
-    def mapping_db_query(self) -> None | str:
-        enrichment = self.data_source_config.storage.enrichment
-        mapping = self.data_source_config.mapping
-        base = self.data_source_config.mapping.base_table
-        query = f"""
-                           INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, connection_id, distance_m)
-                            SELECT 
-                                w.id AS way_id,
-                                o.connection_id AS connection_id,
-                                ST_Distance(w.geometry_25833, o.geometry_25833) AS distance
-                            FROM {base.table_schema}.{base.table_name} w
-                            JOIN LATERAL (
-                                SELECT
-                                    connection_id,
-                                    geometry_25833
-                                FROM {enrichment.table_schema}.{enrichment.table_name}
-                                WHERE ST_DWithin(w.geometry_25833, geometry_25833, 20)
-                                ORDER BY connection_id, w.geometry_25833 <-> geometry_25833
-                                LIMIT 1
-                            ) o
-                            ON true
-                          """
-
-        return query
-
     @staticmethod
     def _normalize_connection_id(value) -> str | None:
         if value is None:
