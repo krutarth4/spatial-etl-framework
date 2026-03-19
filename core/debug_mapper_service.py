@@ -274,7 +274,7 @@ class DebugMapperService:
         )
 
         strategy = mapping.get("strategy")
-        link_on = strategy.get("link_on") if isinstance(strategy, dict) else {}
+        link_on = (strategy.get("link_on") if isinstance(strategy, dict) else None) or {}
         mapping_column = link_on.get("mapping_column") or mapping.get("joins_on")
         basis = link_on.get("basis")
         strategy_name = strategy.get("name") if isinstance(strategy, dict) else strategy
@@ -293,6 +293,13 @@ class DebugMapperService:
             and enrich_geom_col is not None
             and mapping_column in mapping_table.c
             and mapping_column in enrichment_table.c
+            and "way_id" in mapping_table.c
+        )
+
+        can_base_join = (
+            not can_spatial_join
+            and base_table is not None
+            and base_geom_col is not None
             and "way_id" in mapping_table.c
         )
 
@@ -351,6 +358,33 @@ class DebugMapperService:
                         "link_geometry": self._try_json_load(row.get("link_geometry")),
                         "mapped_geometry": self._try_json_load(row.get("mapped_geometry")),
                     },
+                }
+                features.append(feature)
+        elif can_base_join:
+            primary_col = self._pick_primary_value_col(mapping_table)
+            sql = f"""
+                SELECT
+                    m.*,
+                    ST_AsGeoJSON(b.{self._quote_ident(base_geom_col)}) AS base_geometry
+                FROM "{mapping_schema}"."{mapping_table_name}" m
+                JOIN "{base_table_schema}"."{base_table_name}" b ON b.id = m.way_id
+                WHERE (:way_id IS NULL OR m.way_id = :way_id)
+                LIMIT :limit
+            """
+            with self.db.session_scope() as session:
+                query_result = session.execute(text(sql), {"way_id": way_id, "limit": limit}).mappings().all()
+
+            rows = [self._to_jsonable(dict(r)) for r in query_result]
+            visualization_mode = "base_geometry_only"
+            for row in rows:
+                base_geom = self._try_json_load(row.get("base_geometry"))
+                props = {k: v for k, v in row.items() if k != "base_geometry"}
+                if primary_col:
+                    props["mapped_value"] = row.get(primary_col)
+                feature = {
+                    "type": "Feature",
+                    "geometry": base_geom,
+                    "properties": props,
                 }
                 features.append(feature)
         else:
@@ -415,7 +449,7 @@ class DebugMapperService:
         )
 
         strategy = mapping.get("strategy")
-        link_on = strategy.get("link_on") if isinstance(strategy, dict) else {}
+        link_on = (strategy.get("link_on") if isinstance(strategy, dict) else None) or {}
         mapping_column = link_on.get("mapping_column") or mapping.get("joins_on")
         basis = link_on.get("basis")
         strategy_name = strategy.get("name") if isinstance(strategy, dict) else strategy
@@ -451,6 +485,13 @@ class DebugMapperService:
         base_geometry = None
         mapped_geometry = None
         mapped_value = None
+
+        can_base_join = (
+            not can_spatial_join
+            and base_table is not None
+            and base_geom_col is not None
+            and "way_id" in mapping_table.c
+        )
 
         if can_spatial_join:
             sql = f"""
@@ -494,6 +535,29 @@ class DebugMapperService:
             }
             mapping_record = row_dict
             mapped_value = mapping_record.get(mapping_column)
+        elif can_base_join:
+            sql = f"""
+                SELECT
+                    m.*,
+                    ST_AsGeoJSON(b.{self._quote_ident(base_geom_col)}) AS base_geometry
+                FROM "{mapping_schema}"."{mapping_table_name}" m
+                JOIN "{base_table_schema}"."{base_table_name}" b ON b.id = m.way_id
+                WHERE m.way_id = :way_id
+                LIMIT 1
+            """
+            with self.db.session_scope() as session:
+                row = session.execute(text(sql), {"way_id": way_id}).mappings().first()
+
+            if row is None:
+                raise ValueError(f"No mapping row found for way_id={way_id}.")
+
+            row_dict = self._to_jsonable(dict(row))
+            base_geometry = self._try_json_load(row_dict.pop("base_geometry", None))
+            mapping_record = row_dict
+            primary_col = self._pick_primary_value_col(mapping_table)
+            mapped_value = mapping_record.get(primary_col) if primary_col else None
+            if primary_col:
+                mapping_record["mapped_value"] = mapped_value
         else:
             with self.db.session_scope() as session:
                 row = session.execute(
@@ -787,6 +851,14 @@ class DebugMapperService:
     def _quote_ident(value: str) -> str:
         escaped = str(value).replace('"', '""')
         return f'"{escaped}"'
+
+    @staticmethod
+    def _pick_primary_value_col(mapping_table, exclude: set[str] | None = None) -> str | None:
+        skip = (exclude or set()) | {"way_id", "id", "geom", "geometry", "line_geometry"}
+        for col in mapping_table.columns:
+            if col.name.lower() not in skip and "geom" not in col.name.lower():
+                return col.name
+        return None
 
     @staticmethod
     def _guess_geom_col(table, candidates: list[str]) -> str | None:
