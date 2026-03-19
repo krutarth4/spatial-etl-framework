@@ -187,6 +187,7 @@ class DebugMapperService:
             },
             "metadata": metadata,
             "tables": self._build_table_overview(ds),
+            "mapping_overview": self._mapping_overview(ds),
         }
 
     def fetch(
