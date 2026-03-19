@@ -763,12 +763,55 @@ class DataSourceABCImpl(DataSourceABC):
     def execute_query(self, table_key: str, query: str | None, params= None):
         if query is not None:
             # self.logger.info(f"calling the query for {table_key} -->, {query}")
-            self.db.call_sql(query, params)
+            # Use batched execution for mapping queries if configured
+            if table_key.lower() == "mapping" and self._should_use_batching():
+                batch_size = self._get_batch_size()
+                self.logger.info(f"Using batched execution for {table_key} with batch size: {batch_size}")
+                self.db.call_sql_batched(query, batch_size=batch_size, params=params)
+            else:
+                self.db.call_sql(query, params)
         else:
             if table_key.lower() == "mapping":
                 self.logger.info(
                     "No mapping Query given. Please write a postgresql query in the respective mapper class. Implement "
                     "func map_to_link_db_query")
+
+    def _should_use_batching(self) -> bool:
+        """
+        Check if batching should be enabled based on configuration.
+        """
+        try:
+            from main_core.core_config import CoreConfig
+            config = CoreConfig().get_config()
+            db_config = config.get("database", {})
+            perf_config = db_config.get("performance", {})
+            return perf_config.get("enable_batching", False)
+        except Exception as e:
+            self.logger.warning(f"Could not read batching config, defaulting to disabled: {e}")
+            return False
+
+    def _get_batch_size(self) -> int:
+        """
+        Get configured batch size or return default.
+        Checks datasource-specific config first, then global config.
+        """
+        try:
+            # Check datasource-specific batch size first
+            if hasattr(self.data_source_config, 'mapping') and self.data_source_config.mapping:
+                datasource_batch_size = getattr(self.data_source_config.mapping, 'batch_size', None)
+                if datasource_batch_size is not None:
+                    self.logger.info(f"Using datasource-specific batch size: {datasource_batch_size}")
+                    return int(datasource_batch_size)
+
+            # Fall back to global config
+            from main_core.core_config import CoreConfig
+            config = CoreConfig().get_config()
+            db_config = config.get("database", {})
+            perf_config = db_config.get("performance", {})
+            return perf_config.get("default_batch_size", 10000)
+        except Exception as e:
+            self.logger.warning(f"Could not read batch size config, using default: {e}")
+            return 10000
 
     def map_to_links(self):
         query = self.mapping_db_query()
