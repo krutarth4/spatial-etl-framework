@@ -2,7 +2,6 @@ from geoalchemy2 import Geometry
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint, ForeignKeyConstraint
 
 from core.globalconstants import GlobalConstants
-from main_core.mapping_sql_builder import MappingInsertSpec
 from database_tables.enrichment_table import EnrichmentTable
 from database_tables.mapping_table import MappingTable
 from database_tables.staging_table import StagingTable
@@ -75,10 +74,3 @@ class WeatherStationMapper(DataSourceABCImpl):
 
         return sql
 
-    def get_mapping_insert_spec(self) -> MappingInsertSpec:
-        self.logger.info("Mapping DWD stations to links using strategy-backed SQL builder")
-        return MappingInsertSpec(
-            columns=["way_id", "dwd_station_id", "distance", "bearing_degree"],
-            conflict_columns=["way_id"],
-            update_columns=["dwd_station_id", "distance", "bearing_degree"],
-        )

@@ -40,47 +40,6 @@ class TreeMappingTable(MappingTable):
 
 class TreeMapper(DataSourceABCImpl):
 
-
-    def mapping_db_query(self) -> None | str:
-        base = self.data_source_config.mapping.base_table
-        staging= self.data_source_config.storage.staging
-        mapping = self.data_source_config.mapping
-
-        sql = f"""
-                INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, trees)
-                SELECT
-                    w.id AS way_id,
-                    COALESCE(
-                        jsonb_agg(
-                            jsonb_build_object(
-                                'tree_id', t.id,
-                                'source_id', t.source_id,
-                                'distance_m', ST_Distance(
-                                    t.geometry_25833,
-                                    w.geometry_25833
-                                )
-                            )
-                            ORDER BY ST_Distance(
-                                t.geometry_25833,
-                                w.geometry_25833
-                            )
-                        ) FILTER (WHERE t.id IS NOT NULL),
-                        '[]'::jsonb
-                    ) AS trees
-                FROM {base.table_schema}.{base.table_name} w
-                LEFT JOIN {staging.table_schema}.{staging.table_name} t
-                  ON t.geometry_25833 && ST_Expand(w.geometry_25833, 50)
-                 AND ST_DWithin(
-                        t.geometry_25833,
-                        w.geometry_25833,
-                        50
-                     )
-                GROUP BY w.id
-                ON CONFLICT (way_id)
-                DO UPDATE SET trees = EXCLUDED.trees;
-            """
-        return sql
-
     def read_file_content(self, path: str):
 
         # Read entire GeoPackage
