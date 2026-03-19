@@ -882,6 +882,15 @@ class DataSourceABCImpl(DataSourceABC):
         except Exception:
             pass
 
+        # Normalize whitespace to prevent SQL syntax errors from collapsed lines
+        # This fixes issues where YAML multiline strings lose newlines between clauses
+        import re
+        # Add newline after common SQL patterns if missing
+        sql = re.sub(r'(\))(\s*)(AS\s+\w+)(\s*)(FROM|LEFT\s+JOIN|INNER\s+JOIN|WHERE|GROUP\s+BY)',
+                     r'\1\n    \3\n    \5', sql, flags=re.IGNORECASE)
+        # Add newline after SELECT columns before FROM if missing
+        sql = re.sub(r'(AS\s+\w+)([A-Z])', r'\1\n    \2', sql)
+
         self.execute_query("Mapping", sql)
 
     def get_mapping_template_context(self) -> dict[str, str | None]:
