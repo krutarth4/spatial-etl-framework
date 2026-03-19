@@ -200,17 +200,72 @@ These are the main extension points in `DataSourceABCImpl`.
 
 Built-in mapping modes in [data_source_abc_impl.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py):
 
-1. `custom`
-2. `sql_template`
-3. `none`
-4. registry-backed spatial types such as `nearest_neighbour`, `within_distance`, `intersection`, `knn`
+### Control Strategies
+1. `custom` - calls mapper's `mapping_db_query()` method
+2. `sql_template` - uses `mapping.config.sql` template with placeholders
+3. `none` - skips mapping entirely
 
-Behavior:
+### Spatial Strategies (Registry-Backed)
+4. `nearest_neighbour` / `knn` / `nearest_station` - maps each base geometry to its nearest enrichment feature
+5. `within_distance` - maps base geometries to all enrichment features within max distance
+6. `intersection` - maps spatially intersecting features
+7. **NEW** `nearest_k` / `k_nearest` / `knn_multiple` - maps each base geometry to K nearest enrichment features
+8. **NEW** `aggregate_within_distance` / `buffer_aggregate` - aggregates all enrichment features within a buffer distance
 
-1. `custom`: calls `mapping_db_query()`
-2. `sql_template`: reads `mapping.config.sql` from config and formats placeholders
-3. `none`: skips mapping
-4. registry-backed spatial types: generate SQL from `strategy.type` and `mapping.config`
+### Non-Spatial Strategies
+9. **NEW** `attribute_join` / `id_join` / `key_join` - joins based on shared attribute columns (non-spatial)
+
+### Strategy Behavior
+
+1. **`custom`**: Calls mapper's `mapping_db_query()` - full SQL control in Python code
+2. **`sql_template`**: Reads `mapping.config.sql` string and formats placeholders like `{mapping_table}`, `{enrichment_table}`, etc.
+3. **`none`**: Completely skips the mapping step
+4. **Spatial strategies**: Auto-generate optimized PostGIS SQL based on `mapping.config` parameters
+5. **Attribute join**: Standard SQL JOIN on ID columns instead of geometry
+
+### New Strategy Configuration Examples
+
+#### Nearest K Strategy
+```yaml
+mapping:
+  enable: true
+  strategy:
+    type: nearest_k
+  config:
+    k: 5  # Find 5 nearest neighbors
+    base_geometry_column: geometry
+    enrichment_geometry_column: point
+    order_by_sql: ST_Distance({base_geometry}::geography, {enrichment_geometry}::geography)
+```
+
+#### Aggregate Within Distance Strategy
+```yaml
+mapping:
+  enable: true
+  strategy:
+    type: aggregate_within_distance
+  config:
+    max_distance: 50  # meters
+    aggregation_type: jsonb_agg  # Options: jsonb_agg, array_agg, count, avg, sum, min, max
+    aggregation_column: tree_id
+    aggregation_alias: nearby_trees
+    base_geometry_column: geometry_25833
+    enrichment_geometry_column: geometry_25833
+```
+
+#### Attribute Join Strategy
+```yaml
+mapping:
+  enable: true
+  strategy:
+    type: attribute_join
+    link_on:
+      base_column: osm_id
+      mapping_column: external_osm_id
+  config:
+    join_type: INNER  # or LEFT, RIGHT
+    select_all_enrichment: true  # Include all enrichment columns
+```
 
 ## Recommended order when writing a new mapper
 

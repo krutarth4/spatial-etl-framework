@@ -2,8 +2,17 @@
 
 ## Project docs
 
+### Core Documentation
 1. [Configuration README](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/docs/config-README.md)
 2. [Mapper README](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/docs/mapper-README.md)
+
+### Mapping System (⭐ NEW - Enhanced & More General)
+3. [Mapping Strategies Reference](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/docs/mapping-strategies-reference.md) - Complete guide to all mapping strategies
+4. [Mapping Quick Reference](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/docs/mapping-quick-reference.md) - One-page cheat sheet
+5. [Migration Example: Tree Mapper](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/docs/migration-example-tree-mapper.md) - Real migration example
+6. [Mapping Improvements Summary](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/docs/MAPPING_IMPROVEMENTS_SUMMARY.md) - What changed and why
+
+**🎯 Quick Start**: The mapping system is now much more general! Most spatial joins can be done with **zero Python code** - just YAML config. See the [Quick Reference](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/docs/mapping-quick-reference.md) to get started.
 
 * TODO: add the hstore, postgis extension to docker container at start
 * TODO: Add for the command line osm2pgrouting

@@ -288,13 +288,46 @@ Supported strategies in code:
 | `strategy.link_on.base_column` | Base-side join column | Any column |
 | `strategy.link_on.basis` | Join basis metadata | Any string |
 | `config.sql` | SQL template used by `sql_template` type | Any SQL string |
+| `config.k` | Number of nearest neighbors (for `nearest_k`) | Any positive integer |
+| `config.max_distance` | Maximum distance threshold (for distance-based strategies) | Any number (meters) |
+| `config.base_geometry_column` | Geometry column in base table | Any column (default: `geometry`) |
+| `config.enrichment_geometry_column` | Geometry column in enrichment table | Any column (default: `geometry`) |
+| `config.distance_sql` | Custom distance calculation SQL template | Any SQL expression |
+| `config.order_by_sql` | Custom ordering SQL template | Any SQL expression |
+| `config.join_condition_sql` | Custom join condition SQL template | Any SQL expression |
+| `config.base_filter_sql` | WHERE clause for base table | Any SQL WHERE condition |
+| `config.enrichment_filter_sql` | WHERE clause for enrichment table | Any SQL WHERE condition |
+| `config.aggregation_type` | Type of aggregation (for `aggregate_within_distance`) | `jsonb_agg`, `array_agg`, `count`, `avg`, `sum`, `min`, `max` |
+| `config.aggregation_column` | Column to aggregate | Any column name |
+| `config.aggregation_alias` | Output column name for aggregation | Any string |
+| `config.aggregation_expression` | Custom aggregation SQL | Any SQL expression |
+| `config.base_join_column` | Join column in base table (for `attribute_join`) | Any column |
+| `config.enrichment_join_column` | Join column in enrichment table (for `attribute_join`) | Any column |
+| `config.join_type` | Type of SQL join (for `attribute_join`) | `INNER`, `LEFT`, `RIGHT` |
+| `config.select_all_enrichment` | Include all enrichment columns | `true`, `false` |
+| `config.select_columns` | Additional computed columns | List of strings or dicts with `expression` and `alias` |
+| `config.insert.columns` | Columns for INSERT statement | List of column names |
+| `config.insert.conflict_columns` | Columns for ON CONFLICT clause | List of column names |
+| `config.insert.update_columns` | Columns to update on conflict | List of column names |
 
 Built-in runtime strategies:
 
-1. `custom`
-2. `sql_template`
-3. `none`
-4. spatial registry types such as `nearest_neighbour`, `within_distance`, `intersection`, `knn`
+**Control strategies:**
+1. `custom` - delegates to mapper's `mapping_db_query()` method
+2. `sql_template` - uses SQL template string from `mapping.config.sql`
+3. `none` - skips mapping entirely
+
+**Spatial strategies (auto-generate PostGIS SQL):**
+4. `nearest_neighbour` / `knn` / `nearest_station` - maps to single nearest feature
+5. `within_distance` - maps to all features within max distance
+6. `intersection` - maps spatially intersecting features
+7. `nearest_k` / `k_nearest` / `knn_multiple` - maps to K nearest features
+8. `aggregate_within_distance` / `buffer_aggregate` - aggregates features within buffer
+
+**Non-spatial strategies:**
+9. `attribute_join` / `id_join` / `key_join` - joins on shared attribute columns
+
+See [mapping-strategies-reference.md](mapping-strategies-reference.md) for detailed documentation.
 
 ### `storage`
 

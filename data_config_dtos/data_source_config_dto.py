@@ -59,6 +59,15 @@ class MappingStrategyDTO(str, Enum):
     KNN = "knn"
     NEAREST_STATION = "nearest_station"
     MAPPER_SQL = "mapper_sql"
+    NEAREST_K = "nearest_k"
+    K_NEAREST = "k_nearest"
+    KNN_MULTIPLE = "knn_multiple"
+    AGGREGATE_WITHIN_DISTANCE = "aggregate_within_distance"
+    BUFFER_AGGREGATE = "buffer_aggregate"
+    AGGREGATE_BUFFER = "aggregate_buffer"
+    ATTRIBUTE_JOIN = "attribute_join"
+    ID_JOIN = "id_join"
+    KEY_JOIN = "key_join"
 
     @classmethod
     def has_value(cls, value):
