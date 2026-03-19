@@ -62,7 +62,16 @@ class SpatialRelationshipMappingSelectStrategy:
 
     def build_select(self, datasource: "DataSourceABCImpl") -> str:
         base = datasource.data_source_config.mapping.base_table
-        enrichment = datasource.data_source_config.storage.enrichment
+        storage = datasource.data_source_config.storage
+
+        # Use enrichment if available, otherwise fallback to staging
+        enrichment = storage.enrichment if storage.enrichment else storage.staging
+        if not enrichment:
+            raise ValueError(
+                f"Datasource {datasource.data_source_name} must have either enrichment or staging "
+                f"storage configured for spatial mapping strategies"
+            )
+
         link_fields = datasource.get_mapping_strategy_link_fields()
         config = datasource.get_mapping_config()
 
@@ -376,7 +385,16 @@ class AggregateWithinDistanceMappingSelectStrategy(SpatialRelationshipMappingSel
 
     def build_select(self, datasource: "DataSourceABCImpl") -> str:
         base = datasource.data_source_config.mapping.base_table
-        enrichment = datasource.data_source_config.storage.enrichment
+        storage = datasource.data_source_config.storage
+
+        # Use enrichment if available, otherwise fallback to staging
+        enrichment = storage.enrichment if storage.enrichment else storage.staging
+        if not enrichment:
+            raise ValueError(
+                f"Datasource {datasource.data_source_name} must have either enrichment or staging "
+                f"storage configured for spatial mapping strategies"
+            )
+
         link_fields = datasource.get_mapping_strategy_link_fields()
         config = datasource.get_mapping_config()
 

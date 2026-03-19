@@ -891,14 +891,31 @@ class DataSourceABCImpl(DataSourceABC):
         link_fields = self.get_mapping_strategy_link_fields()
         strategy_type = self.get_mapping_strategy_type()
 
+        # Handle cases where staging or enrichment might not be defined
+        staging_table = None
+        staging_schema = None
+        if storage.staging:
+            staging_table = storage.staging.table_name
+            staging_schema = storage.staging.table_schema
+
+        enrichment_table = None
+        enrichment_schema = None
+        if storage.enrichment:
+            enrichment_table = storage.enrichment.table_name
+            enrichment_schema = storage.enrichment.table_schema
+        elif storage.staging:
+            # Fallback: if no enrichment, use staging as enrichment
+            enrichment_table = storage.staging.table_name
+            enrichment_schema = storage.staging.table_schema
+
         return {
             "datasource_name": self.data_source_name,
             "mapping_table": mapping.table_name,
             "mapping_schema": mapping.table_schema,
-            "staging_table": storage.staging.table_name,
-            "staging_schema": storage.staging.table_schema,
-            "enrichment_table": storage.enrichment.table_name,
-            "enrichment_schema": storage.enrichment.table_schema,
+            "staging_table": staging_table,
+            "staging_schema": staging_schema,
+            "enrichment_table": enrichment_table,
+            "enrichment_schema": enrichment_schema,
             "base_table": base.table_name,
             "base_schema": base.table_schema,
             "joins_on": mapping.joins_on,
