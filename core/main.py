@@ -11,6 +11,8 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:4200"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 logger = LoggerManager("CoreMain").get_logger()
@@ -91,19 +93,28 @@ async def debug_mappers():
     }
 
 
-@app.get("/debug/mappers/{mapper_endpoint}/{target}")
-async def debug_mapper_data(mapper_endpoint: str, target: str, limit: int = 100):
-    try:
-        service = _get_debug_service()
-        return service.fetch(mapper_endpoint=mapper_endpoint, target=target, limit=limit)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-
 @app.get("/debug/mappers/{mapper_endpoint}/mapping-visualization")
 async def debug_mapping_visualization(mapper_endpoint: str, limit: int = 100, way_id: int | None = None):
     try:
         service = _get_debug_service()
         return service.fetch_mapping_visualization(mapper_endpoint=mapper_endpoint, limit=limit, way_id=way_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/debug/mappers/{mapper_endpoint}/way-inspector")
+async def debug_way_inspector(mapper_endpoint: str, way_id: int | None = None):
+    try:
+        service = _get_debug_service()
+        return service.fetch_way_inspector(mapper_endpoint=mapper_endpoint, way_id=way_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/debug/mappers/{mapper_endpoint}/{target}")
+async def debug_mapper_data(mapper_endpoint: str, target: str, limit: int = 100):
+    try:
+        service = _get_debug_service()
+        return service.fetch(mapper_endpoint=mapper_endpoint, target=target, limit=limit)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
