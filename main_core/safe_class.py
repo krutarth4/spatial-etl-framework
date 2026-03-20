@@ -1,10 +1,13 @@
 import functools
 import inspect
+import logging
 
 
 def safe_class(cls):
     """Decorate all public methods to catch/log exceptions using instance logger."""
     for name, func in cls.__dict__.items():
+        if isinstance(func, staticmethod):
+            continue
         if callable(func) and not name.startswith("_"):
 
             @functools.wraps(func)
@@ -18,7 +21,10 @@ def safe_class(cls):
                             exc_info=True
                         )
                     else:
-                        self.logger.error(f"{cls.__name__}.{__func.__name__} failed: {e}")
+                        logging.getLogger(cls.__name__).error(
+                            f"{cls.__name__}.{__func.__name__} failed: {e}",
+                            exc_info=True
+                        )
 
 
             setattr(cls, name, wrapper)

@@ -213,7 +213,7 @@ class DataSourceABCImpl(DataSourceABC):
         self.logger.info(f" no. of urls: {len(urls)}, process starting ......")
         for i, url in enumerate(urls):
             url_name = url.split("/")[-1:]
-            path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(source, "_".join(url_name))
+            path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(source, {"url": "_".join(url_name)})
             self.logger.info(f" count {i + 1}")
             if self.check_multi_metadata_before_fetch(url=url, headers=source.headers,
                                                       params=source.params, path=path):
