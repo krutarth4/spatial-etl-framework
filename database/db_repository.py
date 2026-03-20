@@ -310,7 +310,7 @@ class DBRepository(DbConfiguration):
                 schema = table_schema or self.schema
                 if not self.table_schema_matches(table_name, schema):
                     self.logger.info("Table schema doesn't match")
-                    self.create_table_if_not_exist(table_name, True)
+                    self.create_table_if_not_exist(table_name, force_create=True)
                 else:
                     self.logger.info("Table exists, skipping the creation of the table")
         except Exception as e:

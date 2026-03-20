@@ -3,8 +3,9 @@ import gzip
 import ijson
 from geoalchemy2 import Geometry, WKTElement
 from pyproj import Transformer
-from sqlalchemy import Integer, Column, DateTime, Float, ARRAY, UniqueConstraint, String, Index
+from sqlalchemy import Integer, Column, DateTime, Float, ARRAY, UniqueConstraint, String, Index, ForeignKey
 
+from core.globalconstants import GlobalConstants
 from database_tables.enrichment_table import EnrichmentTable
 from database_tables.mapping_table import MappingTable
 from database_tables.staging_table import StagingTable
@@ -64,7 +65,7 @@ class AirPollutionGridEnrichmentTable(EnrichmentTable):
 
     __table_args__ = (
         UniqueConstraint("grid_id", "forecast_time"),
-        Index("ix_air_pollution_grid_enrichment_grid_time_uid", "grid_id", "forecast_time", "uid"),
+        Index(None, "grid_id", "forecast_time", "uid"),
         Index(None, "geom_25833", postgresql_using="gist"),
         Index(None, "geom_4326", postgresql_using="gist"),
     )
@@ -73,10 +74,17 @@ class AirPollutionGridEnrichmentTable(EnrichmentTable):
 class AirPollutionGridMappingTable(MappingTable):
     __tablename__ = "air_pollution_grid_mapping"
 
+    # Override parent's way_id to remove column-level unique=True (this table has N rows per way)
+    way_id = Column(Integer, ForeignKey(f"{GlobalConstants.base_schema}.{GlobalConstants.base_table}.id"), nullable=False)
+
     uid = Column(Integer, primary_key=True, autoincrement=True)
     grid_uid = Column(Integer, nullable=False, index=True)
     grid_id = Column(Integer, nullable=False, index=True)
-    distance_m = Column(Float, nullable=False)
+    intersection_length_m = Column(Float, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("way_id", "grid_id"),
+    )
 
 
 class AirQualityDataMapper(DataSourceABCImpl):
