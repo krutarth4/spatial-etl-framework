@@ -1,0 +1,1116 @@
+2026-03-20 11:25:35 | CoreMain | INFO | Pipeline bootstrap thread started
+2026-03-20 11:25:35 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T11:25:35.272316+01:00
+2026-03-20 11:25:35 | CoreConfig | INFO | 2026-03-20T11:25:35.272316+01:00
+2026-03-20 11:25:35 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 11:25:35 | Application | INFO | Starting Application based on the configuration
+2026-03-20 11:25:35 | Application | INFO | Initializing database ......
+2026-03-20 11:25:35 | DbInstance | INFO | Testing connection with url postgresql+psycopg://postgres:admin123@localhost:5432/test
+2026-03-20 11:25:35 | DbInstance | INFO | Schema 'trial' ensured.
+2026-03-20 11:25:35 | DbInstance | INFO | ✅ Database instance initialized.
+2026-03-20 11:25:35 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:35 | DataSourceMetadataService | INFO | Metadata table already exists
+2026-03-20 11:25:35 | Application | INFO | Communication service disabled by graph.communication.enable=false
+2026-03-20 11:25:35 | Application | INFO | Initializing scheduler ....
+2026-03-20 11:25:35 | InitScheduler | WARNING | Scheduler disabled — not creating scheduler instance
+2026-03-20 11:25:35 | Application | INFO | Initializing debug FastAPI server ....
+2026-03-20 11:25:35 | InitGraph | INFO | Skipping comm task setup because graph.communication.enable is false
+2026-03-20 11:25:35 | DbInstance | INFO | create table ways_base
+2026-03-20 11:25:35 | DbInstance | INFO | Table 'ways_base' exists: True
+2026-03-20 11:25:35 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:25:35 | InitGraph | INFO | Initializing Base Graph
+2026-03-20 11:25:35 | DataSourceMapper | INFO | Found 1 data sources
+2026-03-20 11:25:35 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:35 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:35 | DataSourceMapper | INFO | Enable Found 0 data sources
+2026-03-20 11:25:35 | InitGraph | INFO | Loading Graph through external_ingest which means the base graph data will be parsed at router level
+2026-03-20 11:25:35 | InitGraph | INFO | Skipping router-coupled wait because graph.communication.enable is false
+2026-03-20 11:25:35 | InitGraph | INFO | Skipping main ways wait because graph.communication.enable is false
+2026-03-20 11:25:35 | DbInstance | INFO | Table 'way_segment' exists: True
+2026-03-20 11:25:35 | InitGraph | INFO | Table way_segment exists
+2026-03-20 11:25:35 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:25:35 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:25:36 | DbInstance | INFO | Row count for 'trial.way_segment': 1000117
+2026-03-20 11:25:36 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:25:36 | DbInstance | INFO | Row count for 'trial.way_segment': 1000117
+2026-03-20 11:25:36 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:25:36 | DbInstance | INFO | Row count for 'trial.way_segment': 1000117
+2026-03-20 11:25:36 | DataSourceMapper | INFO | Found 9 data sources
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | DataSourceMapper | INFO | Enable Found 6 data sources
+2026-03-20 11:25:36 | WeatherStationMapper | INFO | Initializing WeatherStationMapper
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | WeatherStationMapper | INFO | Executing starting for datasource weather_station_bright_sky
+2026-03-20 11:25:36 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:36 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/sources
+2026-03-20 11:25:37 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/sources?dwd_station_id=00399&dwd_station_id=00403&dwd_station_id=00400&dwd_station_id=00410&dwd_station_id=00420&dwd_station_id=00427&dwd_station_id=00430&dwd_station_id=00433 -> fallback mechanism check started..
+2026-03-20 11:25:37 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/sources
+2026-03-20 11:25:37 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/stations
+2026-03-20 11:25:37 | WeatherStationMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:25:37 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/stations
+2026-03-20 11:25:37 | WeatherStationMapper | INFO | Total number of paths found 1
+2026-03-20 11:25:37 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:37 | WeatherStationMapper | INFO | Creating table
+2026-03-20 11:25:37 | DbInstance | INFO | create table dwd_station_locations_staging
+2026-03-20 11:25:37 | DbInstance | INFO | Table 'dwd_station_locations_staging' exists: True
+2026-03-20 11:25:37 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:25:37 | DbInstance | INFO | Creating raw staging table dwd_station_locations_staging_raw_staging ...
+2026-03-20 11:25:37 | DbInstance | WARNING | Dropping table 'trial.dwd_station_locations_staging_raw_staging' ...
+2026-03-20 11:25:37 | DbInstance | INFO | Table 'trial.dwd_station_locations_staging_raw_staging' dropped successfully.
+2026-03-20 11:25:37 | DbInstance | INFO | Table 'dwd_station_locations_staging_raw_staging' created successfully.
+2026-03-20 11:25:37 | DbInstance | INFO | create table dwd_station_locations_enrichment
+2026-03-20 11:25:37 | DbInstance | INFO | Table 'dwd_station_locations_enrichment' exists: True
+2026-03-20 11:25:37 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:25:37 | DbInstance | INFO | create table dwd_station_locations_mapping
+2026-03-20 11:25:37 | DbInstance | INFO | Table 'dwd_station_locations_mapping' exists: True
+2026-03-20 11:25:37 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:25:37 | WeatherStationMapper | CRITICAL | Starting with 3 workers
+2026-03-20 11:25:37 | WeatherStationMapper | INFO | [THREAD START] name=ETLWorker_0 id=6172766208 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/stations/data_weatherStation_2026-01-02T17-36-57.json
+2026-03-20 11:25:37 | WeatherStationMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/stations/data_weatherStation_2026-01-02T17-36-57.json
+2026-03-20 11:25:37 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/stations
+2026-03-20 11:25:37 | WeatherStationMapper | INFO | result contains currently 1
+2026-03-20 11:25:37 | WeatherStationMapper | INFO | Filtered 52 → 8 rows
+2026-03-20 11:25:37 | WeatherStationMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=8 time=0.00s
+2026-03-20 11:25:37 | WeatherStationMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:25:37 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=8
+2026-03-20 11:25:37 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:25:37 | DbInstance | INFO | Inserted 8 rows into 'dwd_station_locations_staging_raw_staging'
+2026-03-20 11:25:37 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=0.01s
+2026-03-20 11:25:37 | DbInstance | CRITICAL | ⏱ bulk insert executed in 28ms
+2026-03-20 11:25:37 | WeatherStationMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=0.03s
+2026-03-20 11:25:37 | WeatherStationMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=0.03s
+2026-03-20 11:25:37 | DbInstance | INFO | Synced raw → staging: trial.dwd_station_locations_staging_raw_staging → trial.dwd_station_locations_staging
+2026-03-20 11:25:37 | DbInstance | CRITICAL | ⏱ Syncing source to target table executed in 47ms
+2026-03-20 11:25:37 | DbInstance | WARNING | No updatable enrichment columns found for trial.dwd_station_locations_enrichment -> this means there is not copying of columns present in staging to enrichment, which is not a PK, FK, or any other constraints.
+2026-03-20 11:25:37 | DbInstance | INFO | Synced staging → enrichment: trial.dwd_station_locations_staging → trial.dwd_station_locations_enrichment
+2026-03-20 11:25:37 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:25:37 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:25:37 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 5ms
+2026-03-20 11:25:37 | WeatherStationMapper | INFO | Mapping started on Mapping Table.....
+2026-03-20 11:25:37 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:25:37 | DbInstance | INFO | Row count for 'trial.dwd_station_locations_mapping': 1000117
+2026-03-20 11:25:37 | WeatherStationMapper | INFO | Skipping mapping as all ways geometry mapped....
+2026-03-20 11:25:37 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T11:25:37.815737+01:00
+2026-03-20 11:25:37 | CoreConfig | INFO | 2026-03-20T11:25:37.815737+01:00
+2026-03-20 11:25:37 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 11:25:37 | MaterializedViewManager | INFO | Materialized view trigger matched for datasource 'weather_station_bright_sky' -> mv_weather
+2026-03-20 11:25:37 | DbInstance | INFO | MV SQL (mv_weather): CREATE INDEX IF NOT EXISTS "mv_weather_way_id_idx" ON "test_osm_base_graph"."mv_weather" (way_id)
+2026-03-20 11:25:37 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:25:38 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:25:38 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 448ms
+2026-03-20 11:25:38 | DbInstance | INFO | MV SQL (mv_weather): REFRESH MATERIALIZED VIEW "test_osm_base_graph"."mv_weather"
+2026-03-20 11:25:38 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:25:41 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:25:41 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 2s 961ms
+2026-03-20 11:25:41 | DbInstance | INFO | MV SQL (mv_weather): CREATE INDEX IF NOT EXISTS "mv_weather_way_id_idx" ON "test_osm_base_graph"."mv_weather" (way_id)
+2026-03-20 11:25:41 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:25:41 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:25:41 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 4ms
+2026-03-20 11:25:41 | DbInstance | WARNING | Dropping table 'trial.dwd_station_locations_staging_raw_staging' ...
+2026-03-20 11:25:41 | DbInstance | INFO | Table 'trial.dwd_station_locations_staging_raw_staging' dropped successfully.
+2026-03-20 11:25:41 | WeatherStationMapper | INFO | Finished run for weather_station_bright_sky in 4s 324ms seconds -> message: Job finished Successfully !!!
+2026-03-20 11:25:41 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:41 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:41 | DataSourceMapper | INFO | WeatherStationMapper configuration step finished!!
+2026-03-20 11:25:41 | WeatherMapper | INFO | Initializing WeatherMapper
+2026-03-20 11:25:41 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:41 | WeatherMapper | INFO | Executing starting for datasource weather_forecast_bright_sky
+2026-03-20 11:25:41 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:41 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:25:41 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A25%3A35.272316%2B01%3A00&dwd_station_id=00399 -> fallback mechanism check started..
+2026-03-20 11:25:41 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:25:41 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:41 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:25:41 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:41 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:25:41 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A25%3A35.272316%2B01%3A00&dwd_station_id=00403 -> fallback mechanism check started..
+2026-03-20 11:25:41 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:25:41 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:41 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:25:41 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:41 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:25:41 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A25%3A35.272316%2B01%3A00&dwd_station_id=00400 -> fallback mechanism check started..
+2026-03-20 11:25:42 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:25:42 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:42 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:25:42 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:42 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:25:42 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A25%3A35.272316%2B01%3A00&dwd_station_id=00410 -> fallback mechanism check started..
+2026-03-20 11:25:42 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:25:42 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:42 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:25:42 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:42 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:25:42 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A25%3A35.272316%2B01%3A00&dwd_station_id=00420 -> fallback mechanism check started..
+2026-03-20 11:25:42 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:25:42 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:42 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:25:42 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:42 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:25:42 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A25%3A35.272316%2B01%3A00&dwd_station_id=00427 -> fallback mechanism check started..
+2026-03-20 11:25:42 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:25:42 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:42 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:25:42 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:42 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:25:42 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A25%3A35.272316%2B01%3A00&dwd_station_id=00430 -> fallback mechanism check started..
+2026-03-20 11:25:43 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:25:43 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:43 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:25:43 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:43 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:25:43 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A25%3A35.272316%2B01%3A00&dwd_station_id=00433 -> fallback mechanism check started..
+2026-03-20 11:25:43 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:25:43 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:43 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:25:43 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:43 | WeatherMapper | INFO | Total number of paths found 8
+2026-03-20 11:25:43 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:43 | WeatherMapper | INFO | Creating table
+2026-03-20 11:25:43 | DbInstance | INFO | create table weather_staging
+2026-03-20 11:25:43 | DbInstance | WARNING | Renaming table 'trial.weather_staging' → 'trial.weather_staging_backup_20260320_112543'
+2026-03-20 11:25:43 | DbInstance | INFO | Table 'weather_staging' exists: False
+2026-03-20 11:25:43 | DbInstance | INFO | Table 'weather_staging' created successfully.
+2026-03-20 11:25:43 | DbInstance | INFO | Creating raw staging table weather_staging_raw_staging ...
+2026-03-20 11:25:43 | DbInstance | WARNING | Table 'trial.weather_staging_raw_staging' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:25:43 | DbInstance | INFO | Table 'weather_staging_raw_staging' created successfully.
+2026-03-20 11:25:43 | DbInstance | INFO | create table weather_enrichment
+2026-03-20 11:25:43 | DbInstance | WARNING | Renaming table 'trial.weather_enrichment' → 'trial.weather_enrichment_backup_20260320_112543'
+2026-03-20 11:25:43 | DbInstance | INFO | Table 'weather_enrichment' exists: False
+2026-03-20 11:25:43 | DbInstance | INFO | Table 'weather_enrichment' created successfully.
+2026-03-20 11:25:43 | WeatherMapper | CRITICAL | Starting with 3 workers
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_0 id=6172766208 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00399_2026-02-24T15-39-24.json
+2026-03-20 11:25:43 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00399_2026-02-24T15-39-24.json
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_1 id=6189592576 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00403_2026-02-24T15-39-25.json
+2026-03-20 11:25:43 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00403_2026-02-24T15-39-25.json
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_2 id=6206418944 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00400_2026-02-24T15-39-25.json
+2026-03-20 11:25:43 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00400_2026-02-24T15-39-25.json
+2026-03-20 11:25:43 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:43 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:43 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:43 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_2 rows=24 time=0.00s
+2026-03-20 11:25:43 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:25:43 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=24 time=0.00s
+2026-03-20 11:25:43 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:25:43 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_1 rows=24 time=0.00s
+2026-03-20 11:25:43 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:25:43 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_2 rows=24
+2026-03-20 11:25:43 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_2
+2026-03-20 11:25:43 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:25:43 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_2 time=0.01s
+2026-03-20 11:25:43 | DbInstance | CRITICAL | ⏱ bulk insert executed in 47ms
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_2 time=0.05s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_2 total_time=0.05s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_2 id=6206418944 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00410_2026-02-24T15-39-25.json
+2026-03-20 11:25:43 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00410_2026-02-24T15-39-25.json
+2026-03-20 11:25:43 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:43 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_2 rows=24 time=0.00s
+2026-03-20 11:25:43 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:25:43 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_2 rows=24
+2026-03-20 11:25:43 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_2
+2026-03-20 11:25:43 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:25:43 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_2 time=0.00s
+2026-03-20 11:25:43 | DbInstance | CRITICAL | ⏱ bulk insert executed in 62ms
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_2 time=0.06s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_2 total_time=0.06s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_2 id=6206418944 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00420_2026-02-24T15-39-26.json
+2026-03-20 11:25:43 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00420_2026-02-24T15-39-26.json
+2026-03-20 11:25:43 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:43 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_2 rows=24 time=0.00s
+2026-03-20 11:25:43 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:25:43 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_2 rows=24
+2026-03-20 11:25:43 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_2
+2026-03-20 11:25:43 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:25:43 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_2 time=0.01s
+2026-03-20 11:25:43 | DbInstance | CRITICAL | ⏱ bulk insert executed in 40ms
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_2 time=0.04s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_2 total_time=0.04s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_2 id=6206418944 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00427_2026-02-24T15-39-26.json
+2026-03-20 11:25:43 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00427_2026-02-24T15-39-26.json
+2026-03-20 11:25:43 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:43 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_2 rows=24 time=0.00s
+2026-03-20 11:25:43 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:25:43 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_2 rows=24
+2026-03-20 11:25:43 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_2
+2026-03-20 11:25:43 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=24
+2026-03-20 11:25:43 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:25:43 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_2 time=0.00s
+2026-03-20 11:25:43 | DbInstance | CRITICAL | ⏱ bulk insert executed in 36ms
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_2 time=0.04s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_2 total_time=0.04s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_2 id=6206418944 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00430_2026-02-24T15-39-26.json
+2026-03-20 11:25:43 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00430_2026-02-24T15-39-26.json
+2026-03-20 11:25:43 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:43 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:25:43 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_2 rows=24 time=0.00s
+2026-03-20 11:25:43 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:25:43 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_1 rows=24
+2026-03-20 11:25:43 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_1
+2026-03-20 11:25:43 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:25:43 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=0.01s
+2026-03-20 11:25:43 | DbInstance | CRITICAL | ⏱ bulk insert executed in 205ms
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=0.21s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=0.21s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_0 id=6172766208 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00433_2026-02-24T15-39-27.json
+2026-03-20 11:25:43 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00433_2026-02-24T15-39-27.json
+2026-03-20 11:25:43 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:25:43 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=24 time=0.00s
+2026-03-20 11:25:43 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:25:43 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:25:43 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_1 time=0.02s
+2026-03-20 11:25:43 | DbInstance | CRITICAL | ⏱ bulk insert executed in 221ms
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_1 time=0.22s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_1 total_time=0.22s
+2026-03-20 11:25:43 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_2 rows=24
+2026-03-20 11:25:43 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_2
+2026-03-20 11:25:43 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:25:43 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_2 time=0.00s
+2026-03-20 11:25:43 | DbInstance | CRITICAL | ⏱ bulk insert executed in 31ms
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_2 time=0.03s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_2 total_time=0.03s
+2026-03-20 11:25:43 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=24
+2026-03-20 11:25:43 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:25:43 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:25:43 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=0.00s
+2026-03-20 11:25:43 | DbInstance | CRITICAL | ⏱ bulk insert executed in 28ms
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=0.03s
+2026-03-20 11:25:43 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=0.03s
+2026-03-20 11:25:44 | DbInstance | INFO | Synced raw → staging: trial.weather_staging_raw_staging → trial.weather_staging
+2026-03-20 11:25:44 | DbInstance | CRITICAL | ⏱ Syncing source to target table executed in 53ms
+2026-03-20 11:25:44 | DbInstance | INFO | Table 'weather_staging' exists: True
+2026-03-20 11:25:44 | DbInstance | CRITICAL | ⏱ create indexes executed in 3ms
+2026-03-20 11:25:44 | DbInstance | INFO | Synced staging → enrichment: trial.weather_staging → trial.weather_enrichment
+2026-03-20 11:25:44 | DbInstance | INFO | Table 'weather_enrichment' exists: True
+2026-03-20 11:25:44 | DbInstance | INFO | Creating index: ix_weather_enrichment_uid
+2026-03-20 11:25:44 | DbInstance | CRITICAL | ⏱ create indexes executed in 18ms
+2026-03-20 11:25:44 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T11:25:44.111227+01:00
+2026-03-20 11:25:44 | CoreConfig | INFO | 2026-03-20T11:25:44.111227+01:00
+2026-03-20 11:25:44 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 11:25:44 | MaterializedViewManager | INFO | Materialized view trigger matched for datasource 'weather_forecast_bright_sky' -> mv_weather
+2026-03-20 11:25:44 | DbInstance | INFO | MV SQL (mv_weather): CREATE INDEX IF NOT EXISTS "mv_weather_way_id_idx" ON "test_osm_base_graph"."mv_weather" (way_id)
+2026-03-20 11:25:44 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:25:44 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:25:44 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 1ms
+2026-03-20 11:25:44 | DbInstance | INFO | MV SQL (mv_weather): REFRESH MATERIALIZED VIEW "test_osm_base_graph"."mv_weather"
+2026-03-20 11:25:44 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:25:47 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:25:47 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 3s 561ms
+2026-03-20 11:25:47 | DbInstance | INFO | MV SQL (mv_weather): CREATE INDEX IF NOT EXISTS "mv_weather_way_id_idx" ON "test_osm_base_graph"."mv_weather" (way_id)
+2026-03-20 11:25:47 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:25:47 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:25:47 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 4ms
+2026-03-20 11:25:47 | DbInstance | WARNING | Dropping table 'trial.weather_staging_raw_staging' ...
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'trial.weather_staging_raw_staging' dropped successfully.
+2026-03-20 11:25:47 | WeatherMapper | INFO | Finished run for weather_forecast_bright_sky in 6s 441ms seconds -> message: Job finished Successfully !!!
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | DataSourceMapper | INFO | WeatherMapper configuration step finished!!
+2026-03-20 11:25:47 | ElevationGridMapper | INFO | Initializing ElevationGridMapper
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | ElevationGridMapper | INFO | Executing starting for datasource elevation_grids_links
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | HttpHandler | INFO | [Metadata Check] HEAD https://gdi.berlin.de/data/dgm1/atom/0.atom
+2026-03-20 11:25:47 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/elevation_grid
+2026-03-20 11:25:47 | ElevationGridMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:25:47 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/elevation_grid
+2026-03-20 11:25:47 | ElevationGridMapper | INFO | Total number of paths found 1
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | ElevationGridMapper | CRITICAL | Starting with 3 workers
+2026-03-20 11:25:47 | ElevationGridMapper | INFO | [THREAD START] name=ETLWorker_0 id=6172766208 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/elevation_grid/data_elevation_2026-03-20T11-16-35.xml
+2026-03-20 11:25:47 | ElevationGridMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/elevation_grid/data_elevation_2026-03-20T11-16-35.xml
+2026-03-20 11:25:47 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/elevation_grid
+2026-03-20 11:25:47 | ElevationGridMapper | INFO | result contains currently 1
+2026-03-20 11:25:47 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/data/grid
+2026-03-20 11:25:47 | FileHandler | INFO | [FileHandler] Replaced normalized file: elevation_links_test.json
+2026-03-20 11:25:47 | ElevationGridMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=297 time=0.00s
+2026-03-20 11:25:47 | ElevationGridMapper | WARNING | data source elevation_grids_links persistent is set to false. Hence it won't be saved to the database 
+2026-03-20 11:25:47 | ElevationGridMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=0.00s
+2026-03-20 11:25:47 | ElevationGridMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=0.00s
+2026-03-20 11:25:47 | DbInstance | WARNING | Table 'None' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:25:47 | DbInstance | WARNING | Table 'trial.elevationGrid' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:25:47 | DbInstance | CRITICAL | ⏱ Syncing source to target table executed in 42ms
+2026-03-20 11:25:47 | ElevationGridMapper | ERROR | DataSourceABCImpl.sync_raw_to_staging failed: Raw table None.None not found
+Traceback (most recent call last):
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/safe_class.py", line 13, in wrapper
+    return __func(self, *args, **kwargs)
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py", line 676, in sync_raw_to_staging
+    return self.db.sync_source_to_target_table(self.raw_staging_schema, self.raw_staging_table
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                        , self.data_source_config.storage.staging.table_schema,
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                        self.data_source_config.storage.staging.table_name)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/utils/execution_time.py", line 10, in wrapper
+    return func(*args, **kwargs)
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/database/db_repository.py", line 1159, in sync_source_to_target_table
+    raise ValueError(f"Raw table {raw_schema}.{raw_table_name} not found")
+ValueError: Raw table None.None not found
+2026-03-20 11:25:47 | DbInstance | WARNING | Table 'trial.elevationGrid' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:25:47 | DbInstance | WARNING | Table 'trial.elevationGrid' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:25:47 | ElevationGridMapper | ERROR | DataSourceABCImpl.sync_staging_to_enrichment failed: Staging table trial.elevationGrid not found
+Traceback (most recent call last):
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/safe_class.py", line 13, in wrapper
+    return __func(self, *args, **kwargs)
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py", line 669, in sync_staging_to_enrichment
+    self.db.sync_staging_to_enrichment(self.data_source_config.storage.staging.table_schema,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                       self.data_source_config.storage.staging.table_name,
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                       self.data_source_config.storage.enrichment.table_schema,
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                       self.data_source_config.storage.enrichment.table_name
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                       )
+                                       ^
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/database/db_repository.py", line 1044, in sync_staging_to_enrichment
+    raise ValueError(
+        f"Staging table {staging_schema}.{staging_table_name} not found"
+    )
+ValueError: Staging table trial.elevationGrid not found
+2026-03-20 11:25:47 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T11:25:47.926132+01:00
+2026-03-20 11:25:47 | CoreConfig | INFO | 2026-03-20T11:25:47.926132+01:00
+2026-03-20 11:25:47 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 11:25:47 | MaterializedViewManager | INFO | No materialized view configured for datasource 'elevation_grids_links'
+2026-03-20 11:25:47 | DbInstance | WARNING | Table 'trial.None' does not exist — skipping.
+2026-03-20 11:25:47 | ElevationGridMapper | INFO | Finished run for elevation_grids_links in 213ms seconds -> message: Job finished Successfully !!!
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | DataSourceMapper | INFO | ElevationGridMapper configuration step finished!!
+2026-03-20 11:25:47 | ElevationPythonMapper | INFO | Initializing ElevationPythonMapper
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | ElevationPythonMapper | INFO | Executing starting for datasource elevation_python
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/data/grid
+2026-03-20 11:25:47 | ElevationPythonMapper | INFO |  no. of urls: 297, process starting ......
+2026-03-20 11:25:47 | ElevationPythonMapper | ERROR | DataSourceABCImpl.process_multi_fetch_expand_list failed: 'SourceDTO' object has no attribute 'logger'
+Traceback (most recent call last):
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/safe_class.py", line 13, in wrapper
+    return __func(self, *args, **kwargs)
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py", line 186, in create_file_name_for_multi_fetch_expand_params
+    for k in sorted(param.keys()):
+                    ^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'keys'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/safe_class.py", line 13, in wrapper
+    return __func(self, *args, **kwargs)
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py", line 216, in process_multi_fetch_expand_list
+    path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(source, "_".join(url_name))
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/safe_class.py", line 21, in wrapper
+    self.logger.error(f"{cls.__name__}.{__func.__name__} failed: {e}")
+    ^^^^^^^^^^^
+AttributeError: 'SourceDTO' object has no attribute 'logger'
+2026-03-20 11:25:47 | ElevationPythonMapper | ERROR | DataSourceABCImpl.extract failed: object of type 'NoneType' has no len()
+Traceback (most recent call last):
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/safe_class.py", line 13, in wrapper
+    return __func(self, *args, **kwargs)
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py", line 421, in extract
+    self.logger.info(f"Total number of paths found {len(paths)}")
+                                                    ~~~^^^^^^^
+TypeError: object of type 'NoneType' has no len()
+2026-03-20 11:25:47 | ElevationPythonMapper | INFO | Finished run for elevation_python in 5ms seconds -> message: No files available
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | DataSourceMapper | INFO | ElevationPythonMapper configuration step finished!!
+2026-03-20 11:25:47 | TreeMapper | INFO | Initializing TreeMapper
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | TreeMapper | INFO | Executing starting for datasource tree
+2026-03-20 11:25:47 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:25:47 | HttpHandler | INFO | [Metadata Check] HEAD https://gdi.berlin.de/services/wfs/baumbestand
+2026-03-20 11:25:58 | HttpHandler | WARNING | Metadata check failed: HTTPSConnectionPool(host='gdi.berlin.de', port=443): Read timed out. (read timeout=10) -> fallback mechanism check started..
+2026-03-20 11:26:23 | HttpHandler | INFO | Fallback Metadata check successful: https://gdi.berlin.de/services/wfs/baumbestand
+2026-03-20 11:26:23 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage
+2026-03-20 11:26:23 | TreeMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:26:23 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage
+2026-03-20 11:26:23 | HttpHandler | INFO | [Metadata Check] HEAD https://gdi.berlin.de/services/wfs/baumbestand
+2026-03-20 11:26:33 | HttpHandler | WARNING | Metadata check failed: HTTPSConnectionPool(host='gdi.berlin.de', port=443): Read timed out. (read timeout=10) -> fallback mechanism check started..
+2026-03-20 11:26:55 | HttpHandler | INFO | Fallback Metadata check successful: https://gdi.berlin.de/services/wfs/baumbestand
+2026-03-20 11:26:55 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage
+2026-03-20 11:26:55 | TreeMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:26:55 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage
+2026-03-20 11:26:55 | TreeMapper | INFO | Total number of paths found 2
+2026-03-20 11:26:55 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:26:55 | TreeMapper | INFO | Creating table
+2026-03-20 11:26:55 | DbInstance | INFO | create table tree_staging
+2026-03-20 11:26:55 | DbInstance | INFO | Table 'tree_staging' exists: True
+2026-03-20 11:26:55 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:26:55 | DbInstance | INFO | Creating raw staging table tree_staging_raw_staging ...
+2026-03-20 11:26:55 | DbInstance | WARNING | Table 'trial.tree_staging_raw_staging' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:26:55 | DbInstance | INFO | Table 'tree_staging_raw_staging' created successfully.
+2026-03-20 11:26:55 | DbInstance | INFO | create table tree_mapping
+2026-03-20 11:26:55 | DbInstance | INFO | Table 'tree_mapping' exists: True
+2026-03-20 11:26:55 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:26:55 | TreeMapper | CRITICAL | Starting with 3 workers
+2026-03-20 11:26:55 | TreeMapper | INFO | [THREAD START] name=ETLWorker_0 id=6172766208 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage/data_gpkg_packet_outputFormat-geopackage_request-GetFeature_service-wfs_sortBy-gisid_typenames-baumbestand_anlagenbaeume_version-2.0.0_2026-02-22T16-32-33.gpkg
+2026-03-20 11:26:55 | TreeMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage/data_gpkg_packet_outputFormat-geopackage_request-GetFeature_service-wfs_sortBy-gisid_typenames-baumbestand_anlagenbaeume_version-2.0.0_2026-02-22T16-32-33.gpkg
+2026-03-20 11:26:55 | TreeMapper | INFO | [THREAD START] name=ETLWorker_1 id=6189592576 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage/data_gpkg_packet_outputFormat-geopackage_request-GetFeature_service-wfs_sortBy-gisid_typenames-baumbestand_strassenbaeume_version-2.0.0_2026-02-22T16-35-48.gpkg
+2026-03-20 11:26:55 | TreeMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage/data_gpkg_packet_outputFormat-geopackage_request-GetFeature_service-wfs_sortBy-gisid_typenames-baumbestand_strassenbaeume_version-2.0.0_2026-02-22T16-35-48.gpkg
+2026-03-20 11:26:55 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage
+2026-03-20 11:26:55 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage
+2026-03-20 11:27:13 | TreeMapper | INFO | result contains currently 434035
+2026-03-20 11:27:13 | TreeMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_1 rows=434035 time=17.95s
+2026-03-20 11:27:13 | TreeMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:27:17 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_1 rows=434035
+2026-03-20 11:27:17 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_1
+2026-03-20 11:27:23 | TreeMapper | INFO | result contains currently 511872
+2026-03-20 11:27:23 | TreeMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=511872 time=27.39s
+2026-03-20 11:27:23 | TreeMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:27:24 | DbInstance | INFO | Inserted 434035 rows into 'tree_staging_raw_staging'
+2026-03-20 11:27:24 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_1 time=7.44s
+2026-03-20 11:27:24 | DbInstance | CRITICAL | ⏱ bulk insert executed in 11s 254ms
+2026-03-20 11:27:24 | TreeMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_1 time=11.26s
+2026-03-20 11:27:24 | TreeMapper | INFO | [THREAD END] name=ETLWorker_1 total_time=29.22s
+2026-03-20 11:27:27 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=511872
+2026-03-20 11:27:27 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:27:35 | DbInstance | INFO | Inserted 511872 rows into 'tree_staging_raw_staging'
+2026-03-20 11:27:35 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=8.05s
+2026-03-20 11:27:35 | DbInstance | CRITICAL | ⏱ bulk insert executed in 11s 977ms
+2026-03-20 11:27:35 | TreeMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=11.98s
+2026-03-20 11:27:35 | TreeMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=39.37s
+2026-03-20 11:27:49 | DbInstance | INFO | Synced raw → staging: trial.tree_staging_raw_staging → trial.tree_staging
+2026-03-20 11:27:49 | DbInstance | CRITICAL | ⏱ Syncing source to target table executed in 14s 705ms
+2026-03-20 11:27:49 | TreeMapper | INFO | Mapping started on Mapping Table.....
+2026-03-20 11:27:50 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:27:50 | DbInstance | INFO | Row count for 'trial.tree_mapping': 1000117
+2026-03-20 11:27:50 | TreeMapper | INFO | Skipping mapping as all ways geometry mapped....
+2026-03-20 11:27:50 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T11:27:50.546114+01:00
+2026-03-20 11:27:50 | CoreConfig | INFO | 2026-03-20T11:27:50.546114+01:00
+2026-03-20 11:27:50 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 11:27:50 | MaterializedViewManager | INFO | No materialized view configured for datasource 'tree'
+2026-03-20 11:27:50 | DbInstance | WARNING | Dropping table 'trial.tree_staging_raw_staging' ...
+2026-03-20 11:27:50 | DbInstance | INFO | Table 'trial.tree_staging_raw_staging' dropped successfully.
+2026-03-20 11:27:50 | TreeMapper | INFO | Finished run for tree in 2m 2s 613ms seconds -> message: Job finished Successfully !!!
+2026-03-20 11:27:50 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:27:50 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:27:50 | DataSourceMapper | INFO | TreeMapper configuration step finished!!
+2026-03-20 11:27:50 | PleasantBicyclingMapper | INFO | Initializing PleasantBicyclingMapper
+2026-03-20 11:27:50 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:27:50 | PleasantBicyclingMapper | INFO | Executing starting for datasource pleasant_bicycling
+2026-03-20 11:27:50 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:27:50 | PleasantBicyclingMapper | INFO | Total number of paths found 1
+2026-03-20 11:27:50 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:27:50 | PleasantBicyclingMapper | INFO | Creating table
+2026-03-20 11:27:50 | DbInstance | INFO | create table pleasant_staging
+2026-03-20 11:27:50 | DbInstance | INFO | Table 'pleasant_staging' exists: True
+2026-03-20 11:27:50 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:27:50 | DbInstance | INFO | Creating raw staging table pleasant_staging_raw_staging ...
+2026-03-20 11:27:50 | DbInstance | WARNING | Dropping table 'trial.pleasant_staging_raw_staging' ...
+2026-03-20 11:27:50 | DbInstance | INFO | Table 'trial.pleasant_staging_raw_staging' dropped successfully.
+2026-03-20 11:27:50 | DbInstance | INFO | Table 'pleasant_staging_raw_staging' created successfully.
+2026-03-20 11:27:50 | DbInstance | INFO | create table pleasant_enrichment
+2026-03-20 11:27:50 | DbInstance | INFO | Table 'pleasant_enrichment' exists: True
+2026-03-20 11:27:50 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:27:50 | DbInstance | INFO | create table pleasant_mapping
+2026-03-20 11:27:50 | DbInstance | INFO | Table 'pleasant_mapping' exists: True
+2026-03-20 11:27:50 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:27:50 | PleasantBicyclingMapper | CRITICAL | Starting with 3 workers
+2026-03-20 11:27:50 | PleasantBicyclingMapper | INFO | [THREAD START] name=ETLWorker_0 id=6172766208 file=tmp/pleasant_bicycle/aggregated_metrics.parquet
+2026-03-20 11:27:50 | PleasantBicyclingMapper | INFO | Processing file tmp/pleasant_bicycle/aggregated_metrics.parquet
+2026-03-20 11:27:50 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/pleasant_bicycle
+2026-03-20 11:30:08 | PleasantBicyclingMapper | INFO | Read 4064703 pleasant rows after left join (metrics=4064703, lanes=231625)
+2026-03-20 11:30:08 | PleasantBicyclingMapper | INFO | result contains currently 4064703
+2026-03-20 11:30:08 | PleasantBicyclingMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=4064703 time=138.05s
+2026-03-20 11:30:08 | PleasantBicyclingMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:30:48 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=4064703
+2026-03-20 11:30:48 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:31:46 | DbInstance | INFO | Inserted 4064703 rows into 'pleasant_staging_raw_staging'
+2026-03-20 11:31:46 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=58.03s
+2026-03-20 11:31:46 | DbInstance | CRITICAL | ⏱ bulk insert executed in 1m 37s 918ms
+2026-03-20 11:31:46 | PleasantBicyclingMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=97.92s
+2026-03-20 11:31:46 | PleasantBicyclingMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=235.97s
+2026-03-20 11:32:55 | DbInstance | INFO | Synced raw → staging: trial.pleasant_staging_raw_staging → trial.pleasant_staging
+2026-03-20 11:32:55 | DbInstance | CRITICAL | ⏱ Syncing source to target table executed in 1m 6s 778ms
+2026-03-20 11:33:58 | DbInstance | INFO | Synced staging → enrichment: trial.pleasant_staging → trial.pleasant_enrichment
+2026-03-20 11:33:58 | PleasantBicyclingMapper | INFO | Mapping started on Mapping Table.....
+2026-03-20 11:33:59 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:33:59 | DbInstance | INFO | Row count for 'trial.pleasant_mapping': 0
+2026-03-20 11:33:59 | PleasantBicyclingMapper | INFO | Executing mapping strategy type 'knn' for datasource pleasant_bicycling
+2026-03-20 11:33:59 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T11:33:59.547206+01:00
+2026-03-20 11:33:59 | CoreConfig | INFO | 2026-03-20T11:33:59.547206+01:00
+2026-03-20 11:33:59 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 11:33:59 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T11:33:59.570140+01:00
+2026-03-20 11:33:59 | CoreConfig | INFO | 2026-03-20T11:33:59.570140+01:00
+2026-03-20 11:33:59 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 11:33:59 | PleasantBicyclingMapper | INFO | Using batched execution for Mapping with batch size: 10000
+2026-03-20 11:33:59 | DbInstance | INFO | Batching query on table: trial.ways_base (alias: b)
+2026-03-20 11:33:59 | DbInstance | INFO | Total rows to process: 1000117, batch size: 10000
+2026-03-20 11:33:59 | DbInstance | INFO | Processing in 101 batches...
+2026-03-20 11:33:59 | DbInstance | INFO | Processing batch 1/101 (rows 1-10000)
+2026-03-20 11:51:23 | RunConfigWatcher | INFO | Skipping custom config watcher because Uvicorn reload is enabled
+2026-03-20 11:51:24 | CoreMain | INFO | Pipeline bootstrap thread started
+2026-03-20 11:51:24 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T11:51:24.407549+01:00
+2026-03-20 11:51:24 | CoreConfig | INFO | 2026-03-20T11:51:24.407549+01:00
+2026-03-20 11:51:24 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 11:51:24 | Application | INFO | Starting Application based on the configuration
+2026-03-20 11:51:24 | Application | INFO | Initializing database ......
+2026-03-20 11:51:24 | DbInstance | INFO | Testing connection with url postgresql+psycopg://postgres:admin123@localhost:5432/test
+2026-03-20 11:51:24 | DbInstance | INFO | Schema 'trial' ensured.
+2026-03-20 11:51:24 | DbInstance | INFO | ✅ Database instance initialized.
+2026-03-20 11:51:24 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:24 | DataSourceMetadataService | INFO | Metadata table already exists
+2026-03-20 11:51:24 | Application | INFO | Communication service disabled by graph.communication.enable=false
+2026-03-20 11:51:24 | Application | INFO | Initializing scheduler ....
+2026-03-20 11:51:24 | InitScheduler | WARNING | Scheduler disabled — not creating scheduler instance
+2026-03-20 11:51:24 | Application | INFO | Initializing debug FastAPI server ....
+2026-03-20 11:51:24 | InitGraph | INFO | Skipping comm task setup because graph.communication.enable is false
+2026-03-20 11:51:24 | DbInstance | INFO | create table ways_base
+2026-03-20 11:51:24 | DbInstance | INFO | Table 'ways_base' exists: True
+2026-03-20 11:51:24 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:51:24 | InitGraph | INFO | Initializing Base Graph
+2026-03-20 11:51:24 | DataSourceMapper | INFO | Found 1 data sources
+2026-03-20 11:51:24 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:24 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:24 | DataSourceMapper | INFO | Enable Found 0 data sources
+2026-03-20 11:51:24 | InitGraph | INFO | Loading Graph through external_ingest which means the base graph data will be parsed at router level
+2026-03-20 11:51:24 | InitGraph | INFO | Skipping router-coupled wait because graph.communication.enable is false
+2026-03-20 11:51:24 | InitGraph | INFO | Skipping main ways wait because graph.communication.enable is false
+2026-03-20 11:51:24 | DbInstance | INFO | Table 'way_segment' exists: True
+2026-03-20 11:51:24 | InitGraph | INFO | Table way_segment exists
+2026-03-20 11:51:24 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:51:25 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:51:25 | DbInstance | INFO | Row count for 'trial.way_segment': 1000117
+2026-03-20 11:51:25 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:51:25 | DbInstance | INFO | Row count for 'trial.way_segment': 1000117
+2026-03-20 11:51:25 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:51:25 | DbInstance | INFO | Row count for 'trial.way_segment': 1000117
+2026-03-20 11:51:25 | DataSourceMapper | INFO | Found 9 data sources
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | DataSourceMapper | INFO | Enable Found 6 data sources
+2026-03-20 11:51:25 | WeatherStationMapper | INFO | Initializing WeatherStationMapper
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | WeatherStationMapper | INFO | Executing starting for datasource weather_station_bright_sky
+2026-03-20 11:51:25 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:25 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/sources
+2026-03-20 11:51:26 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/sources?dwd_station_id=00399&dwd_station_id=00403&dwd_station_id=00400&dwd_station_id=00410&dwd_station_id=00420&dwd_station_id=00427&dwd_station_id=00430&dwd_station_id=00433 -> fallback mechanism check started..
+2026-03-20 11:51:26 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/sources
+2026-03-20 11:51:26 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/stations
+2026-03-20 11:51:26 | WeatherStationMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:51:26 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/stations
+2026-03-20 11:51:26 | WeatherStationMapper | INFO | Total number of paths found 1
+2026-03-20 11:51:26 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:26 | WeatherStationMapper | INFO | Creating table
+2026-03-20 11:51:26 | DbInstance | INFO | create table dwd_station_locations_staging
+2026-03-20 11:51:26 | DbInstance | INFO | Table 'dwd_station_locations_staging' exists: True
+2026-03-20 11:51:26 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:51:26 | DbInstance | INFO | Creating raw staging table dwd_station_locations_staging_raw_staging ...
+2026-03-20 11:51:26 | DbInstance | WARNING | Table 'trial.dwd_station_locations_staging_raw_staging' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:51:26 | DbInstance | INFO | Table 'dwd_station_locations_staging_raw_staging' created successfully.
+2026-03-20 11:51:26 | DbInstance | INFO | create table dwd_station_locations_enrichment
+2026-03-20 11:51:26 | DbInstance | INFO | Table 'dwd_station_locations_enrichment' exists: True
+2026-03-20 11:51:26 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:51:26 | DbInstance | INFO | create table dwd_station_locations_mapping
+2026-03-20 11:51:26 | DbInstance | INFO | Table 'dwd_station_locations_mapping' exists: True
+2026-03-20 11:51:26 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:51:26 | WeatherStationMapper | CRITICAL | Starting with 3 workers
+2026-03-20 11:51:26 | WeatherStationMapper | INFO | [THREAD START] name=ETLWorker_0 id=6128021504 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/stations/data_weatherStation_2026-01-02T17-36-57.json
+2026-03-20 11:51:26 | WeatherStationMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/stations/data_weatherStation_2026-01-02T17-36-57.json
+2026-03-20 11:51:26 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/stations
+2026-03-20 11:51:26 | WeatherStationMapper | INFO | result contains currently 1
+2026-03-20 11:51:26 | WeatherStationMapper | INFO | Filtered 52 → 8 rows
+2026-03-20 11:51:26 | WeatherStationMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=8 time=0.00s
+2026-03-20 11:51:26 | WeatherStationMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:51:26 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=8
+2026-03-20 11:51:26 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:51:26 | DbInstance | INFO | Inserted 8 rows into 'dwd_station_locations_staging_raw_staging'
+2026-03-20 11:51:26 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=0.00s
+2026-03-20 11:51:26 | DbInstance | CRITICAL | ⏱ bulk insert executed in 25ms
+2026-03-20 11:51:26 | WeatherStationMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=0.03s
+2026-03-20 11:51:26 | WeatherStationMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=0.03s
+2026-03-20 11:51:26 | DbInstance | INFO | Synced raw → staging: trial.dwd_station_locations_staging_raw_staging → trial.dwd_station_locations_staging
+2026-03-20 11:51:26 | DbInstance | CRITICAL | ⏱ Syncing source to target table executed in 51ms
+2026-03-20 11:51:26 | DbInstance | WARNING | No updatable enrichment columns found for trial.dwd_station_locations_enrichment -> this means there is not copying of columns present in staging to enrichment, which is not a PK, FK, or any other constraints.
+2026-03-20 11:51:26 | DbInstance | INFO | Synced staging → enrichment: trial.dwd_station_locations_staging → trial.dwd_station_locations_enrichment
+2026-03-20 11:51:26 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:51:26 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:51:26 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 4ms
+2026-03-20 11:51:26 | WeatherStationMapper | INFO | Mapping started on Mapping Table.....
+2026-03-20 11:51:26 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:51:26 | DbInstance | INFO | Row count for 'trial.dwd_station_locations_mapping': 1000117
+2026-03-20 11:51:26 | WeatherStationMapper | INFO | Skipping mapping as all ways geometry mapped....
+2026-03-20 11:51:26 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T11:51:26.722806+01:00
+2026-03-20 11:51:26 | CoreConfig | INFO | 2026-03-20T11:51:26.722806+01:00
+2026-03-20 11:51:26 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 11:51:26 | MaterializedViewManager | INFO | Materialized view trigger matched for datasource 'weather_station_bright_sky' -> mv_weather
+2026-03-20 11:51:26 | DbInstance | INFO | MV SQL (mv_weather): CREATE INDEX IF NOT EXISTS "mv_weather_way_id_idx" ON "test_osm_base_graph"."mv_weather" (way_id)
+2026-03-20 11:51:26 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:51:26 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:51:26 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 3ms
+2026-03-20 11:51:26 | DbInstance | INFO | MV SQL (mv_weather): REFRESH MATERIALIZED VIEW "test_osm_base_graph"."mv_weather"
+2026-03-20 11:51:26 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:51:29 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:51:29 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 2s 547ms
+2026-03-20 11:51:29 | DbInstance | INFO | MV SQL (mv_weather): CREATE INDEX IF NOT EXISTS "mv_weather_way_id_idx" ON "test_osm_base_graph"."mv_weather" (way_id)
+2026-03-20 11:51:29 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:51:29 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:51:29 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 4ms
+2026-03-20 11:51:29 | DbInstance | WARNING | Dropping table 'trial.dwd_station_locations_staging_raw_staging' ...
+2026-03-20 11:51:29 | DbInstance | INFO | Table 'trial.dwd_station_locations_staging_raw_staging' dropped successfully.
+2026-03-20 11:51:29 | WeatherStationMapper | INFO | Finished run for weather_station_bright_sky in 3s 339ms seconds -> message: Job finished Successfully !!!
+2026-03-20 11:51:29 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:29 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:29 | DataSourceMapper | INFO | WeatherStationMapper configuration step finished!!
+2026-03-20 11:51:29 | WeatherMapper | INFO | Initializing WeatherMapper
+2026-03-20 11:51:29 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:29 | WeatherMapper | INFO | Executing starting for datasource weather_forecast_bright_sky
+2026-03-20 11:51:29 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:29 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:51:29 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A51%3A24.407549%2B01%3A00&dwd_station_id=00399 -> fallback mechanism check started..
+2026-03-20 11:51:29 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:51:29 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:29 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:51:29 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:29 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:51:29 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A51%3A24.407549%2B01%3A00&dwd_station_id=00403 -> fallback mechanism check started..
+2026-03-20 11:51:29 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:51:29 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:29 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:51:29 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:29 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:51:29 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A51%3A24.407549%2B01%3A00&dwd_station_id=00400 -> fallback mechanism check started..
+2026-03-20 11:51:30 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:51:30 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:30 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:51:30 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:30 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:51:30 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A51%3A24.407549%2B01%3A00&dwd_station_id=00410 -> fallback mechanism check started..
+2026-03-20 11:51:30 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:51:30 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:30 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:51:30 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:30 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:51:30 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A51%3A24.407549%2B01%3A00&dwd_station_id=00420 -> fallback mechanism check started..
+2026-03-20 11:51:30 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:51:30 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:30 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:51:30 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:30 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:51:30 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A51%3A24.407549%2B01%3A00&dwd_station_id=00427 -> fallback mechanism check started..
+2026-03-20 11:51:30 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:51:30 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:30 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:51:30 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:30 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:51:30 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A51%3A24.407549%2B01%3A00&dwd_station_id=00430 -> fallback mechanism check started..
+2026-03-20 11:51:31 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:51:31 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:31 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:51:31 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:31 | HttpHandler | INFO | [Metadata Check] HEAD https://api.brightsky.dev/weather
+2026-03-20 11:51:31 | HttpHandler | WARNING | Metadata check failed: 405 Client Error: Method Not Allowed for url: https://api.brightsky.dev/weather?date=2026-03-20T11%3A51%3A24.407549%2B01%3A00&dwd_station_id=00433 -> fallback mechanism check started..
+2026-03-20 11:51:31 | HttpHandler | INFO | Fallback Metadata check successful: https://api.brightsky.dev/weather
+2026-03-20 11:51:31 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:31 | WeatherMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:51:31 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:31 | WeatherMapper | INFO | Total number of paths found 8
+2026-03-20 11:51:31 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:31 | WeatherMapper | INFO | Creating table
+2026-03-20 11:51:31 | DbInstance | INFO | create table weather_staging
+2026-03-20 11:51:31 | DbInstance | WARNING | Renaming table 'trial.weather_staging' → 'trial.weather_staging_backup_20260320_115131'
+2026-03-20 11:51:31 | DbInstance | INFO | Table 'weather_staging' exists: False
+2026-03-20 11:51:31 | DbInstance | INFO | Table 'weather_staging' created successfully.
+2026-03-20 11:51:31 | DbInstance | INFO | Creating raw staging table weather_staging_raw_staging ...
+2026-03-20 11:51:31 | DbInstance | WARNING | Table 'trial.weather_staging_raw_staging' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:51:31 | DbInstance | INFO | Table 'weather_staging_raw_staging' created successfully.
+2026-03-20 11:51:31 | DbInstance | INFO | create table weather_enrichment
+2026-03-20 11:51:31 | DbInstance | WARNING | Renaming table 'trial.weather_enrichment' → 'trial.weather_enrichment_backup_20260320_115131'
+2026-03-20 11:51:31 | DbInstance | INFO | Table 'weather_enrichment' exists: False
+2026-03-20 11:51:31 | DbInstance | INFO | Table 'weather_enrichment' created successfully.
+2026-03-20 11:51:31 | WeatherMapper | CRITICAL | Starting with 3 workers
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_0 id=6128021504 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00399_2026-02-24T15-39-24.json
+2026-03-20 11:51:31 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00399_2026-02-24T15-39-24.json
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_1 id=6144847872 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00403_2026-02-24T15-39-25.json
+2026-03-20 11:51:31 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00403_2026-02-24T15-39-25.json
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_2 id=6161674240 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00400_2026-02-24T15-39-25.json
+2026-03-20 11:51:31 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00400_2026-02-24T15-39-25.json
+2026-03-20 11:51:31 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:31 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:31 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:31 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=24 time=0.00s
+2026-03-20 11:51:31 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:51:31 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_1 rows=24 time=0.00s
+2026-03-20 11:51:31 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:51:31 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_2 rows=24 time=0.00s
+2026-03-20 11:51:31 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:51:31 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=24
+2026-03-20 11:51:31 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:51:31 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:51:31 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=0.01s
+2026-03-20 11:51:31 | DbInstance | CRITICAL | ⏱ bulk insert executed in 34ms
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=0.03s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=0.04s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_0 id=6128021504 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00410_2026-02-24T15-39-25.json
+2026-03-20 11:51:31 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00410_2026-02-24T15-39-25.json
+2026-03-20 11:51:31 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:31 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=24 time=0.00s
+2026-03-20 11:51:31 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:51:31 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=24
+2026-03-20 11:51:31 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:51:31 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:51:31 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=0.00s
+2026-03-20 11:51:31 | DbInstance | CRITICAL | ⏱ bulk insert executed in 39ms
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=0.04s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=0.04s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_0 id=6128021504 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00420_2026-02-24T15-39-26.json
+2026-03-20 11:51:31 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00420_2026-02-24T15-39-26.json
+2026-03-20 11:51:31 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:31 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=24 time=0.00s
+2026-03-20 11:51:31 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:51:31 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=24
+2026-03-20 11:51:31 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:51:31 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:51:31 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=0.01s
+2026-03-20 11:51:31 | DbInstance | CRITICAL | ⏱ bulk insert executed in 52ms
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=0.05s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=0.05s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_0 id=6128021504 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00427_2026-02-24T15-39-26.json
+2026-03-20 11:51:31 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00427_2026-02-24T15-39-26.json
+2026-03-20 11:51:31 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:31 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=24 time=0.00s
+2026-03-20 11:51:31 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:51:31 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=24
+2026-03-20 11:51:31 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:51:31 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:51:31 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=0.00s
+2026-03-20 11:51:31 | DbInstance | CRITICAL | ⏱ bulk insert executed in 43ms
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=0.04s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=0.05s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_0 id=6128021504 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00430_2026-02-24T15-39-26.json
+2026-03-20 11:51:31 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00430_2026-02-24T15-39-26.json
+2026-03-20 11:51:31 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:31 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=24 time=0.00s
+2026-03-20 11:51:31 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:51:31 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_2 rows=24
+2026-03-20 11:51:31 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_1 rows=24
+2026-03-20 11:51:31 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_2
+2026-03-20 11:51:31 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_1
+2026-03-20 11:51:31 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:51:31 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_1 time=0.01s
+2026-03-20 11:51:31 | DbInstance | CRITICAL | ⏱ bulk insert executed in 190ms
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_1 time=0.19s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_1 total_time=0.19s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD START] name=ETLWorker_1 id=6144847872 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00433_2026-02-24T15-39-27.json
+2026-03-20 11:51:31 | WeatherMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data/data_weather_forecast_dwd_station_id-00433_2026-02-24T15-39-27.json
+2026-03-20 11:51:31 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/brightsky/weather-data
+2026-03-20 11:51:31 | WeatherMapper | INFO | result contains currently 1
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_1 rows=24 time=0.00s
+2026-03-20 11:51:31 | WeatherMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:51:31 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:51:31 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_2 time=0.01s
+2026-03-20 11:51:31 | DbInstance | CRITICAL | ⏱ bulk insert executed in 192ms
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_2 time=0.19s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_2 total_time=0.19s
+2026-03-20 11:51:31 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=24
+2026-03-20 11:51:31 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:51:31 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:51:31 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=0.00s
+2026-03-20 11:51:31 | DbInstance | CRITICAL | ⏱ bulk insert executed in 29ms
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=0.03s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=0.03s
+2026-03-20 11:51:31 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_1 rows=24
+2026-03-20 11:51:31 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_1
+2026-03-20 11:51:31 | DbInstance | INFO | Inserted 24 rows into 'weather_staging_raw_staging'
+2026-03-20 11:51:31 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_1 time=0.00s
+2026-03-20 11:51:31 | DbInstance | CRITICAL | ⏱ bulk insert executed in 25ms
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_1 time=0.03s
+2026-03-20 11:51:31 | WeatherMapper | INFO | [THREAD END] name=ETLWorker_1 total_time=0.03s
+2026-03-20 11:51:31 | DbInstance | INFO | Synced raw → staging: trial.weather_staging_raw_staging → trial.weather_staging
+2026-03-20 11:51:31 | DbInstance | CRITICAL | ⏱ Syncing source to target table executed in 58ms
+2026-03-20 11:51:31 | DbInstance | INFO | Table 'weather_staging' exists: True
+2026-03-20 11:51:31 | DbInstance | CRITICAL | ⏱ create indexes executed in 6ms
+2026-03-20 11:51:31 | DbInstance | INFO | Synced staging → enrichment: trial.weather_staging → trial.weather_enrichment
+2026-03-20 11:51:31 | DbInstance | INFO | Table 'weather_enrichment' exists: True
+2026-03-20 11:51:31 | DbInstance | INFO | Creating index: ix_weather_enrichment_uid
+2026-03-20 11:51:31 | DbInstance | CRITICAL | ⏱ create indexes executed in 18ms
+2026-03-20 11:51:31 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T11:51:31.773937+01:00
+2026-03-20 11:51:31 | CoreConfig | INFO | 2026-03-20T11:51:31.773937+01:00
+2026-03-20 11:51:31 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 11:51:31 | MaterializedViewManager | INFO | Materialized view trigger matched for datasource 'weather_forecast_bright_sky' -> mv_weather
+2026-03-20 11:51:31 | DbInstance | INFO | MV SQL (mv_weather): CREATE INDEX IF NOT EXISTS "mv_weather_way_id_idx" ON "test_osm_base_graph"."mv_weather" (way_id)
+2026-03-20 11:51:31 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:51:31 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:51:31 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 2ms
+2026-03-20 11:51:31 | DbInstance | INFO | MV SQL (mv_weather): REFRESH MATERIALIZED VIEW "test_osm_base_graph"."mv_weather"
+2026-03-20 11:51:31 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:51:34 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:51:34 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 2s 435ms
+2026-03-20 11:51:34 | DbInstance | INFO | MV SQL (mv_weather): CREATE INDEX IF NOT EXISTS "mv_weather_way_id_idx" ON "test_osm_base_graph"."mv_weather" (way_id)
+2026-03-20 11:51:34 | DbInstance | INFO | Starting SQL execution...
+2026-03-20 11:51:34 | DbInstance | INFO | SQL execution completed.
+2026-03-20 11:51:34 | DbInstance | CRITICAL | ⏱ SQL execution time:  executed in 3ms
+2026-03-20 11:51:34 | DbInstance | WARNING | Dropping table 'trial.weather_staging_raw_staging' ...
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'trial.weather_staging_raw_staging' dropped successfully.
+2026-03-20 11:51:34 | WeatherMapper | INFO | Finished run for weather_forecast_bright_sky in 4s 920ms seconds -> message: Job finished Successfully !!!
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | DataSourceMapper | INFO | WeatherMapper configuration step finished!!
+2026-03-20 11:51:34 | ElevationGridMapper | INFO | Initializing ElevationGridMapper
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | ElevationGridMapper | INFO | Executing starting for datasource elevation_grids_links
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | HttpHandler | INFO | [Metadata Check] HEAD https://gdi.berlin.de/data/dgm1/atom/0.atom
+2026-03-20 11:51:34 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/elevation_grid
+2026-03-20 11:51:34 | ElevationGridMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:51:34 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/elevation_grid
+2026-03-20 11:51:34 | ElevationGridMapper | INFO | Total number of paths found 1
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | ElevationGridMapper | CRITICAL | Starting with 3 workers
+2026-03-20 11:51:34 | ElevationGridMapper | INFO | [THREAD START] name=ETLWorker_0 id=6128021504 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/elevation_grid/data_elevation_2026-03-20T11-16-35.xml
+2026-03-20 11:51:34 | ElevationGridMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/elevation_grid/data_elevation_2026-03-20T11-16-35.xml
+2026-03-20 11:51:34 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/elevation_grid
+2026-03-20 11:51:34 | ElevationGridMapper | INFO | result contains currently 1
+2026-03-20 11:51:34 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/data/grid
+2026-03-20 11:51:34 | FileHandler | INFO | [FileHandler] Replaced normalized file: elevation_links_test.json
+2026-03-20 11:51:34 | ElevationGridMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=297 time=0.00s
+2026-03-20 11:51:34 | ElevationGridMapper | WARNING | data source elevation_grids_links persistent is set to false. Hence it won't be saved to the database 
+2026-03-20 11:51:34 | ElevationGridMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=0.00s
+2026-03-20 11:51:34 | ElevationGridMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=0.00s
+2026-03-20 11:51:34 | DbInstance | WARNING | Table 'None' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:51:34 | DbInstance | WARNING | Table 'trial.elevationGrid' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:51:34 | DbInstance | CRITICAL | ⏱ Syncing source to target table executed in 42ms
+2026-03-20 11:51:34 | ElevationGridMapper | ERROR | DataSourceABCImpl.sync_raw_to_staging failed: Raw table None.None not found
+Traceback (most recent call last):
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/safe_class.py", line 13, in wrapper
+    return __func(self, *args, **kwargs)
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py", line 676, in sync_raw_to_staging
+    return self.db.sync_source_to_target_table(self.raw_staging_schema, self.raw_staging_table
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                        , self.data_source_config.storage.staging.table_schema,
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                        self.data_source_config.storage.staging.table_name)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/utils/execution_time.py", line 10, in wrapper
+    return func(*args, **kwargs)
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/database/db_repository.py", line 1159, in sync_source_to_target_table
+    raise ValueError(f"Raw table {raw_schema}.{raw_table_name} not found")
+ValueError: Raw table None.None not found
+2026-03-20 11:51:34 | DbInstance | WARNING | Table 'trial.elevationGrid' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:51:34 | DbInstance | WARNING | Table 'trial.elevationGrid' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:51:34 | ElevationGridMapper | ERROR | DataSourceABCImpl.sync_staging_to_enrichment failed: Staging table trial.elevationGrid not found
+Traceback (most recent call last):
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/safe_class.py", line 13, in wrapper
+    return __func(self, *args, **kwargs)
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py", line 669, in sync_staging_to_enrichment
+    self.db.sync_staging_to_enrichment(self.data_source_config.storage.staging.table_schema,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                       self.data_source_config.storage.staging.table_name,
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                       self.data_source_config.storage.enrichment.table_schema,
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                       self.data_source_config.storage.enrichment.table_name
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                       )
+                                       ^
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/database/db_repository.py", line 1044, in sync_staging_to_enrichment
+    raise ValueError(
+        f"Staging table {staging_schema}.{staging_table_name} not found"
+    )
+ValueError: Staging table trial.elevationGrid not found
+2026-03-20 11:51:34 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T11:51:34.479530+01:00
+2026-03-20 11:51:34 | CoreConfig | INFO | 2026-03-20T11:51:34.479530+01:00
+2026-03-20 11:51:34 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 11:51:34 | MaterializedViewManager | INFO | No materialized view configured for datasource 'elevation_grids_links'
+2026-03-20 11:51:34 | DbInstance | WARNING | Table 'trial.None' does not exist — skipping.
+2026-03-20 11:51:34 | ElevationGridMapper | INFO | Finished run for elevation_grids_links in 230ms seconds -> message: Job finished Successfully !!!
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | DataSourceMapper | INFO | ElevationGridMapper configuration step finished!!
+2026-03-20 11:51:34 | ElevationPythonMapper | INFO | Initializing ElevationPythonMapper
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | ElevationPythonMapper | INFO | Executing starting for datasource elevation_python
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/data/grid
+2026-03-20 11:51:34 | ElevationPythonMapper | INFO |  no. of urls: 297, process starting ......
+2026-03-20 11:51:34 | ElevationPythonMapper | ERROR | DataSourceABCImpl.process_multi_fetch_expand_list failed: 'SourceDTO' object has no attribute 'logger'
+Traceback (most recent call last):
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/safe_class.py", line 13, in wrapper
+    return __func(self, *args, **kwargs)
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py", line 186, in create_file_name_for_multi_fetch_expand_params
+    for k in sorted(param.keys()):
+                    ^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'keys'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/safe_class.py", line 13, in wrapper
+    return __func(self, *args, **kwargs)
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py", line 216, in process_multi_fetch_expand_list
+    path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(source, "_".join(url_name))
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/safe_class.py", line 21, in wrapper
+    self.logger.error(f"{cls.__name__}.{__func.__name__} failed: {e}")
+    ^^^^^^^^^^^
+AttributeError: 'SourceDTO' object has no attribute 'logger'
+2026-03-20 11:51:34 | ElevationPythonMapper | ERROR | DataSourceABCImpl.extract failed: object of type 'NoneType' has no len()
+Traceback (most recent call last):
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/safe_class.py", line 13, in wrapper
+    return __func(self, *args, **kwargs)
+  File "/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py", line 421, in extract
+    self.logger.info(f"Total number of paths found {len(paths)}")
+                                                    ~~~^^^^^^^
+TypeError: object of type 'NoneType' has no len()
+2026-03-20 11:51:34 | ElevationPythonMapper | INFO | Finished run for elevation_python in 6ms seconds -> message: No files available
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | DataSourceMapper | INFO | ElevationPythonMapper configuration step finished!!
+2026-03-20 11:51:34 | TreeMapper | INFO | Initializing TreeMapper
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | TreeMapper | INFO | Executing starting for datasource tree
+2026-03-20 11:51:34 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:51:34 | HttpHandler | INFO | [Metadata Check] HEAD https://gdi.berlin.de/services/wfs/baumbestand
+2026-03-20 11:51:44 | HttpHandler | WARNING | Metadata check failed: HTTPSConnectionPool(host='gdi.berlin.de', port=443): Read timed out. (read timeout=10) -> fallback mechanism check started..
+2026-03-20 11:52:10 | HttpHandler | INFO | Fallback Metadata check successful: https://gdi.berlin.de/services/wfs/baumbestand
+2026-03-20 11:52:10 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage
+2026-03-20 11:52:10 | TreeMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:52:10 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage
+2026-03-20 11:52:10 | HttpHandler | INFO | [Metadata Check] HEAD https://gdi.berlin.de/services/wfs/baumbestand
+2026-03-20 11:52:20 | HttpHandler | WARNING | Metadata check failed: HTTPSConnectionPool(host='gdi.berlin.de', port=443): Read timed out. (read timeout=10) -> fallback mechanism check started..
+2026-03-20 11:52:42 | HttpHandler | INFO | Fallback Metadata check successful: https://gdi.berlin.de/services/wfs/baumbestand
+2026-03-20 11:52:42 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage
+2026-03-20 11:52:42 | TreeMapper | WARNING | No new data found for metadata before fetch check. Hence skipping the rest of processing steps 
+2026-03-20 11:52:42 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage
+2026-03-20 11:52:42 | TreeMapper | INFO | Total number of paths found 2
+2026-03-20 11:52:42 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:52:42 | TreeMapper | INFO | Creating table
+2026-03-20 11:52:42 | DbInstance | INFO | create table tree_staging
+2026-03-20 11:52:42 | DbInstance | INFO | Table 'tree_staging' exists: True
+2026-03-20 11:52:42 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:52:42 | DbInstance | INFO | Creating raw staging table tree_staging_raw_staging ...
+2026-03-20 11:52:42 | DbInstance | WARNING | Table 'trial.tree_staging_raw_staging' not found in schema 'trial'. Reflecting metadata...
+2026-03-20 11:52:42 | DbInstance | INFO | Table 'tree_staging_raw_staging' created successfully.
+2026-03-20 11:52:42 | DbInstance | INFO | create table tree_mapping
+2026-03-20 11:52:42 | DbInstance | INFO | Table 'tree_mapping' exists: True
+2026-03-20 11:52:42 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:52:42 | TreeMapper | CRITICAL | Starting with 3 workers
+2026-03-20 11:52:42 | TreeMapper | INFO | [THREAD START] name=ETLWorker_0 id=6128021504 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage/data_gpkg_packet_outputFormat-geopackage_request-GetFeature_service-wfs_sortBy-gisid_typenames-baumbestand_anlagenbaeume_version-2.0.0_2026-02-22T16-32-33.gpkg
+2026-03-20 11:52:42 | TreeMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage/data_gpkg_packet_outputFormat-geopackage_request-GetFeature_service-wfs_sortBy-gisid_typenames-baumbestand_anlagenbaeume_version-2.0.0_2026-02-22T16-32-33.gpkg
+2026-03-20 11:52:42 | TreeMapper | INFO | [THREAD START] name=ETLWorker_1 id=6144847872 file=/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage/data_gpkg_packet_outputFormat-geopackage_request-GetFeature_service-wfs_sortBy-gisid_typenames-baumbestand_strassenbaeume_version-2.0.0_2026-02-22T16-35-48.gpkg
+2026-03-20 11:52:42 | TreeMapper | INFO | Processing file /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage/data_gpkg_packet_outputFormat-geopackage_request-GetFeature_service-wfs_sortBy-gisid_typenames-baumbestand_strassenbaeume_version-2.0.0_2026-02-22T16-35-48.gpkg
+2026-03-20 11:52:42 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage
+2026-03-20 11:52:42 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/tree_wfs/tree_ablage
+2026-03-20 11:53:05 | TreeMapper | INFO | result contains currently 434035
+2026-03-20 11:53:05 | TreeMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_1 rows=434035 time=22.69s
+2026-03-20 11:53:05 | TreeMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:53:09 | TreeMapper | INFO | result contains currently 511872
+2026-03-20 11:53:09 | TreeMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=511872 time=27.49s
+2026-03-20 11:53:09 | TreeMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:53:12 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_1 rows=434035
+2026-03-20 11:53:12 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_1
+2026-03-20 11:53:15 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=511872
+2026-03-20 11:53:15 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:53:21 | DbInstance | INFO | Inserted 434035 rows into 'tree_staging_raw_staging'
+2026-03-20 11:53:21 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_1 time=8.97s
+2026-03-20 11:53:21 | DbInstance | CRITICAL | ⏱ bulk insert executed in 16s 761ms
+2026-03-20 11:53:21 | TreeMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_1 time=16.77s
+2026-03-20 11:53:21 | TreeMapper | INFO | [THREAD END] name=ETLWorker_1 total_time=39.46s
+2026-03-20 11:53:25 | DbInstance | INFO | Inserted 511872 rows into 'tree_staging_raw_staging'
+2026-03-20 11:53:25 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=10.03s
+2026-03-20 11:53:25 | DbInstance | CRITICAL | ⏱ bulk insert executed in 15s 823ms
+2026-03-20 11:53:25 | TreeMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=15.83s
+2026-03-20 11:53:25 | TreeMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=43.33s
+2026-03-20 11:53:42 | DbInstance | INFO | Synced raw → staging: trial.tree_staging_raw_staging → trial.tree_staging
+2026-03-20 11:53:42 | DbInstance | CRITICAL | ⏱ Syncing source to target table executed in 16s 812ms
+2026-03-20 11:53:42 | TreeMapper | INFO | Mapping started on Mapping Table.....
+2026-03-20 11:53:43 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 11:53:44 | DbInstance | INFO | Row count for 'trial.tree_mapping': 1000117
+2026-03-20 11:53:44 | TreeMapper | INFO | Skipping mapping as all ways geometry mapped....
+2026-03-20 11:53:44 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T11:53:44.071285+01:00
+2026-03-20 11:53:44 | CoreConfig | INFO | 2026-03-20T11:53:44.071285+01:00
+2026-03-20 11:53:44 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 11:53:44 | MaterializedViewManager | INFO | No materialized view configured for datasource 'tree'
+2026-03-20 11:53:44 | DbInstance | WARNING | Dropping table 'trial.tree_staging_raw_staging' ...
+2026-03-20 11:53:44 | DbInstance | INFO | Table 'trial.tree_staging_raw_staging' dropped successfully.
+2026-03-20 11:53:44 | TreeMapper | INFO | Finished run for tree in 2m 9s 947ms seconds -> message: Job finished Successfully !!!
+2026-03-20 11:53:44 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:53:44 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:53:44 | DataSourceMapper | INFO | TreeMapper configuration step finished!!
+2026-03-20 11:53:44 | PleasantBicyclingMapper | INFO | Initializing PleasantBicyclingMapper
+2026-03-20 11:53:44 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:53:44 | PleasantBicyclingMapper | INFO | Executing starting for datasource pleasant_bicycling
+2026-03-20 11:53:44 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:53:44 | PleasantBicyclingMapper | INFO | Total number of paths found 1
+2026-03-20 11:53:44 | DbInstance | INFO | Table 'data_source_metadata' exists: True
+2026-03-20 11:53:44 | PleasantBicyclingMapper | INFO | Creating table
+2026-03-20 11:53:44 | DbInstance | INFO | create table pleasant_staging
+2026-03-20 11:53:44 | DbInstance | INFO | Table 'pleasant_staging' exists: True
+2026-03-20 11:53:44 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:53:44 | DbInstance | INFO | Creating raw staging table pleasant_staging_raw_staging ...
+2026-03-20 11:53:44 | DbInstance | WARNING | Dropping table 'trial.pleasant_staging_raw_staging' ...
+2026-03-20 11:53:44 | DbInstance | INFO | Table 'trial.pleasant_staging_raw_staging' dropped successfully.
+2026-03-20 11:53:44 | DbInstance | INFO | Table 'pleasant_staging_raw_staging' created successfully.
+2026-03-20 11:53:44 | DbInstance | INFO | create table pleasant_enrichment
+2026-03-20 11:53:44 | DbInstance | INFO | Table 'pleasant_enrichment' exists: True
+2026-03-20 11:53:44 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:53:44 | DbInstance | INFO | create table pleasant_mapping
+2026-03-20 11:53:44 | DbInstance | INFO | Table 'pleasant_mapping' exists: True
+2026-03-20 11:53:44 | DbInstance | INFO | Table exists, skipping the creation of the table
+2026-03-20 11:53:44 | PleasantBicyclingMapper | CRITICAL | Starting with 3 workers
+2026-03-20 11:53:44 | PleasantBicyclingMapper | INFO | [THREAD START] name=ETLWorker_0 id=6128021504 file=tmp/pleasant_bicycle/aggregated_metrics.parquet
+2026-03-20 11:53:44 | PleasantBicyclingMapper | INFO | Processing file tmp/pleasant_bicycle/aggregated_metrics.parquet
+2026-03-20 11:53:44 | FileHandler | INFO | Base directory: /Users/krutarthparwal/Documents/mdp/modular-data-pipeline/tmp/pleasant_bicycle
+2026-03-20 11:56:08 | PleasantBicyclingMapper | INFO | Read 4064703 pleasant rows after left join (metrics=4064703, lanes=231625)
+2026-03-20 11:56:09 | PleasantBicyclingMapper | INFO | result contains currently 4064703
+2026-03-20 11:56:09 | PleasantBicyclingMapper | INFO | [THREAD TRANSFORM DONE] name=ETLWorker_0 rows=4064703 time=144.29s
+2026-03-20 11:56:09 | PleasantBicyclingMapper | WARNING | found new data hence continuing with db upsert
+2026-03-20 11:56:51 | DbInstance | INFO | [DB WAIT] thread=ETLWorker_0 rows=4064703
+2026-03-20 11:56:51 | DbInstance | INFO | [DB ACQUIRED] thread=ETLWorker_0
+2026-03-20 11:58:07 | DbInstance | INFO | Inserted 4064703 rows into 'pleasant_staging_raw_staging'
+2026-03-20 11:58:07 | DbInstance | CRITICAL | [DB DONE] thread=ETLWorker_0 time=75.43s
+2026-03-20 11:58:07 | DbInstance | CRITICAL | ⏱ bulk insert executed in 1m 58s 345ms
+2026-03-20 11:58:07 | PleasantBicyclingMapper | INFO | [THREAD LOAD DONE] name=ETLWorker_0 time=118.35s
+2026-03-20 11:58:07 | PleasantBicyclingMapper | INFO | [THREAD END] name=ETLWorker_0 total_time=262.64s
+2026-03-20 11:59:39 | DbInstance | INFO | Synced raw → staging: trial.pleasant_staging_raw_staging → trial.pleasant_staging
+2026-03-20 11:59:39 | DbInstance | CRITICAL | ⏱ Syncing source to target table executed in 1m 29s 944ms
+2026-03-20 12:00:19 | DbInstance | INFO | Synced staging → enrichment: trial.pleasant_staging → trial.pleasant_enrichment
+2026-03-20 12:00:19 | PleasantBicyclingMapper | INFO | Mapping started on Mapping Table.....
+2026-03-20 12:00:21 | DbInstance | INFO | Row count for 'trial.ways_base': 1000117
+2026-03-20 12:00:21 | DbInstance | INFO | Row count for 'trial.pleasant_mapping': 0
+2026-03-20 12:00:21 | PleasantBicyclingMapper | INFO | Executing mapping strategy type 'knn' for datasource pleasant_bicycling
+2026-03-20 12:00:21 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T12:00:21.268343+01:00
+2026-03-20 12:00:21 | CoreConfig | INFO | 2026-03-20T12:00:21.268343+01:00
+2026-03-20 12:00:21 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 12:00:21 | CoreConfig | INFO | YAML reader Python eval is 2026-03-20T12:00:21.301925+01:00
+2026-03-20 12:00:21 | CoreConfig | INFO | 2026-03-20T12:00:21.301925+01:00
+2026-03-20 12:00:21 | CoreConfig | INFO | Config file loaded successfully!
+2026-03-20 12:00:21 | PleasantBicyclingMapper | INFO | Using batched execution for Mapping with batch size: 10000
+2026-03-20 12:00:21 | DbInstance | INFO | Batching query on table: trial.ways_base (alias: b)
+2026-03-20 12:00:21 | DbInstance | INFO | Total rows to process: 1000117, batch size: 10000
+2026-03-20 12:00:21 | DbInstance | INFO | Processing in 101 batches...
+2026-03-20 12:00:21 | DbInstance | INFO | Processing batch 1/101 (rows 1-10000)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import uvicorn
 from core.application import Application
-from log_manager.logger_manager import LoggerManager
+from log_manager.logger_manager import LoggerManager, setup_file_logging
 from main_core.core_config import CoreConfig
 
 
@@ -55,6 +55,7 @@ def _start_config_watcher(runtime_conf: dict | None):
 
 if __name__ == "__main__":
     core_conf = CoreConfig()
+    setup_file_logging(core_conf.get_config().get("logging") or {})
     conf = core_conf.get_value("server")
     if conf.get("enable") and conf.get("reload"):
         logger.info("Skipping custom config watcher because Uvicorn reload is enabled")

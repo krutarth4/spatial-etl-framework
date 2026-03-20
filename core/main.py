@@ -5,7 +5,8 @@ from starlette.middleware.cors import CORSMiddleware
 
 from core.application import Application
 from core.debug_mapper_service import DebugMapperService
-from log_manager.logger_manager import LoggerManager
+from log_manager.logger_manager import LoggerManager, setup_file_logging
+from main_core.core_config import CoreConfig
 
 app = FastAPI()
 app.add_middleware(
@@ -33,6 +34,7 @@ def _pipeline_bootstrap():
 
 @app.on_event("startup")
 def startup_pipeline():
+    setup_file_logging(CoreConfig().get_config().get("logging") or {})
     global _pipeline_thread
     with _pipeline_lock:
         if _pipeline_thread is not None and _pipeline_thread.is_alive():
