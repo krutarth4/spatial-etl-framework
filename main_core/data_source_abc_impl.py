@@ -519,6 +519,7 @@ class DataSourceABCImpl(DataSourceABC):
     def run(self):
         self.start_execution()
         self._mark_metadata_run_started()
+        run_started_at = datetime.utcnow()
         run_succeeded = False
         run_error: Exception | None = None
         run_result = None
@@ -532,7 +533,8 @@ class DataSourceABCImpl(DataSourceABC):
             self.on_run_error(e)
             return self.run_job_response("Job failed")
         finally:
-            self._mark_metadata_run_finished(run_succeeded, run_result, run_error)
+            run_duration = int((datetime.utcnow() - run_started_at).total_seconds())
+            self._mark_metadata_run_finished(run_succeeded, run_result, run_error, run_duration)
             self.run_end_cleanup(run_succeeded, run_error)
 
     def execute_run_pipeline(self):
@@ -616,7 +618,7 @@ class DataSourceABCImpl(DataSourceABC):
         except Exception as e:
             self.logger.error(f"Failed to mark metadata run start for {self.data_source_name}: {e}")
 
-    def _mark_metadata_run_finished(self, succeeded: bool, run_result=None, error: Exception | None = None):
+    def _mark_metadata_run_finished(self, succeeded: bool, run_result=None, error: Exception | None = None, duration_seconds: int | None = None):
         if self.metadata_service is None:
             return
         try:
@@ -625,7 +627,7 @@ class DataSourceABCImpl(DataSourceABC):
                 message = run_result.get("message")
             if error is not None:
                 message = str(error)
-            self.metadata_service.mark_run_finished(self.data_source_name, succeeded, message)
+            self.metadata_service.mark_run_finished(self.data_source_name, succeeded, message, duration_seconds)
         except Exception as e:
             self.logger.error(f"Failed to update metadata run status for {self.data_source_name}: {e}")
 

@@ -93,7 +93,7 @@ class DataSourceMetadataService:
             },
         )
 
-    def mark_run_finished(self, source_key: str, success: bool, message: str | None = None):
+    def mark_run_finished(self, source_key: str, success: bool, message: str | None = None, duration_seconds: int | None = None):
         if not source_key:
             return None
         status = "success" if success else "failed"
@@ -101,6 +101,8 @@ class DataSourceMetadataService:
         finish_updates = {"current_run_status": "idle"}
         if success:
             finish_updates["last_ingested_at"] = datetime.utcnow()
+        if duration_seconds is not None:
+            finish_updates["last_run_duration_seconds"] = duration_seconds
         return self.update(source_key, finish_updates)
 
     def update_runtime_file_paths(self, source_key: str, paths) -> None:
