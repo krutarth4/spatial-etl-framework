@@ -442,13 +442,14 @@ class DBRepository(DbConfiguration):
         if table is None:
             raise ValueError(f"Table '{table_name}' does not exist")
 
-        # Determine allowed columns (exclude autoincrement PKs)
-        insert_columns = [
-            c.name
-            for c in table.columns
-            if not (c.primary_key or c.autoincrement)
-
-        ]
+        # Determine allowed columns (exclude autoincrement PKs). Skip columns that
+        # are absent from every row so database-side defaults can still apply.
+        insert_columns = []
+        for column in table.columns:
+            if column.primary_key or column.autoincrement:
+                continue
+            if any(column.name in row for row in data_list):
+                insert_columns.append(column.name)
 
         if not insert_columns:
             raise ValueError("No insertable columns found")
