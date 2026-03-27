@@ -612,6 +612,60 @@ class DebugMapperService:
             },
         }
 
+    def fetch_nearest_way(
+        self,
+        mapper_endpoint: str,
+        lat: float,
+        lng: float,
+    ) -> dict[str, Any]:
+        if self.db is None:
+            raise ValueError("Database is not initialized.")
+
+        ds = self._resolve_datasource(mapper_endpoint)
+        mapping = ds.get("mapping") or {}
+        if not mapping.get("enable", False):
+            raise ValueError(f"Mapping is disabled for datasource '{ds.get('name')}'.")
+
+        mapping_table_name = mapping.get("table_name")
+        mapping_schema = mapping.get("table_schema")
+        if not mapping_table_name:
+            raise ValueError(f"No mapping table configured for datasource '{ds.get('name')}'.")
+
+        mapping_table = self.db.get_table(mapping_table_name, mapping_schema)
+        if mapping_table is None:
+            raise ValueError(f"Mapping table '{mapping_schema}.{mapping_table_name}' does not exist.")
+
+        if "way_id" not in mapping_table.c:
+            raise ValueError(f"Mapping table '{mapping_schema}.{mapping_table_name}' has no way_id column.")
+
+        base_table_conf = mapping.get("base_table") or {}
+        base_table_name = base_table_conf.get("table_name")
+        base_table_schema = base_table_conf.get("table_schema")
+        base_table = self.db.get_table(base_table_name, base_table_schema) if base_table_name else None
+
+        if base_table is None:
+            raise ValueError(f"No base table configured or found for datasource '{ds.get('name')}'.")
+
+        base_geom_col = self._guess_geom_col(base_table, ["geometry", "geom", "line_geometry"])
+        if base_geom_col is None:
+            raise ValueError(f"No geometry column found in base table '{base_table_schema}.{base_table_name}'.")
+
+        sql = f"""
+            SELECT m.way_id
+            FROM "{mapping_schema}"."{mapping_table_name}" m
+            JOIN "{base_table_schema}"."{base_table_name}" b ON b.id = m.way_id
+            ORDER BY b.{self._quote_ident(base_geom_col)}::geography
+                <-> ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
+            LIMIT 1
+        """
+        with self.db.session_scope() as session:
+            row = session.execute(text(sql), {"lat": lat, "lng": lng}).mappings().first()
+
+        if row is None:
+            raise ValueError(f"No ways found in mapping table '{mapping_schema}.{mapping_table_name}'.")
+
+        return {"way_id": int(row["way_id"])}
+
     def _resolve_datasource(self, mapper_endpoint: str) -> dict[str, Any]:
         key = self._normalize_endpoint_key(mapper_endpoint)
         ds = self._endpoint_index.get(key)

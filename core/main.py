@@ -104,6 +104,15 @@ async def debug_mapping_visualization(mapper_endpoint: str, limit: int = 100, wa
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@app.get("/debug/mappers/{mapper_endpoint}/nearest-way")
+async def debug_nearest_way(mapper_endpoint: str, lat: float, lng: float):
+    try:
+        service = _get_debug_service()
+        return service.fetch_nearest_way(mapper_endpoint=mapper_endpoint, lat=lat, lng=lng)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @app.get("/debug/mappers/{mapper_endpoint}/way-inspector")
 async def debug_way_inspector(mapper_endpoint: str, way_id: int | None = None):
     try:
