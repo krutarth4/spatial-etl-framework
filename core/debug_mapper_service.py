@@ -328,11 +328,14 @@ class DebugMapperService:
                     ON b.id = m.way_id
                 LEFT JOIN "{enrichment_table_schema}"."{enrichment_table_name}" e
                     ON e.{self._quote_ident(mapping_column)} = m.{self._quote_ident(mapping_column)}
-                WHERE (:way_id IS NULL OR m.way_id = :way_id)
+                {f"WHERE m.way_id = :way_id" if way_id is not None else ""}
                 LIMIT :limit
             """
+            params: dict[str, Any] = {"limit": limit}
+            if way_id is not None:
+                params["way_id"] = way_id
             with self.db.session_scope() as session:
-                query_result = session.execute(text(sql), {"way_id": way_id, "limit": limit}).mappings().all()
+                query_result = session.execute(text(sql), params).mappings().all()
 
             rows = [self._to_jsonable(dict(r)) for r in query_result]
             visualization_mode = "spatial_line_to_point"
@@ -368,11 +371,14 @@ class DebugMapperService:
                     ST_AsGeoJSON(b.{self._quote_ident(base_geom_col)}) AS base_geometry
                 FROM "{mapping_schema}"."{mapping_table_name}" m
                 JOIN "{base_table_schema}"."{base_table_name}" b ON b.id = m.way_id
-                WHERE (:way_id IS NULL OR m.way_id = :way_id)
+                {f"WHERE m.way_id = :way_id" if way_id is not None else ""}
                 LIMIT :limit
             """
+            params2: dict[str, Any] = {"limit": limit}
+            if way_id is not None:
+                params2["way_id"] = way_id
             with self.db.session_scope() as session:
-                query_result = session.execute(text(sql), {"way_id": way_id, "limit": limit}).mappings().all()
+                query_result = session.execute(text(sql), params2).mappings().all()
 
             rows = [self._to_jsonable(dict(r)) for r in query_result]
             visualization_mode = "base_geometry_only"
