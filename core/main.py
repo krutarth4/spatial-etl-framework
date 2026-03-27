@@ -7,6 +7,7 @@ from core.application import Application
 from core.debug_mapper_service import DebugMapperService
 from log_manager.logger_manager import LoggerManager, setup_file_logging
 from main_core.core_config import CoreConfig
+from utils.execution_time import measure_time
 
 app = FastAPI()
 app.add_middleware(
@@ -78,6 +79,7 @@ async def debug_datasources():
 
 
 @app.get("/debug/datasources/{mapper_endpoint}")
+@measure_time("debug_datasource_dashboard")
 async def debug_datasource_dashboard(mapper_endpoint: str):
     try:
         service = _get_debug_service()
