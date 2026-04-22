@@ -26,3 +26,4 @@ uvicorn==0.38.0
 psycopg[binary]==3.2.12
 pyarrow
 fastapi
+python-dotenv==1.0.1

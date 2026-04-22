@@ -5,6 +5,10 @@ import threading
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
 import uvicorn
 from core.application import Application
 from log_manager.logger_manager import LoggerManager, setup_file_logging
