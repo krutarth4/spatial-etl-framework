@@ -3,3 +3,8 @@ tmp/
 NotUsed/
 data
 *.ipynb
+.env
+.env.*
+!.env.example
+.git
+.venv
