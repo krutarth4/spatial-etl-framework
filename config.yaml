@@ -73,14 +73,15 @@ database:
   description: "Database used for APSScheduler + data storage"
   enable: true
   driver: "postgresql+psycopg" # for sqlalchemy
-  url: localhost
-  port: &port 5432
-  database_name: &db_name test #postgres from osrm-postgis
+  url: ${{ os.getenv("DB_HOST") }}
+  port: &port ${{ os.getenv("DB_PORT") }}
+  database_name: &db_name ${{ os.getenv("DB_NAME") }} #postgres from osrm-postgis
   database_schema: *db_schema
   # Credentials: override locally via .env / environment; do NOT commit real values here.
   credential:
-    username: &username "CHANGE_ME"
-    password: &pass "CHANGE_ME"
+    username: &username ${{ os.getenv("DB_USER") }}
+    password: &pass ${{ os.getenv("DB_PASSWORD") }}
+
   performance:
     # Batch processing configuration for large SQL operations
     enable_batching: true
@@ -139,7 +140,7 @@ graph:
   schema: *db_schema  # table schema
   table_name: way_segment #links
   env:
-    pass: CHANGE_ME
+    pass: ${{ os.getenv("DB_PASSWORD") }}
   osm_file_path: &osmfile "./tmp/osm_graph/berlin.osm.pbf"
   datasource:
     - name: "osm_graph"
@@ -214,7 +215,7 @@ graph:
 datasources:
   - name: "weather_station_bright_sky"
     description: "gets weather station data with their location"
-    enable: false # to use the data source or not
+    enable: true # to use the data source or not
 #    check_before_update: false
     class_name: weatherStation
     debug:
