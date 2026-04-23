@@ -250,6 +250,14 @@ spatial-etl-framework/
 
 The framework is used in production for the [MDP bicycle routing platform](https://github.com/) in Berlin; PRs that keep the Berlin datasources working are appreciated.
 
+All contributors and participants are expected to follow the project's [Code of Conduct](CODE_OF_CONDUCT.md).
+
+---
+
+## Code of Conduct
+
+This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md) adapted from the Contributor Covenant. By participating — whether by opening issues, submitting pull requests, or adding new datasources — you agree to uphold it. Report unacceptable behavior to **krutartparwal@gmail.com**.
+
 ---
 
 ## Reference: operational notes
