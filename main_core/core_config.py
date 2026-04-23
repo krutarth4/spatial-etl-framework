@@ -7,12 +7,22 @@ from readers.yaml_reader import YamlReader
 class CoreConfig(YamlReader):
 
     filepath = str(Path(__file__).resolve().parents[1] / "config.yaml")
+    _instance = None
 
-    def __init__(self,filepath= filepath):
+    def __new__(cls, filepath=filepath):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self, filepath=filepath):
+        if self._initialized:
+            return
         super().__init__(filepath)
         self.logger = LoggerManager(type(self).__name__)
         self.config = YamlReader.read(self)
         self._apply_env_overrides()
+        self._initialized = True
         self.logger.info(f"Config file loaded successfully!")
         
 
