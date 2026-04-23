@@ -1,0 +1,975 @@
+logging:
+  enable: true
+  dir: logs
+  filename: pipeline.log
+  level: INFO
+  rotation:
+    max_bytes: 10485760   # 10 MB per file
+    backup_count: 7       # keep 7 rotated files → max ~80 MB total
+    encoding: utf-8
+
+server:
+  app_type: core.main:app
+  enable: true
+  name: fastAPI
+  description: "this is a API server used for debugging purpose to see the data call for faster development"
+  host: 0.0.0.0
+  port: 8000
+  reload: True
+
+runtime:
+  config_watch:
+    enable: true
+    poll_seconds: 30
+
+materialized_views:
+  enable: true
+  views:
+    - id: mv_weather
+      enable: true
+      schema: test_osm_base_graph
+      name: mv_weather
+      handler_class: WeatherMaterializedViewHandler
+      depends_on:
+        datasources: [ "weather_forecast_bright_sky", "weather_station_bright_sky" ]
+        tables:
+          - "test_osm_base_graph.weather_enrichment"
+          - "test_osm_base_graph.dwd_station_locations_mapping"
+          - "test_osm_base_graph.ways_base"
+      mapping_table: dwd_station_locations_mapping
+      weather_table: weather_enrichment
+      ways_table: ways_base
+      # Optional fixed snapshot filter; remove or set null for all timestamps
+      timestamp_filter: "2026-02-24 16:00:00+00"
+      indexes:
+        - name: mv_weather_way_id_idx
+          column: way_id
+      refresh:
+        enabled: true
+        mode: normal  # normal | concurrently
+        with_data: true
+      # custom_sql:
+      #   create: |
+      #     CREATE MATERIALIZED VIEW test_osm_base_graph.mv_weather AS
+      #     SELECT ...
+      #   refresh: |
+      #     REFRESH MATERIALIZED VIEW test_osm_base_graph.mv_weather
+
+scheduler:
+  name: APSScheduler
+  enable: false
+  description: "This is a scheduler which helps to orchestrate the background task on either thread or process level"
+  timezone: "Europe/Berlin"
+  scheduler_type: BackgroundScheduler   #https://apscheduler.readthedocs.io/en/3.x/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+  wait_before_shutdown: false # should executor wait before shutdown to let jobs finish execution
+
+data_folder: ./data_source_configs/
+
+env_variables:
+  base_schema: &db_schema trial
+  base_table: &base_table_name ways_base
+
+database:
+  description: "Database used for APSScheduler + data storage"
+  enable: true
+  driver: "postgresql+psycopg" # for sqlalchemy
+  url: localhost
+  port: &port 5432
+  database_name: &db_name test #postgres from osrm-postgis
+  database_schema: *db_schema
+  # Credentials: override locally via .env / environment; do NOT commit real values here.
+  credential:
+    username: &username "CHANGE_ME"
+    password: &pass "CHANGE_ME"
+  performance:
+    # Batch processing configuration for large SQL operations
+    enable_batching: true
+    default_batch_size: 10000  # Number of rows per batch for INSERT/UPDATE operations
+    batch_commit_interval: 5000  # Commit every N rows (0 = commit per batch only)
+
+metadata-datasource:
+  description: "this will contain all the data realted to data sources to store particular information"
+  table_schema: *db_schema
+
+base:
+  table_name: *base_table_name
+  table_schema: *db_schema
+  force_generate: false # To generate brand new table the other base tabkle will be backed up
+
+
+graph:
+  enable: true # TODO prepare main graph tables for nodes and links
+  tool: external_ingest # terminal or custom local tool either use osm2pgrouting with config.xml to create the initial tables or custom osmosis class with the help of handler
+  communication:
+    enable: false # set false to run standalone without comm/router waits
+    tasks:
+      - key: read_osm_file
+        owner: router
+        status: idle
+        is_completed: false
+      - key: main_ways_table
+        owner: router
+        status: idle
+        is_completed: false
+      - key: ways_base_table
+        owner: mdp
+        status: idle
+        is_completed: false
+      - key: osm_file_update
+        owner: mdp
+        status: idle
+        is_completed: false
+      - key: osm_file_download
+        owner: mdp
+        status: idle
+        is_completed: false
+    waits:
+      router_coupled:
+        enable: false
+        task_key: osm_graph
+        poll_seconds: 5
+        timeout_seconds: null
+      main_ways_before_base:
+        enable: true
+        task_key: main_ways_table
+        poll_seconds: 5
+        timeout_seconds: null
+        require_is_completed: true
+
+  schema: *db_schema  # table schema
+  table_name: way_segment #links
+  env:
+    pass: CHANGE_ME
+  osm_file_path: &osmfile "./tmp/osm_graph/berlin.osm.pbf"
+  datasource:
+    - name: "osm_graph"
+      description: "gets weather station data with their location"
+      enable: false # to use the data source or not
+  #    check_before_update: false
+      class_name: graph
+      debug:
+        endpoint: osm-graph
+      data_type: static # static / Dynamic
+      source:
+        fetch: http #http \ local
+        mode: single # can be single or multi
+        check_metadata: # The api doesn't support the implicit header request
+          enable: true
+          keys: [ "last_modified" ]
+        url: "https://download.geofabrik.de/europe/germany/berlin-latest.osm.pbf"
+        stream: True
+        save_local: True
+        destination: &dest "./tmp/osm_graph/berlin.osm.pbf" # path where to save the response
+        response_type: pbf # the response type
+
+      job:
+        name: graphJob
+        id: graphJob
+  #      executor: process
+        trigger:
+          # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+          type:
+            name: interval # interval , cron, date
+            start_date: 2025-12-21T11:15:00
+            config: # should be same key value pair to for job
+              days: 15
+
+        replace_existing: true
+        coalesce: true
+        max_instances: 1
+        next_run_time: none
+      mapping:
+        enable: true
+        joins_on: dwd_station_id # link id column to join the table to
+        table_name: dwd_mapping_stations
+        table_schema: *db_schema
+        base_table:
+          table_name: *base_table_name
+          table_schema: *db_schema
+          column_name: "dwd_station_id"
+          column_type: String
+      storage:
+        force_create: false
+        persistent: false # true | false -> to store the values or not
+        expires_after: 6h # how long to keep the data before again running the new process for persistency
+        staging:
+          table_name: dwd_station_locations
+          table_schema: *db_schema
+          table_class: DwdStationsTable
+          persistent: false
+        enrichment:
+          table_name: dwd_weather_station_enrichment
+          table_schema: *db_schema
+          table_class: StationLocationLink # create class file to be liknked to the table
+
+  cmd: [ "osm2pgrouting",
+         "-f", "./tmp/osm_graph/berlin_latest.osm" ,"-d", *db_name,
+         "-p", *port,
+         "-U", *username,
+         "-W", *pass,
+         "-c", "mapconfig.xml",
+         "--schema", *db_schema,"--no-index" ]
+
+
+datasources:
+  - name: "weather_station_bright_sky"
+    description: "gets weather station data with their location"
+    enable: false # to use the data source or not
+#    check_before_update: false
+    class_name: weatherStation
+    debug:
+      endpoint: weather-station
+    table_name: &s1 dwd_station_locations
+    data_type: static # static / Dynamic
+    source:
+      fetch: http #http \ local
+      mode: single # can be single or multi
+      check_metadata: # The api doesn't support the implicit header request
+        enable: true
+        keys: [ "last_modified" ]
+      url: https://api.brightsky.dev/sources
+      stream: True
+      save_local: True
+      destination: "tmp/brightsky/stations/weatherStation.json" # path where to save the response
+      response_type: json # the response type
+      header:
+        Accept: "application/json"
+      params:
+        dwd_station_id: ["00399", "00403", "00400", "00410", "00420", "00427", "00430", "00433"]
+    job:
+      name: weatherJob
+      id: weatherJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: interval # interval , cron, date
+          start_date: 2025-12-21T11:15:00
+          config: # should be same key value pair to for job
+            hours: 1
+
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: true
+      joins_on: dwd_station_id # link id column to join the table to
+      strategy:
+        type: knn
+        description: map each base way to its nearest weather station
+        link_on:
+          mapping_column: dwd_station_id
+          base_column: dwd_station_id
+          basis: nearest_by_distance
+      config:
+        base_geometry_column: geometry
+        enrichment_geometry_column: point
+        distance_sql: ST_Distance({base_geometry}::geography, {enrichment_geometry}::geography)
+        order_by_sql: ST_Distance({base_geometry}::geography, {enrichment_geometry}::geography)
+        select_columns:
+          - expression: |
+              MOD(
+                (DEGREES(
+                  ST_Azimuth(
+                    ST_StartPoint({base_geometry}),
+                    ST_EndPoint({base_geometry})
+                  )
+                ) + 360)::NUMERIC,
+                360
+              )
+            alias: bearing_degree
+        insert:
+          columns: [way_id, dwd_station_id, distance, bearing_degree]
+          conflict_columns: [way_id]
+          update_columns: [dwd_station_id, distance, bearing_degree]
+      table_name: dwd_station_locations_mapping
+      table_schema: *db_schema
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "dwd_station_id"
+        column_type: String
+    storage:
+      force_create: false
+      persistent: true # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+      staging:
+        table_name: dwd_station_locations_staging
+        table_schema: *db_schema
+        table_class: DwdStationsTable
+        persistent: false
+      enrichment:
+        table_name: dwd_station_locations_enrichment
+        table_schema: *db_schema
+        table_class: DwdWeatherStationEnrichmentTable # create class file to be liknked to the table
+
+  - name: "weather_forecast_bright_sky"
+    description: "get weather forecast for the dwd_stations in params with hourly forecast "
+    enable: false # to use the data source or not
+    class_name: weather
+    debug:
+      endpoint: weather-forecast
+    data_type: dynamic
+    source:
+      fetch: http #http \ local
+      mode: multi
+      check_metadata:
+        enable: true
+        keys: [ "last_modified" ]
+      url: https://api.brightsky.dev/weather
+      multi_fetch:
+        enable: true
+        strategy: expand_params # could be expand_params for different params, url_template, EXPLICIT_URL_LIST contains a lot of urls
+        expand:
+          dwd_station_id: ["00399", "00403", "00400", "00410", "00420", "00427", "00430", "00433"]
+        params:
+          date: >
+            ${{
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            datetime.now(ZoneInfo("Europe/Berlin")).isoformat()
+            }}
+      stream: True
+      save_local: true
+      destination: "tmp/brightsky/weather-data/weather_forecast.json" # path where to save the response
+      response_type: json # the response type
+      header:
+        Accept: "application/json"
+    job:
+      name: weatherForecastJob
+      id: weatherForecastJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: run_once # interval , cron, date, calendar_interval
+          start_format: 00:00:00
+          config: # should be same key value pair to for job
+            seconds: 15
+#            run_date:
+
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: false
+      joins_on: way_id # link id column to join the table to
+#      table_name: weather_mapping
+#      table_schema: *db_schema
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "station"
+        column_type: Integer
+    #      maps_on:
+    storage: # this information will be used to for metadata storage
+      force_create: true
+      enrichment:
+        table_name: weather_enrichment
+        table_schema: *db_schema
+        table_class: WeatherEnrichmentTable # create class file to be liknked to the table
+      persistent: true # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+      staging:
+        table_name: weather_staging
+        table_schema: *db_schema
+        table_class: WeatherStagingTable
+        persistent: false
+
+  - name: "air_quality_data_download"
+    description: "Air quality data from the dcaiti Tu Berlin server"
+    enable: false # to use the data source or not
+#    check_before_update: false
+    class_name: airQualityData
+    debug:
+      endpoint: air-quality
+    data_type: dynamic
+    source:
+      fetch: http #http \ local
+      mode: multi
+      check_metadata:
+        enable: true
+        keys: [ "last_modified" ]
+      url: https://werkzeug.dcaiti.tu-berlin.de/fairqberlin/
+      multi_fetch:
+        enable: true
+        strategy : url_template
+        url_template: https://werkzeug.dcaiti.tu-berlin.de/fairqberlin/inwt_fairq_cache_skip_{skip}_limit_100000.json.gz #tmp/test{id}.xyz #"https://dummyjson.com/products/{productId}"
+        template_params:
+          skip: [0, 100000, 200000, 300000]
+      stream: True
+      save_local: true
+      destination: "tmp/dcaiti/airqualityAPI/fairq.gz" # path where to save the response
+      response_type: json.gz # the response type
+      header:
+        Accept:
+    job:
+      name: airPollutionJob
+      id: airPollutionJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: interval # interval , cron, date
+          config: # should be same key value pair to for job
+            hour: 8
+
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: true
+      joins_on: way_id
+      table_name: air_pollution_grid_mapping
+      table_schema: *db_schema
+      strategy:
+        type: sql_template
+        description: map each base way to the nearest latest air quality grid point
+      # Optional: Override global batch size for this specific datasource
+      # batch_size: 5000
+      config:
+        sql: |
+          INSERT INTO {mapping_schema}.{mapping_table} (way_id, grid_uid, grid_id, intersection_length_m)
+          SELECT
+              w.id AS way_id,
+              lpg.uid AS grid_uid,
+              lpg.grid_id,
+              ST_Length(
+                  ST_Intersection(
+                      COALESCE(w.geometry_25833, ST_Transform(w.geometry, 25833)),
+                      ST_Expand(lpg.geom_25833, 25)
+                  )
+              ) AS intersection_length_m
+          FROM {base_schema}.{base_table} w
+          JOIN LATERAL (
+              SELECT DISTINCT ON (e.grid_id)
+                  e.uid,
+                  e.grid_id,
+                  e.geom_25833
+              FROM {enrichment_schema}.{enrichment_table} e
+              WHERE e.geom_25833 IS NOT NULL
+                AND ST_DWithin(COALESCE(w.geometry_25833, ST_Transform(w.geometry, 25833)), e.geom_25833, 36)
+              ORDER BY e.grid_id, e.forecast_time DESC NULLS LAST, e.uid DESC
+          ) lpg ON ST_Intersects(COALESCE(w.geometry_25833, ST_Transform(w.geometry, 25833)), ST_Expand(lpg.geom_25833, 25))
+          WHERE (w.geometry_25833 IS NOT NULL OR w.geometry IS NOT NULL)
+            AND ST_Length(ST_Intersection(COALESCE(w.geometry_25833, ST_Transform(w.geometry, 25833)), ST_Expand(lpg.geom_25833, 25))) > 0
+          ON CONFLICT (way_id, grid_id) DO UPDATE
+              SET grid_uid = EXCLUDED.grid_uid,
+                  intersection_length_m = EXCLUDED.intersection_length_m;
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "air_pollution"
+        column_type: Integer
+    storage: # this information will be used to for metadata storage
+      persistent: true # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+      staging:
+        table_name: air_pollution_grid
+        table_schema: *db_schema
+        table_class: AirPollutionGridStagingTable
+      enrichment:
+        table_name: air_pollution_grid_enrichment
+        table_schema: *db_schema
+        table_class: AirPollutionGridEnrichmentTable
+
+  - name: elevation_grids_links
+    description: " 1m elevation Grid links "
+    enable: false # to use the data source or not
+    #    check_before_job_run: true
+    check_before_update: true
+    class_name: elevationGrid
+    debug:
+      endpoint: elevation-grids
+    data_type: dynamic # static / Dynamic
+    source:
+      input: none
+      mode: single
+      check_metadata: # The api doesn't support the implicit header request
+        enable: true
+        keys: [ "last_modified" ] # check for the keys in header metadata
+      url: https://gdi.berlin.de/data/dgm1/atom/0.atom
+      file_path: ""
+      fetch: http #http \ local
+      stream: True
+      save_local: True
+      destination: "tmp/elevation_grid/elevation.xml" # path where to save the response
+      response_type: xml # the response type
+      header:
+        Accept: "application/atom+xml"
+      params:
+    pre-filter-processing:
+      enable: true
+    post_filter_processing:
+      save: true
+      destination: &gridlinks data/grid/elevation_links_test.json # should be explicit the name not the internal naming mechanism
+    pre-database-processing:
+      enable: false
+    post-database-processing:
+      enable: false
+    job:
+      name: elevationJob
+      id: elevationJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: interval # interval , cron, date
+          config: # should be same key value pair to for job
+            seconds: 15
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: false
+      joins_on: id # link id column to join the table to
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "elevation_factor"
+        column_type: Integer
+    storage: # DB storage
+      persistent: false # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+      staging:
+        table_name: elevationGrid
+        table_schema: *db_schema
+        table_class: ElevationTable
+      enrichment:
+        table_name: elevationGrid
+        table_schema: *db_schema
+        table_class: ElevationTable
+
+
+  - name: elevation
+    description: " 1m elevation "
+    enable: false # to use the data source or not
+#    check_before_update: false # only valid for api call
+    class_name: elevation
+    debug:
+      endpoint: elevation
+    data_type: static # static / Dynamic
+    source:
+      input: none
+      mode: multi
+      check_metadata: # The api doesn't support the implicit header request
+        enable: true
+        keys: [ "last_modified" ] # check for the keys in header metadata
+      file_path: ""
+      fetch: http #http \ local
+      stream: True
+      save_local: True
+      destination: "tmp/elevation_zips/elevation.zip" # path where to save the response
+      response_type: zip # the response type
+      multi_fetch:
+        enable : true
+        strategy: explicit_url_list
+        urls:
+          input: *gridlinks
+    job:
+      name: elevationJob
+      id: elevationJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: run_once # interval , cron, date
+          config: # should be same key value pair to for job
+            seconds: 15
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: true
+      joins_on: id
+      table_name: elevation_mapping
+      table_schema: *db_schema
+      strategy:
+        type: sql_template
+        description: sample elevation profile along each base way from raster tiles
+      config:
+        sql: |
+          WITH sampled_points AS (
+              SELECT
+                  w.id AS way_id,
+                  dp.path[1] AS path_idx,
+                  dp.geom AS geom_25833
+              FROM {base_schema}.{base_table} w
+              CROSS JOIN LATERAL ST_DumpPoints(
+                  ST_Segmentize(
+                      ST_Transform(w.geometry, 25833),
+                      100.0
+                  )
+              ) AS dp
+          ),
+          points_with_elevation AS (
+              SELECT
+                  sp.way_id,
+                  sp.path_idx,
+                  sp.geom_25833,
+                  z_lookup.z
+              FROM sampled_points sp
+              LEFT JOIN LATERAL (
+                  SELECT z
+                  FROM (
+                      SELECT ST_Value(r.rast, sp.geom_25833) AS z
+                      FROM {enrichment_schema}.{enrichment_table} r
+                      WHERE ST_Intersects(r.footprint_4326, ST_Transform(sp.geom_25833, 4326))
+                  ) sampled_z
+                  WHERE sampled_z.z IS NOT NULL
+                  LIMIT 1
+              ) AS z_lookup ON TRUE
+          )
+          INSERT INTO {mapping_schema}.{mapping_table} (way_id, elevation_profile)
+          SELECT
+              p.way_id AS way_id,
+              jsonb_agg(
+                  jsonb_build_object(
+                      'x', ST_X(ST_Transform(p.geom_25833, 4326)),
+                      'y', ST_Y(ST_Transform(p.geom_25833, 4326)),
+                      'z', p.z
+                  )
+                  ORDER BY p.path_idx
+              ) AS elevation_profile
+          FROM points_with_elevation p
+          WHERE p.z IS NOT NULL
+          GROUP BY p.way_id
+          ON CONFLICT (way_id)
+          DO UPDATE SET
+              elevation_profile = EXCLUDED.elevation_profile;
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "elevation_factor"
+        column_type: Integer
+    storage: # DB storage
+      persistent: true # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+      #10h 10m 55s 324ms -> this dataset took around 2-3 hours
+      staging:
+        table_name: elevation_staging
+        table_schema: *db_schema
+        table_class: ElevationStagingTable
+      enrichment:
+        table_name: elevation_enrichment
+        table_schema: *db_schema
+        table_class: ElevationEnrichmentTable
+
+  - name: elevation_python
+    description: " 1m elevation "
+    enable: false # to use the data source or not
+#    check_before_update: false # only valid for api call
+    class_name: elevationPython
+    debug:
+      endpoint: elevation-python
+    data_type: static # static / Dynamic
+    source:
+      input: none
+      mode: multi
+      check_metadata: # The api doesn't support the implicit header request
+        enable: true
+        keys: [ "last_modified" ] # check for the keys in header metadata
+      file_path: ""
+      fetch: http #http \ local
+      stream: True
+      save_local: True
+      destination: "tmp/elevation_zips/elevation.zip" # path where to save the response
+      response_type: zip # the response type
+      multi_fetch:
+        enable : true
+        strategy: explicit_url_list
+        urls:
+          input: *gridlinks
+    job:
+      name: elevationPythonJob
+      id: elevationPythonJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: run_once # interval , cron, date
+          config: # should be same key value pair to for job
+            seconds: 15
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: true
+      joins_on: way_id
+      table_name: elevation_python_mapping
+      table_schema: *db_schema
+      strategy:
+        type: sql_template
+        description: copy per-way elevation stats from staging into mapping table
+      config:
+        sql: |
+          INSERT INTO {mapping_schema}.{mapping_table}
+              (way_id, total_ascent, total_descent, max_slope, avg_slope, sample_count)
+          SELECT way_id, total_ascent, total_descent, max_slope, avg_slope, sample_count
+          FROM {staging_schema}.{staging_table}
+          ON CONFLICT (way_id) DO UPDATE SET
+              total_ascent  = EXCLUDED.total_ascent,
+              total_descent = EXCLUDED.total_descent,
+              max_slope     = EXCLUDED.max_slope,
+              avg_slope     = EXCLUDED.avg_slope,
+              sample_count  = EXCLUDED.sample_count;
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "elevation_factor"
+        column_type: Integer
+    storage: # DB storage
+      persistent: true # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+      #10h 10m 55s 324ms -> this dataset took around 2-3 hours
+      staging:
+        table_name: elevation_python_staging
+        table_schema: *db_schema
+        table_class: ElevationPythonStagingTable
+
+  - name: tree_wfs_capabilities
+    description: " tree data for the streets "
+    enable: false # to use the data source or not
+#    check_before_update: false # only valid for api call
+    class_name: treeWfsCapabilities
+    debug:
+      endpoint: tree-wfs-capabilities
+    data_type: static # static / Dynamic
+    source:
+      input: none
+      mode: single
+      check_metadata: # The api doesn't support the implicit header request
+        enable: true
+        keys: [ "content_length" ] # check for the keys in header metadata
+      file_path: ""
+      fetch: http #http \ local
+      url: "https://gdi.berlin.de/services/wfs/baumbestand"
+      stream: True
+      save_local: True
+      destination: "tmp/tree_wfs/capabilities/tree_capabilities.xml" # path where to save the response
+      response_type: xml # the response type
+      params:
+        service: wfs
+        version: "2.0.0"
+        request: "GetCapabilities"
+#        typenames: "baumbestand:anlagenbaeume"
+#        outputFormat: application/json
+#        count: 5000
+
+    job:
+      name: treeJob
+      id: treeJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: run_once # interval , cron, date
+          config: # should be same key value pair to for job
+            seconds: 15
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+      executor: process
+    mapping:
+      enable: false
+      joins_on: id # link id column to join the table to
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "elevation_factor"
+        column_type: Integer
+    storage: # DB storage
+      persistent: false # true | false -> to store the values or not
+      expires_after: 6h
+      staging:
+        table_name: tree
+        table_schema: *db_schema
+        table_class: TreeTabl
+      enrichment:
+        table_name: tree
+        table_schema: *db_schema
+        table_class: TreeTabl
+
+
+
+  - name: tree
+    description: " Get Trees on the side of the road within 50 m distance "
+    enable: false # to use the data source or not
+#    check_before_update: false # only valid for api call
+    class_name: tree
+    debug:
+      endpoint: tree
+    data_type: static # static / Dynamic
+    source:
+      input: none
+      mode: multi
+      check_metadata: # The api doesn't support the implicit header request
+        enable: true
+        keys: [ "content_type" ] # check for the keys in header metadata
+      file_path: ""
+      fetch: http #http \ local
+      url: "https://gdi.berlin.de/services/wfs/baumbestand"
+      stream: True
+      save_local: True
+      destination: "tmp/tree_wfs/tree_ablage/gpkg_packet.gpkg" # path where to save the response
+      response_type: gpkg # the response type
+      multi_fetch:
+        enable : true
+        strategy: expand_params # could be expand_params for different params, url_template, EXPLICIT_URL_LIST contains a lot of urls
+        expand:
+          typenames: ["baumbestand:anlagenbaeume","baumbestand:strassenbaeume"]
+
+        params:
+          service: wfs
+          version: "2.0.0"
+          request: "GetFeature"
+          outputFormat: geopackage
+#          count: 10000
+          sortBy: gisid
+
+
+    job:
+      name: testJob
+      id: testJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: run_once # interval , cron, date
+          config: # should be same key value pair to for job
+            hours: 1
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: 00:00:00
+    mapping:
+      enable: true
+      table_schema: *db_schema
+      table_name: tree_mapping
+      joins_on: id # link id column to join the table to
+      strategy:
+        type: sql_template
+        description: aggregate trees within 50m of each base way using jsonb
+      config:
+        sql: |
+          INSERT INTO {mapping_schema}.{mapping_table} (way_id, trees)
+          SELECT
+              w.id AS way_id,
+              COALESCE(
+                  jsonb_agg(
+                      jsonb_build_object(
+                          'tree_id', t.id,
+                          'source_id', t.source_id,
+                          'distance_m', ST_Distance(
+                              t.geometry_25833,
+                              w.geometry_25833
+                          )
+                      )
+                      ORDER BY ST_Distance(
+                          t.geometry_25833,
+                          w.geometry_25833
+                      )
+                  ) FILTER (WHERE t.id IS NOT NULL),
+                  '[]'::jsonb
+              ) AS trees
+          FROM {base_schema}.{base_table} w
+          LEFT JOIN {staging_schema}.{staging_table} t
+            ON t.geometry_25833 && ST_Expand(w.geometry_25833, 50)
+           AND ST_DWithin(
+                  t.geometry_25833,
+                  w.geometry_25833,
+                  50
+               )
+          GROUP BY w.id
+          ON CONFLICT (way_id)
+          DO UPDATE SET trees = EXCLUDED.trees;
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "elevation_factor"
+        column_type: Integer
+    storage: # DB storage
+      persistent: true # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+      #10h 10m 55s 324ms -> this dataset took around 2-3 hours
+      staging:
+        table_name: tree_staging
+        table_schema: *db_schema
+        table_class: TreeStaging
+
+
+
+  - name: pleasant_bicycling
+    description: " Get the density of vehicles on the road "
+    enable: false # to use the data source or not
+#    check_before_update: false # only valid for api call
+    class_name: pleasantBicycling
+    debug:
+      endpoint: pleasant-bicycling
+    data_type: dynamic # static / Dynamic
+    source:
+      input: none
+      mode: single
+      check_metadata: # The api doesn't support the implicit header request
+        enable: true
+        keys: [ "content_type" ] # check for the keys in header metadata
+      file_path: tmp/pleasant_bicycle/aggregated_metrics.parquet
+      fetch: local #http \ local
+      stream: True
+      save_local: True
+      destination: "tmp/pleasant_bicycle/pleasant.csv" # path where to save the response
+      response_type: csv # the response type
+      multi_fetch:
+        enable : false
+        strategy: expand_params # could be expand_params for different params, url_template, EXPLICIT_URL_LIST contains a lot of urls
+    job:
+      name: pleasantJob
+      id: pleasantJob
+      trigger:
+        # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
+        type:
+          name: run_once # interval , cron, date
+          config: # should be same key value pair to for job
+            hours: 1
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: 00:00:00
+    mapping:
+      enable: true
+      table_schema: *db_schema
+      table_name: pleasant_mapping
+      joins_on: connection_id
+      strategy:
+        type: knn
+        description: map each base way to nearest pleasant bicycling data within 20m
+        link_on:
+          mapping_column: connection_id
+          basis: nearest_within_distance
+      config:
+        base_geometry_column: geometry_25833
+        enrichment_geometry_column: geometry_25833
+        enrichment_filter_sql: "ST_DWithin(b.geometry_25833, e.geometry_25833, 20)"
+        order_by_sql: "connection_id, {base_geometry} <-> {enrichment_geometry}"
+        distance_sql: "ST_Distance({base_geometry}, {enrichment_geometry})"
+        distance_alias: distance_m
+        insert:
+          columns: [way_id, connection_id, distance_m]
+          conflict_columns: [way_id]
+          update_columns: [connection_id, distance_m]
+      base_table:
+        table_name: *base_table_name
+        table_schema: *db_schema
+        column_name: "pleasant_score"
+        column_type: Float
+    storage: # DB storage
+      persistent: true # true | false -> to store the values or not
+      expires_after: 6h # how long to keep the data before again running the new process for persistency
+      #10h 10m 55s 324ms -> this dataset took around 2-3 hours
+      staging:
+        table_name: pleasant_staging
+        table_schema: *db_schema
+        table_class: PleasantStagingTable
+      enrichment:
+        table_name: pleasant_enrichment
+        table_schema: *db_schema
+        table_class: PleasantEnrichmentTable
