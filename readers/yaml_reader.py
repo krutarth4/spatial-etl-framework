@@ -1,18 +1,23 @@
+import os
 import re
 import textwrap
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import yaml
+from dotenv import load_dotenv
 
 from log_manager.logger_manager import LoggerManager
+
+load_dotenv()
 
 
 class YamlReader:
     PYTHON_BLOCK_PATTERN = r"(?<!#)\$\{\{(.*?)\}\}"
     safe_globals = {
         "datetime": datetime,
-        "ZoneInfo": ZoneInfo
+        "ZoneInfo": ZoneInfo,
+        "os": os,
     }
 
     # matcher ${{.....}}
@@ -53,7 +58,8 @@ class YamlReader:
         # safe environment (allowed modules only)
         safe_globals = {
             "datetime": datetime,
-            "ZoneInfo": ZoneInfo
+            "ZoneInfo": ZoneInfo,
+            "os": os,
         }
 
         local_env = {}
