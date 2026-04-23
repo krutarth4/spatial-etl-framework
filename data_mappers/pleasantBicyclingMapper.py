@@ -6,8 +6,10 @@ import pandas as pd
 from pyproj import Transformer
 from shapely import wkt as shapely_wkt
 from shapely.ops import transform as shp_transform
-from sqlalchemy import Column, Integer, Float, String, BigInteger, DateTime, func, Text, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, Float, String, BigInteger, DateTime, func, Text, UniqueConstraint, Index, \
+    ForeignKey
 
+from core.globalconstants import GlobalConstants
 from database_tables.enrichment_table import EnrichmentTable
 from database_tables.mapping_table import MappingTable
 from database_tables.staging_table import StagingTable
@@ -85,28 +87,6 @@ class PleasantEnrichmentTable(EnrichmentTable):
 
 class PleasantBicyclingMapper(DataSourceABCImpl):
     _to_25833 = Transformer.from_crs(4326, 25833, always_xy=True).transform
-
-    def mapping_db_query(self) -> None | str:
-        enrichment = self.data_source_config.storage.enrichment
-        mapping = self.data_source_config.mapping
-        base = self.data_source_config.mapping.base_table
-        query = f"""
-                           INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, connection_id, distance_m)
-                           SELECT 
-                       w.id as way_id,
-                       o.id as connection_id,
-                       ST_Distance(w.geometry_25833, o.geometry_25833) AS distance
-                   FROM {base.table_schema}.{base.table_name} w
-                   JOIN LATERAL (
-                       SELECT id,lane_id, geometry_25833
-                       FROM {enrichment.table_schema}.{enrichment.table_name}
-                       WHERE ST_DWithin(w.geometry_25833, geometry_25833, 20)
-                       ORDER BY w.geometry_25833 <-> geometry_25833
-                       LIMIT 1
-                   ) o ON true;
-                   """
-
-        return query
 
     @staticmethod
     def _normalize_connection_id(value) -> str | None:

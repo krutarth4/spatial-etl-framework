@@ -35,6 +35,7 @@ class DataSourceMetadata(Base):
     current_run_status = Column(String, default="idle")
     last_run_status = Column(String)
     last_run_message = Column(Text)
+    last_run_duration_seconds = Column(Integer)
 
     # --- config tracking (VERY useful)
     config_hash = Column(String)

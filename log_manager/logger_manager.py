@@ -2,7 +2,33 @@
 import logging
 import sys
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+
+def setup_file_logging(conf: dict) -> None:
+    if not conf.get("enable", False):
+        return
+    root = logging.getLogger()
+    for h in root.handlers:
+        if isinstance(h, RotatingFileHandler):
+            return
+    log_dir = Path(conf.get("dir", "logs"))
+    log_dir.mkdir(parents=True, exist_ok=True)
+    rotation = conf.get("rotation", {})
+    handler = RotatingFileHandler(
+        filename=log_dir / conf.get("filename", "pipeline.log"),
+        maxBytes=rotation.get("max_bytes", 10 * 1024 * 1024),
+        backupCount=rotation.get("backup_count", 7),
+        encoding=rotation.get("encoding", "utf-8"),
+    )
+    handler.setFormatter(logging.Formatter(
+        fmt="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    level = getattr(logging, str(conf.get("level", "INFO")).upper(), logging.INFO)
+    handler.setLevel(level)
+    root.addHandler(handler)
 
 
 class ColorFormatter(logging.Formatter):

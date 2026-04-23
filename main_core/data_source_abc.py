@@ -93,6 +93,12 @@ class DataSourceABC(ABC):
         """
         pass
 
+    def execute(self):
+        """
+        Trigger datasource execution after initialization.
+        """
+        pass
+
     def run(self):
         """
         The main function which executes for all the datasources and contains the main logis of execution steps

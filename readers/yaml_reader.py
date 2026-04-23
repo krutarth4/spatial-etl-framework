@@ -133,13 +133,20 @@ class YamlReader:
 
         return obj
 
-    def _strip_newlines_recursive(self, obj):
+    def _strip_newlines_recursive(self, obj, parent_key=None):
+        # Keys that should preserve their exact formatting including newlines
+        # Used for SQL templates, queries, and other multiline formatted strings
+        PRESERVE_NEWLINES_KEYS = {"sql", "query", "sql_template", "command", "script"}
+
         if isinstance(obj, str):
-            return obj.replace("\n", "").strip()
+            # Don't strip newlines for SQL/query fields - preserve exact formatting
+            if parent_key in PRESERVE_NEWLINES_KEYS:
+                return obj  # Keep newlines as-is for SQL templates
+            return obj.replace("\n", "").strip()  # Strip for other strings
         elif isinstance(obj, dict):
-            return {k: self._strip_newlines_recursive(v) for k, v in obj.items()}
+            return {k: self._strip_newlines_recursive(v, parent_key=k) for k, v in obj.items()}
         elif isinstance(obj, list):
-            return [self._strip_newlines_recursive(v) for v in obj]
+            return [self._strip_newlines_recursive(v, parent_key=parent_key) for v in obj]
         else:
             return obj
 

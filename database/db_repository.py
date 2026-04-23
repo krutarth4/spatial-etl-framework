@@ -310,7 +310,7 @@ class DBRepository(DbConfiguration):
                 schema = table_schema or self.schema
                 if not self.table_schema_matches(table_name, schema):
                     self.logger.info("Table schema doesn't match")
-                    self.create_table_if_not_exist(table_name, True)
+                    self.create_table_if_not_exist(table_name, force_create=True)
                 else:
                     self.logger.info("Table exists, skipping the creation of the table")
         except Exception as e:
@@ -442,13 +442,14 @@ class DBRepository(DbConfiguration):
         if table is None:
             raise ValueError(f"Table '{table_name}' does not exist")
 
-        # Determine allowed columns (exclude autoincrement PKs)
-        insert_columns = [
-            c.name
-            for c in table.columns
-            if not (c.primary_key or c.autoincrement)
-
-        ]
+        # Determine allowed columns (exclude autoincrement PKs). Skip columns that
+        # are absent from every row so database-side defaults can still apply.
+        insert_columns = []
+        for column in table.columns:
+            if column.primary_key or column.autoincrement:
+                continue
+            if any(column.name in row for row in data_list):
+                insert_columns.append(column.name)
 
         if not insert_columns:
             raise ValueError("No insertable columns found")
@@ -1251,6 +1252,159 @@ class DBRepository(DbConfiguration):
             self.logger.error(f"SQL execution failed: {e}")
             if raise_on_error:
                 raise
+
+    def _extract_base_table_from_sql(self, sql: str) -> tuple[str, str] | None:
+        """
+        Extract base table name and schema from SQL query for batching.
+        Looks for patterns like: FROM schema.table alias
+        """
+        import re
+        # Match FROM schema.table or FROM "schema"."table"
+        pattern = r'FROM\s+(?:"?(\w+)"?\.)?"?(\w+)"?\s+(\w+)'
+        match = re.search(pattern, sql, re.IGNORECASE)
+        if match:
+            schema = match.group(1)
+            table = match.group(2)
+            alias = match.group(3)
+            return (schema, table, alias)
+        return None
+
+    def _detect_batchable_query(self, sql: str) -> bool:
+        """
+        Detect if a query is suitable for batching.
+        Currently detects: INSERT INTO ... SELECT ... FROM
+        """
+        sql_upper = sql.upper().strip()
+        return (
+            "INSERT INTO" in sql_upper
+            and "SELECT" in sql_upper
+            and "FROM" in sql_upper
+            and "JOIN" in sql_upper  # Likely a mapping query
+        )
+
+    @measure_time(label="Batched SQL execution time: ")
+    def call_sql_batched(
+        self,
+        sql: str,
+        batch_size: int = 10000,
+        base_id_column: str = "id",
+        params: Any = None,
+        raise_on_error: bool = False
+    ):
+        """
+        Execute large INSERT INTO ... SELECT queries in batches to avoid long locks.
+
+        Args:
+            sql: The SQL query to execute
+            batch_size: Number of rows to process per batch
+            base_id_column: Column name to use for batching (default: "id")
+            params: Optional query parameters
+            raise_on_error: Whether to raise exceptions
+
+        This method:
+        1. Extracts the base table from the query
+        2. Counts total rows to process
+        3. Processes in batches using ID ranges or LIMIT/OFFSET
+        4. Commits after each batch to release locks
+        5. Provides progress logging
+        """
+
+        if not self._detect_batchable_query(sql):
+            self.logger.info("Query not suitable for batching, executing normally")
+            return self.call_sql(sql, params, raise_on_error)
+
+        try:
+            # Extract base table info
+            table_info = self._extract_base_table_from_sql(sql)
+            if not table_info:
+                self.logger.warning("Could not extract base table from query, executing without batching")
+                return self.call_sql(sql, params, raise_on_error)
+
+            base_schema, base_table, base_alias = table_info
+            self.logger.info(f"Batching query on table: {base_schema}.{base_table} (alias: {base_alias})")
+
+            # Get total row count from base table
+            count_sql = f"SELECT COUNT(*) FROM {base_schema}.{base_table}"
+            with self.session_scope() as session:
+                total_rows = session.execute(text(count_sql)).scalar()
+
+            if total_rows == 0:
+                self.logger.info("No rows to process")
+                return
+
+            self.logger.info(f"Total rows to process: {total_rows}, batch size: {batch_size}")
+
+            # Calculate number of batches
+            num_batches = (total_rows + batch_size - 1) // batch_size
+
+            # Process in batches using ID ranges
+            self.logger.info(f"Processing in {num_batches} batches...")
+
+            for batch_num in range(num_batches):
+                offset = batch_num * batch_size
+
+                # Modify SQL to add LIMIT and OFFSET
+                # We wrap the base table in a subquery with LIMIT/OFFSET
+                batched_sql = self._add_batch_limits_to_query(
+                    sql, base_schema, base_table, base_alias,
+                    batch_size, offset
+                )
+
+                self.logger.info(
+                    f"Processing batch {batch_num + 1}/{num_batches} "
+                    f"(rows {offset + 1}-{min(offset + batch_size, total_rows)})"
+                )
+
+                start_time = time.perf_counter()
+                with self.session_scope() as session:
+                    result = session.execute(text(batched_sql), params or {})
+                    row_count = result.rowcount if hasattr(result, 'rowcount') else 0
+
+                elapsed = time.perf_counter() - start_time
+                self.logger.info(
+                    f"Batch {batch_num + 1} completed in {elapsed:.2f}s "
+                    f"({row_count} rows affected)"
+                )
+
+            self.logger.info(f"All {num_batches} batches completed successfully")
+
+        except Exception as e:
+            self.logger.error(f"Batched SQL execution failed: {e}")
+            if raise_on_error:
+                raise
+
+    def _add_batch_limits_to_query(
+        self,
+        sql: str,
+        base_schema: str,
+        base_table: str,
+        base_alias: str,
+        limit: int,
+        offset: int
+    ) -> str:
+        """
+        Modify SQL query to add LIMIT/OFFSET by wrapping the base table.
+
+        Converts:
+            FROM schema.table b
+        To:
+            FROM (SELECT * FROM schema.table LIMIT x OFFSET y) b
+        """
+        import re
+
+        # Pattern to match the FROM clause with the base table
+        pattern = rf'(FROM\s+)(?:"{base_schema}"\.)?"{base_table}"(\s+{base_alias})'
+        replacement = rf'\1(SELECT * FROM "{base_schema}"."{base_table}" LIMIT {limit} OFFSET {offset}) {base_alias}'
+
+        modified_sql = re.sub(pattern, replacement, sql, count=1, flags=re.IGNORECASE)
+
+        # If schema is not quoted
+        if modified_sql == sql:
+            pattern = rf'(FROM\s+){base_schema}\.{base_table}(\s+{base_alias})'
+            replacement = rf'\1(SELECT * FROM {base_schema}.{base_table} LIMIT {limit} OFFSET {offset}) {base_alias}'
+            modified_sql = re.sub(pattern, replacement, sql, count=1, flags=re.IGNORECASE)
+
+        return modified_sql
 
 
 

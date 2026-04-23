@@ -1,17 +1,11 @@
-import binascii
-import hashlib
 import os
 import zipfile
-from pathlib import Path
 
-from geoalchemy2 import Geometry, Raster
 from pyproj import Transformer
 from shapely import wkb
 from shapely.geometry import box
-from sqlalchemy import Column, Integer, Float, ARRAY, UniqueConstraint, Index, func, String, BigInteger, DateTime
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, Integer, Float, ARRAY, UniqueConstraint, String, BigInteger, DateTime, func
 
-from database_tables.enrichment_table import EnrichmentTable
 from database_tables.mapping_table import MappingTable
 from database_tables.staging_table import StagingTable
 from main_core.data_source_abc_impl import DataSourceABCImpl
@@ -35,44 +29,23 @@ class ElevationPythonStagingTable(StagingTable):
     tile_name = Column(ARRAY(String), nullable=True)
     sample_count = Column(Integer, nullable=True)
 
-    created_at = Column(DateTime(timezone=True), default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         UniqueConstraint("way_id"),
     )
 
 
-# class ElevationPythonEnrichmentTable(EnrichmentTable):
-#     __tablename__ = "elevation_python_enrichment"
-#
-#     id = Column(Integer, primary_key=True, autoincrement=True, index=True)
-#
-#     dataset_id = Column(String, nullable=False, default="default", index=True)
-#
-#     tile_x = Column(Integer, nullable=False, index=True)
-#     tile_y = Column(Integer, nullable=False, index=True)
-#     rast = Column(Raster)
-#     raster_hash = Column(String, index=True)
-#
-#     footprint_4326 = Column(Geometry("POLYGON", srid=4326), index=True)
-#
-#     __table_args__ = (
-#         Index(
-#             "elevation_enrichment_rast_gix",
-#             func.ST_ConvexHull(rast),
-#             postgresql_using="gist"
-#         ),
-#         Index(
-#             "elevation_enrichment_footprint",
-#             func.ST_ConvexHull(footprint_4326),
-#             postgresql_using="gist"
-#         ),
-#         UniqueConstraint(
-#             "dataset_id",
-#             "tile_x",
-#             "tile_y",
-#         ),
-#     )
+class ElevationPythonMappingTable(MappingTable):
+    __tablename__ = "elevation_python_mapping"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    total_ascent = Column(Float, nullable=False)
+    total_descent = Column(Float, nullable=False)
+    max_slope = Column(Float, nullable=False)
+    avg_slope = Column(Float, nullable=False)
+    sample_count = Column(Integer, nullable=True)
 
 
 class ElevationPythonMapper(DataSourceABCImpl):
@@ -187,15 +160,7 @@ class ElevationPythonMapper(DataSourceABCImpl):
                 pts = [clipped.interpolate(d) for d in distances]
                 coords = np.array([[p.x, p.y] for p in pts], dtype=np.float32)
 
-            # build sample points (utm)
-            # pts = [clipped.interpolate(d) for d in distances]
-            # coords = np.array([[p.x, p.y] for p in pts], dtype=np.float32)
 
-            # if len(coords) == 0:
-            #     self._missing_inside.add(way_id)
-            #     continue
-
-        # ➕ DEBUG: Single-sample detection
             if len(coords) == 1:
                 self._single_sample.add(way_id)
                 coords = np.array([

@@ -78,8 +78,9 @@ class DataSourceMapper:
                 module = importlib.import_module(module_path)
                 mapper_class = getattr(module, f"{class_name[0].upper() + class_name[1:]}Mapper")
                 instance_data_source = mapper_class(data, self.db_instance, self.scheduler_core, self.base_graph_conf, self.metadata_service)
-                self.logger.info(f"execution finished for the {mapper_class.__name__}")
-                # instance_data_source.run()
+                instance_data_source.execute()
+
+                self.logger.info(f"{mapper_class.__name__} configuration step finished!!")
             except Exception as e:
                 self.logger.error(f"Error running data source {class_name} :{e}")
 

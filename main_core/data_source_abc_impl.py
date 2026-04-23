@@ -24,7 +24,8 @@ from main_core.core_config import CoreConfig
 from main_core.data_source_abc import DataSourceABC
 from data_config_dtos.data_source_config_dto import DataSourceDTO, SourceFetchModeEnum, SourceMultiFetchStrategy, \
     SourceInputDTO, SourceDTO
-from main_core.mapping_strategy import mapping_strategy_registry
+from main_core.mapping_sql_builder import MappingInsertBuilder, MappingInsertSpec, \
+    mapping_select_sql_strategy_registry
 from main_core.safe_class import safe_class
 from materialized_views.manager import MaterializedViewManager
 from utils.execution_time import format_duration
@@ -72,13 +73,15 @@ class DataSourceABCImpl(DataSourceABC):
         self.raw_staging_schema = None
         self._last_fetch_performed_download: bool | None = None
         self._register_datasource_metadata()
+        self.scheduler = scheduler_core
 
-        if scheduler_core is not None:
-            self.scheduler = scheduler_core
+    def execute(self):
+        if self.scheduler is not None:
             self.create_job()
-        else:
-            self.logger.debug(f"No scheduler found, using default setting")
-            self.run()
+            return
+
+        self.logger.debug("No scheduler found, executing datasource directly")
+        self.run()
 
     def create_data_tables(self):
         if self.data_source_config.storage.persistent and self.db is not None:
@@ -115,19 +118,7 @@ class DataSourceABCImpl(DataSourceABC):
         After the fetch define some criteria to check if the new data is available or not , if not then return otherwise continue with the run method as usual
 
         """
-        # get the data from the raw file that we always save / or from the database metadata
 
-        # if same metadta then let it be otherwise continue with the job
-
-        # found_new_data = True
-        # if self.data_source_config.check_before_update:
-        #     if self.db is not None and self.data_source_config.storage.persistent:
-        #         self.logger.info(f"Checking for changes before update {self.data_source_config.name} ......")
-        #         old_data = self.db.fetch_columns_with_limits(self.data_source_config.storage.table_name)
-        #         found_new_data = DataSourceABCImpl.check_before_update_condition(old_data, self.source_result)
-        # else:
-        #     self.logger.warning(f"Check on the file disabled  {self.data_source_config.name}")
-        # return found_new_data
         return True
 
     @staticmethod
@@ -222,7 +213,7 @@ class DataSourceABCImpl(DataSourceABC):
         self.logger.info(f" no. of urls: {len(urls)}, process starting ......")
         for i, url in enumerate(urls):
             url_name = url.split("/")[-1:]
-            path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(source, "_".join(url_name))
+            path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(source, {"url": "_".join(url_name)})
             self.logger.info(f" count {i + 1}")
             if self.check_multi_metadata_before_fetch(url=url, headers=source.headers,
                                                       params=source.params, path=path):
@@ -528,6 +519,7 @@ class DataSourceABCImpl(DataSourceABC):
     def run(self):
         self.start_execution()
         self._mark_metadata_run_started()
+        run_started_at = datetime.utcnow()
         run_succeeded = False
         run_error: Exception | None = None
         run_result = None
@@ -541,7 +533,8 @@ class DataSourceABCImpl(DataSourceABC):
             self.on_run_error(e)
             return self.run_job_response("Job failed")
         finally:
-            self._mark_metadata_run_finished(run_succeeded, run_result, run_error)
+            run_duration = int((datetime.utcnow() - run_started_at).total_seconds())
+            self._mark_metadata_run_finished(run_succeeded, run_result, run_error, run_duration)
             self.run_end_cleanup(run_succeeded, run_error)
 
     def execute_run_pipeline(self):
@@ -625,7 +618,7 @@ class DataSourceABCImpl(DataSourceABC):
         except Exception as e:
             self.logger.error(f"Failed to mark metadata run start for {self.data_source_name}: {e}")
 
-    def _mark_metadata_run_finished(self, succeeded: bool, run_result=None, error: Exception | None = None):
+    def _mark_metadata_run_finished(self, succeeded: bool, run_result=None, error: Exception | None = None, duration_seconds: int | None = None):
         if self.metadata_service is None:
             return
         try:
@@ -634,7 +627,7 @@ class DataSourceABCImpl(DataSourceABC):
                 message = run_result.get("message")
             if error is not None:
                 message = str(error)
-            self.metadata_service.mark_run_finished(self.data_source_name, succeeded, message)
+            self.metadata_service.mark_run_finished(self.data_source_name, succeeded, message, duration_seconds)
         except Exception as e:
             self.logger.error(f"Failed to update metadata run status for {self.data_source_name}: {e}")
 
@@ -772,43 +765,78 @@ class DataSourceABCImpl(DataSourceABC):
     def execute_query(self, table_key: str, query: str | None, params= None):
         if query is not None:
             # self.logger.info(f"calling the query for {table_key} -->, {query}")
-            self.db.call_sql(query, params)
+            # Use batched execution for mapping queries if configured
+            if table_key.lower() == "mapping" and self._should_use_batching():
+                batch_size = self._get_batch_size()
+                self.logger.info(f"Using batched execution for {table_key} with batch size: {batch_size}")
+                self.db.call_sql_batched(query, batch_size=batch_size, params=params)
+            else:
+                self.db.call_sql(query, params)
         else:
             if table_key.lower() == "mapping":
                 self.logger.info(
                     "No mapping Query given. Please write a postgresql query in the respective mapper class. Implement "
                     "func map_to_link_db_query")
 
+    def _should_use_batching(self) -> bool:
+        """
+        Check if batching should be enabled based on configuration.
+        """
+        try:
+            from main_core.core_config import CoreConfig
+            config = CoreConfig().get_config()
+            db_config = config.get("database", {})
+            perf_config = db_config.get("performance", {})
+            return perf_config.get("enable_batching", False)
+        except Exception as e:
+            self.logger.warning(f"Could not read batching config, defaulting to disabled: {e}")
+            return False
+
+    def _get_batch_size(self) -> int:
+        """
+        Get configured batch size or return default.
+        Checks datasource-specific config first, then global config.
+        """
+        try:
+            # Check datasource-specific batch size first
+            if hasattr(self.data_source_config, 'mapping') and self.data_source_config.mapping:
+                datasource_batch_size = getattr(self.data_source_config.mapping, 'batch_size', None)
+                if datasource_batch_size is not None:
+                    self.logger.info(f"Using datasource-specific batch size: {datasource_batch_size}")
+                    return int(datasource_batch_size)
+
+            # Fall back to global config
+            from main_core.core_config import CoreConfig
+            config = CoreConfig().get_config()
+            db_config = config.get("database", {})
+            perf_config = db_config.get("performance", {})
+            return perf_config.get("default_batch_size", 10000)
+        except Exception as e:
+            self.logger.warning(f"Could not read batch size config, using default: {e}")
+            return 10000
+
     def map_to_links(self):
         query = self.mapping_db_query()
         self.execute_query("Mapping", query)
-
-    def get_mapping_strategy_name(self) -> str | None:
-        mapping_conf = getattr(self.data_source_config, "mapping", None)
-        strategy = getattr(mapping_conf, "strategy", None)
-        if strategy is None:
-            return None
-        if isinstance(strategy, str):
-            return strategy
-        name = getattr(strategy, "name", None)
-        if name is not None:
-            return str(name)
-        # Backward fallback for dict-like payloads if any mapper bypasses DTO conversion.
-        if isinstance(strategy, dict):
-            raw_name = strategy.get("name")
-            return str(raw_name) if raw_name else None
-        return str(strategy)
 
     def get_mapping_strategy_type(self) -> str | None:
         mapping_conf = getattr(self.data_source_config, "mapping", None)
         strategy = getattr(mapping_conf, "strategy", None)
         if strategy is None:
             return None
+        if isinstance(strategy, str):
+            return strategy
         if isinstance(strategy, dict):
             value = strategy.get("type")
-            return str(value) if value else None
+            if value:
+                return str(value)
+            legacy_value = strategy.get("name")
+            return str(legacy_value) if legacy_value else None
         value = getattr(strategy, "type", None)
-        return str(value) if value else None
+        if value is not None:
+            return str(value)
+        legacy_value = getattr(strategy, "name", None)
+        return str(legacy_value) if legacy_value else None
 
     def get_mapping_strategy_link_fields(self) -> dict[str, str | None]:
         mapping_conf = getattr(self.data_source_config, "mapping", None)
@@ -835,24 +863,145 @@ class DataSourceABCImpl(DataSourceABC):
             "basis": str(basis) if basis else None,
         }
 
-    def get_custom_mapping_strategy(self):
+    def get_mapping_config(self) -> dict[str, Any]:
+        mapping_conf = getattr(self.data_source_config, "mapping", None)
+        config = getattr(mapping_conf, "config", None) if mapping_conf else None
+        if isinstance(config, dict):
+            return config
+        return {}
+
+    def get_custom_mapping_select_strategy(self):
         """
-        Override in mapper classes to return a custom strategy object implementing:
-        `name` and `execute(datasource)`.
+        Override in mapper classes to return a SQL select strategy object implementing:
+        `name` and `build_select(datasource)`.
         """
         return None
 
-    def execute_mapping_strategy(self):
-        strategy = mapping_strategy_registry.resolve(self)
-        self.logger.info(
-            f"Executing mapping strategy '{getattr(strategy, 'name', type(strategy).__name__)}' "
-            f"for datasource {self.data_source_name}"
+    def get_mapping_select_strategy(self):
+        custom_strategy = self.get_custom_mapping_select_strategy()
+        if custom_strategy is not None:
+            return custom_strategy
+
+        return mapping_select_sql_strategy_registry.get(self.get_mapping_strategy_type())
+
+    def get_mapping_insert_spec(self) -> MappingInsertSpec | None:
+        insert_conf = self.get_mapping_config().get("insert")
+        if not isinstance(insert_conf, dict):
+            return None
+
+        columns = insert_conf.get("columns") or []
+        conflict_columns = insert_conf.get("conflict_columns")
+        update_columns = insert_conf.get("update_columns")
+
+        return MappingInsertSpec(
+            columns=[str(column) for column in columns],
+            conflict_columns=[str(column) for column in conflict_columns] if conflict_columns else None,
+            update_columns=[str(column) for column in update_columns] if update_columns else None,
         )
-        strategy.execute(self)
+
+    def build_mapping_db_query(self) -> str | None:
+        select_strategy = self.get_mapping_select_strategy()
+        if select_strategy is None:
+            return None
+
+        select_sql = select_strategy.build_select(self)
+        insert_spec = self.get_mapping_insert_spec()
+        if insert_spec is None:
+            return select_sql
+
+        builder = MappingInsertBuilder()
+        return builder.build_insert(self.data_source_config.mapping, select_sql, insert_spec)
+
+    def execute_mapping_sql_template(self):
+        mapping_conf = getattr(self.data_source_config, "mapping", None)
+        config = getattr(mapping_conf, "config", None) or {}
+        sql = config.get("sql")
+        if not sql:
+            raise ValueError(
+                f"Mapping strategy 'sql_template' requires mapping.config.sql "
+                f"for datasource {self.data_source_name}"
+            )
+
+        try:
+            sql = sql.format(**self.get_mapping_template_context())
+        except Exception:
+            pass
+
+        self.execute_query("Mapping", sql)
+
+    def get_mapping_template_context(self) -> dict[str, str | None]:
+        mapping = self.data_source_config.mapping
+        storage = self.data_source_config.storage
+        base = mapping.base_table
+        link_fields = self.get_mapping_strategy_link_fields()
+        strategy_type = self.get_mapping_strategy_type()
+
+        # Handle cases where staging or enrichment might not be defined
+        staging_table = None
+        staging_schema = None
+        if storage.staging:
+            staging_table = storage.staging.table_name
+            staging_schema = storage.staging.table_schema
+
+        enrichment_table = None
+        enrichment_schema = None
+        if storage.enrichment:
+            enrichment_table = storage.enrichment.table_name
+            enrichment_schema = storage.enrichment.table_schema
+        elif storage.staging:
+            # Fallback: if no enrichment, use staging as enrichment
+            enrichment_table = storage.staging.table_name
+            enrichment_schema = storage.staging.table_schema
+
+        return {
+            "datasource_name": self.data_source_name,
+            "mapping_table": mapping.table_name,
+            "mapping_schema": mapping.table_schema,
+            "staging_table": staging_table,
+            "staging_schema": staging_schema,
+            "enrichment_table": enrichment_table,
+            "enrichment_schema": enrichment_schema,
+            "base_table": base.table_name,
+            "base_schema": base.table_schema,
+            "joins_on": mapping.joins_on,
+            "strategy_type": strategy_type,
+            "link_mapping_column": link_fields.get("mapping_column"),
+            "link_base_column": link_fields.get("base_column"),
+            "link_basis": link_fields.get("basis"),
+        }
+
+    def execute_mapping_strategy(self):
+        strategy_type = (self.get_mapping_strategy_type() or "custom").lower()
+        self.logger.info(
+            f"Executing mapping strategy type '{strategy_type}' for datasource {self.data_source_name}"
+        )
+
+        if strategy_type == "none":
+            self.logger.info("Mapping strategy type 'none': skipping mapping step")
+            return
+
+        if strategy_type == "sql_template":
+            self.execute_mapping_sql_template()
+            return
+
+        if strategy_type in {"custom", "mapper_sql"}:
+            self.map_to_links()
+            return
+
+        select_strategy = self.get_mapping_select_strategy()
+        if select_strategy is None:
+            self.logger.warning(
+                f"Unknown mapping strategy type '{strategy_type}' for datasource "
+                f"{self.data_source_name}. Falling back to mapper SQL."
+            )
+            self.map_to_links()
+            return
+
+        query = self.build_mapping_db_query()
+        self.execute_query("Mapping", query)
 
     def mapping_db_query(self) -> None | str:
-        sql_query = None
-        return sql_query
+        return self.build_mapping_db_query()
 
     def execute_on_staging(self):
         query = self.staging_db_query()

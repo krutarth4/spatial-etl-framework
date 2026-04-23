@@ -3,8 +3,9 @@ import gzip
 import ijson
 from geoalchemy2 import Geometry, WKTElement
 from pyproj import Transformer
-from sqlalchemy import Integer, Column, DateTime, Float, ARRAY, UniqueConstraint, String, Index
+from sqlalchemy import Integer, Column, DateTime, Float, ARRAY, UniqueConstraint, String, Index, ForeignKey
 
+from core.globalconstants import GlobalConstants
 from database_tables.enrichment_table import EnrichmentTable
 from database_tables.mapping_table import MappingTable
 from database_tables.staging_table import StagingTable
@@ -64,7 +65,7 @@ class AirPollutionGridEnrichmentTable(EnrichmentTable):
 
     __table_args__ = (
         UniqueConstraint("grid_id", "forecast_time"),
-        Index("ix_air_pollution_grid_enrichment_grid_time_uid", "grid_id", "forecast_time", "uid"),
+        Index(None, "grid_id", "forecast_time", "uid"),
         Index(None, "geom_25833", postgresql_using="gist"),
         Index(None, "geom_4326", postgresql_using="gist"),
     )
@@ -73,10 +74,17 @@ class AirPollutionGridEnrichmentTable(EnrichmentTable):
 class AirPollutionGridMappingTable(MappingTable):
     __tablename__ = "air_pollution_grid_mapping"
 
+    # Override parent's way_id to remove column-level unique=True (this table has N rows per way)
+    way_id = Column(Integer, ForeignKey(f"{GlobalConstants.base_schema}.{GlobalConstants.base_table}.id"), nullable=False)
+
     uid = Column(Integer, primary_key=True, autoincrement=True)
     grid_uid = Column(Integer, nullable=False, index=True)
     grid_id = Column(Integer, nullable=False, index=True)
-    distance_m = Column(Float, nullable=False)
+    intersection_length_m = Column(Float, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("way_id", "grid_id"),
+    )
 
 
 class AirQualityDataMapper(DataSourceABCImpl):
@@ -91,49 +99,6 @@ class AirQualityDataMapper(DataSourceABCImpl):
             SET geom_4326 = ST_Transform(geom_25833, 4326)
             WHERE geom_25833 IS NOT NULL
               AND geom_4326 IS NULL;
-        """
-        return sql
-
-    def mapping_db_query(self) -> None | str:
-        base = self.data_source_config.mapping.base_table
-        enrichment = self.data_source_config.storage.enrichment
-        mapping = self.data_source_config.mapping
-
-        sql = f"""
-            WITH latest_per_grid AS MATERIALIZED (
-                SELECT DISTINCT ON (e.grid_id)
-                    e.uid,
-                    e.grid_id,
-                    e.geom_25833
-                FROM {enrichment.table_schema}.{enrichment.table_name} e
-                WHERE e.geom_25833 IS NOT NULL
-                ORDER BY e.grid_id, e.forecast_time DESC NULLS LAST, e.uid DESC
-            ),
-            ways_src AS MATERIALIZED (
-                SELECT
-                    w.id,
-                    COALESCE(w.geometry_25833, ST_Transform(w.geometry, 25833)) AS geom_25833
-                FROM {base.table_schema}.{base.table_name} w
-                WHERE w.geometry_25833 IS NOT NULL OR w.geometry IS NOT NULL
-            )
-            INSERT INTO {mapping.table_schema}.{mapping.table_name} (way_id, grid_uid, grid_id, distance_m)
-            SELECT
-                w.id AS way_id,
-                aq.uid AS grid_uid,
-                aq.grid_id AS grid_id,
-                ST_Distance(w.geom_25833, aq.geom_25833) AS distance_m
-            FROM ways_src w
-            JOIN LATERAL (
-                SELECT lpg.uid, lpg.grid_id, lpg.geom_25833
-                FROM latest_per_grid lpg
-                ORDER BY w.geom_25833 <-> lpg.geom_25833
-                LIMIT 1
-            ) aq ON TRUE
-            ON CONFLICT (way_id)
-            DO UPDATE SET
-                grid_uid = EXCLUDED.grid_uid,
-                grid_id = EXCLUDED.grid_id,
-                distance_m = EXCLUDED.distance_m;
         """
         return sql
 

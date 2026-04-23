@@ -1,0 +1,22 @@
+.idea/
+.venv/
+__pycache__/
+logs/
+tmp/
+raw/
+data/
+config.yaml
+
+# Secrets / local env — never commit real values
+.env
+.env.*
+!.env.example
+
+# Claude Code local config (kept out of git)
+.claude/
+CLAUDE.md
+**/CLAUDE.md
+
+# OS / editor noise
+.DS_Store
+*.swp
