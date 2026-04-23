@@ -100,6 +100,8 @@ python3 run.py
 
 The pipeline reads `config.yaml`, schedules every enabled datasource, and exposes a debug API on `:8000`. Edits to `config.yaml` reload automatically in ~2 s.
 
+→ Next: configure your first datasource — see **[Config reference](docs/config-reference.md)** and the **[Adding a new data layer](#adding-a-new-data-layer)** walkthrough below.
+
 ---
 
 ## How it works
@@ -150,6 +152,8 @@ class MyDataMapper(DataSourceABCImpl):
         ...  # parse raw file → list of dicts
 ```
 
+→ Full lifecycle + override points: **[Mapper README](docs/mapper-README.md)**.
+
 **2. Datasource config:**
 
 ```yaml
@@ -171,6 +175,10 @@ datasources:
       table_name: my_mapping
       table_schema: test_osm_base_graph
 ```
+
+→ Every field explained: **[Config reference](docs/config-reference.md)** · quick start: **[Config README](docs/config-README.md)**.
+→ Pick a `strategy.type`: **[Mapping strategies reference](docs/mapping-strategies-reference.md)** · one-pager: **[Mapping quick reference](docs/mapping-quick-reference.md)**.
+→ Real migration from custom SQL to a built-in strategy: **[Tree mapper migration example](docs/migration-example-tree-mapper.md)**.
 
 **3. Register in `config.yaml`:**
 
