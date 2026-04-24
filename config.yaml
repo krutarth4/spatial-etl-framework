@@ -57,7 +57,7 @@ materialized_views:
 
 scheduler:
   name: APSScheduler
-  enable: true
+  enable: false
   description: "This is a scheduler which helps to orchestrate the background task on either thread or process level"
   timezone: "Europe/Berlin"
   scheduler_type: BackgroundScheduler   #https://apscheduler.readthedocs.io/en/3.x/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
@@ -310,7 +310,7 @@ datasources:
 
   - name: "weather_forecast_bright_sky"
     description: "get weather forecast for the dwd_stations in params with hourly forecast "
-    enable: false # to use the data source or not
+    enable: true # to use the data source or not
     class_name: weather
     debug:
       endpoint: weather-forecast
@@ -347,9 +347,9 @@ datasources:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
           name: run_once # interval , cron, date, calendar_interval
-          start_format: 00:00:00
+          start_format: 00:05:00
           config: # should be same key value pair to for job
-            seconds: 15
+            hour: 1
 #            run_date:
 
       replace_existing: true
