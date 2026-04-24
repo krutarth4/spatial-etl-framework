@@ -1,0 +1,35 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/fpgmaas/deptry
+    rev: "0.21.2"
+    hooks:
+      - id: deptry
+        args: ["."]
+
+  # pip-audit runs as a local hook against the active env, not pre-commit's
+  # isolated venv, because requirements.txt has unpinned entries and
+  # pip-audit -r requires strict pinning.
+  - repo: local
+    hooks:
+      - id: pip-audit
+        name: pip-audit (installed env)
+        entry: python3 -m pip_audit --skip-editable
+        language: system
+        pass_filenames: false
+        always_run: true
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: detect-private-key
