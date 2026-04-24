@@ -457,6 +457,7 @@ class DataSourceABCImpl(DataSourceABC):
 
         except Exception as e:
             self.logger.error(f"Error occurred while loading the file into Database: {e}")
+            raise
 
     def process_file(self, path: str):
         """
@@ -517,6 +518,8 @@ class DataSourceABCImpl(DataSourceABC):
         # self.load(transformed_data)
 
     def run(self):
+        self._run_degraded = False
+        self._run_stage_warnings: list[tuple[str, str]] = []
         self.start_execution()
         self._mark_metadata_run_started()
         run_started_at = datetime.utcnow()
@@ -531,7 +534,7 @@ class DataSourceABCImpl(DataSourceABC):
         except Exception as e:
             run_error = e
             self.on_run_error(e)
-            return self.run_job_response("Job failed")
+            return self.run_job_response(f"Job failed: {e}", level="error")
         finally:
             run_duration = int((datetime.utcnow() - run_started_at).total_seconds())
             self._mark_metadata_run_finished(run_succeeded, run_result, run_error, run_duration)
@@ -546,6 +549,11 @@ class DataSourceABCImpl(DataSourceABC):
         self.prepare_run_resources(paths)
         self.process_extracted_paths(paths)
         self.finalize_after_file_processing()
+        if self._run_degraded:
+            return self.run_job_response(
+                f"Job finished with warnings: {self._run_stage_warnings}",
+                level="warning",
+            )
         return self.run_job_response("Job finished Successfully !!!")
 
     def is_run_input_available(self, paths: list | None) -> bool:
@@ -631,6 +639,13 @@ class DataSourceABCImpl(DataSourceABC):
         except Exception as e:
             self.logger.error(f"Failed to update metadata run status for {self.data_source_name}: {e}")
 
+    def _note_stage_warning(self, stage: str, error: Exception):
+        """Record a non-fatal stage failure so run() can report the run as degraded."""
+        if not hasattr(self, "_run_stage_warnings"):
+            self._run_stage_warnings = []
+        self._run_degraded = True
+        self._run_stage_warnings.append((stage, str(error)))
+
     def _update_metadata_runtime_paths(self, paths):
         if self.metadata_service is None:
             return
@@ -663,6 +678,7 @@ class DataSourceABCImpl(DataSourceABC):
             MaterializedViewManager(self.db, mv_conf).on_datasource_success(self.data_source_name)
         except Exception as e:
             self.logger.error(f"Materialized view trigger failed for datasource {self.data_source_name}: {e}")
+            self._note_stage_warning("trigger_materialized_views", e)
 
     def sync_staging_to_enrichment(self):
         if self.data_source_config.storage.enrichment:
@@ -716,6 +732,7 @@ class DataSourceABCImpl(DataSourceABC):
                 self.db.create_indexes(table_name, table_schema)
         except Exception as e:
             self.logger.error(f"Failed creating {table_kind} indexes for datasource {self.data_source_name}: {e}")
+            self._note_stage_warning(f"create_indexes:{table_kind}", e)
 
     def post_filter_processing_save_data(self, conf, data):
         file_handler = FileHandler(conf.destination)
@@ -751,16 +768,18 @@ class DataSourceABCImpl(DataSourceABC):
     def should_load_transformed_data(self, transformed_data, path: str) -> bool:
         return bool(transformed_data)
 
-    def run_job_response(self, message: str):
+    def run_job_response(self, message: str, level: str = "info"):
         end_timer = time.perf_counter()
         duration = end_timer - self.start_timer
         formatted_duration = format_duration(duration)
 
-        self.logger.info(
+        log_line = (
             f"Finished run for {self.data_source_config.name} in {formatted_duration} seconds -> message: {message}"
         )
+        log_fn = getattr(self.logger, level, self.logger.info)
+        log_fn(log_line)
 
-        return {"message": message, "duration": formatted_duration}
+        return {"message": message, "duration": formatted_duration, "level": level}
 
     def execute_query(self, table_key: str, query: str | None, params= None):
         if query is not None:
@@ -1043,6 +1062,7 @@ class DataSourceABCImpl(DataSourceABC):
                         self.logger.info(f"Skipping mapping as all ways geometry mapped....")
             except Exception as e:
                 self.logger.error(f"Error occurred during base table update {e}")
+                raise
 
     def create_job(self):
         self.logger.info(f"Job creation started for {self.job_configuration.name}")

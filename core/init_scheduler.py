@@ -87,12 +87,14 @@ class InitScheduler:
         next_run_time = job.next_run_time.isoformat() if job.next_run_time else "No next run scheduled"
         self.logger.info(f"Job '{job_name}' added to scheduler. Next run: {next_run_time}")
 
-    @staticmethod
-    def my_listener(event):
+    def my_listener(self, event):
         if event.exception:
-            print('The job crashed :(')
+            self.logger.error(
+                f"Scheduler job {event.job_id} crashed: {event.exception}",
+                exc_info=(type(event.exception), event.exception, event.traceback),
+            )
         else:
-            print('The job worked :)', event.retval)
+            self.logger.info(f"Scheduler job {event.job_id} completed -> {event.retval}")
 
     def subscribe_listener(self):
         self.scheduler.add_listener(self.my_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
