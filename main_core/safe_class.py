@@ -25,7 +25,7 @@ def safe_class(cls):
                             f"{cls.__name__}.{__func.__name__} failed: {e}",
                             exc_info=True
                         )
-
+                    raise
 
             setattr(cls, name, wrapper)
 
