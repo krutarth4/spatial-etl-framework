@@ -1,0 +1,63 @@
+[project]
+name = "spatial-etl-framework"
+version = "0.1.0"
+description = "Geospatial ETL pipeline for Berlin bicycle routing (PostGIS)."
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    "logs",
+    "tmp",
+    "proj",
+    "metadata",
+    "custom_graph_base_tables",
+    "database_tables",
+    "materialized_views",
+    "default.style",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "S",   # bandit (security)
+]
+ignore = [
+    "E501",  # line-too-long (formatter handles it)
+    "S101",  # assert used (fine in internal code)
+    "B008",  # function call in arg default (FastAPI Depends pattern)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/test_*.py" = ["S"]
+"run.py" = ["S603", "S607"]  # subprocess calls for auto-reload
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.deptry]
+known_first_party = [
+    "core",
+    "main_core",
+    "data_mappers",
+    "data_config_dtos",
+    "handlers",
+    "readers",
+    "graph",
+    "database",
+    "communication",
+    "log_manager",
+    "utils",
+    "yaml_helper",
+]
+
+[tool.deptry.per_rule_ignores]
+# DEP002 = declared but unused. Runtime-only / binary-only / CLI-invoked packages:
+DEP002 = ["psycopg-binary", "psycopg", "uvicorn", "APScheduler"]
