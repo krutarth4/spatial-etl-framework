@@ -1,8 +1,9 @@
 import threading
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 from starlette.middleware.cors import CORSMiddleware
 
+from communication.comm_service import CommService
 from core.application import Application
 from core.debug_mapper_service import DebugMapperService
 from log_manager.logger_manager import LoggerManager, setup_file_logging
@@ -59,6 +60,70 @@ async def health():
         "pipeline_thread_alive": alive,
         "pipeline_initialized": _pipeline_app is not None,
     }
+
+
+def _get_comm_service() -> CommService:
+    if _pipeline_app is None or _pipeline_app.comm_service is None:
+        raise HTTPException(status_code=503, detail="Communication service is not initialized.")
+    return _pipeline_app.comm_service
+
+
+@app.get("/comm/tasks")
+async def comm_list_tasks():
+    service = _get_comm_service()
+    return {"tasks": service.list_tasks()}
+
+
+@app.get("/comm/tasks/{task_key}")
+async def comm_get_task(task_key: str):
+    service = _get_comm_service()
+    task = service.get_task_status(task_key)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task '{task_key}' not found")
+    return task
+
+
+@app.post("/comm/tasks/{task_key}")
+async def comm_upsert_task(task_key: str, payload: dict = Body(default={})):
+    service = _get_comm_service()
+    body = payload or {}
+    if not service.get_task_status(task_key):
+        service.ensure_task(
+            task_key,
+            owner=body.get("owner"),
+            current_status=str(body.get("current_status", "idle")),
+            is_completed=bool(body.get("is_completed", False)),
+        )
+    updated = service.update_status(
+        task_key,
+        owner=body.get("owner"),
+        current_status=body.get("current_status"),
+        last_run_status=body.get("last_run_status"),
+        last_run_message=body.get("last_run_message"),
+        success=bool(body.get("success", False)),
+        is_completed=body.get("is_completed"),
+    )
+    if updated is None:
+        raise HTTPException(status_code=500, detail="Failed to update task")
+    return updated
+
+
+@app.post("/comm/tasks/{task_key}/complete")
+async def comm_complete_task(task_key: str, payload: dict = Body(default={})):
+    service = _get_comm_service()
+    body = payload or {}
+    updated = service.update_status(
+        task_key,
+        owner=body.get("owner"),
+        current_status=body.get("current_status", "idle"),
+        last_run_status=body.get("last_run_status", "success"),
+        last_run_message=body.get("last_run_message"),
+        success=True,
+        is_completed=True,
+    )
+    if updated is None:
+        raise HTTPException(status_code=500, detail="Failed to complete task")
+    return updated
 
 
 def _get_debug_service() -> DebugMapperService:

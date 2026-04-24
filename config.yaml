@@ -103,6 +103,10 @@ graph:
   tool: external_ingest # terminal or custom local tool either use osm2pgrouting with config.xml to create the initial tables or custom osmosis class with the help of handler
   communication:
     enable: false # set false to run standalone without comm/router waits
+    state_file: tmp/comm_state.json # JSON snapshot; router reads/writes via HTTP endpoints below
+    router:
+      base_url: null # e.g. http://router:9000; when set, pipeline POSTs status changes to {base_url}/comm/tasks/{key}
+      timeout_seconds: 5
     tasks:
       - key: read_osm_file
         owner: router

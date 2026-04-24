@@ -1,19 +1,39 @@
 import time
 from datetime import datetime
 
-from database.db_instancce import DbInstance
+import requests
+
 from log_manager.logger_manager import LoggerManager
+from main_core.core_config import CoreConfig
 
 from communication.comm_repository import CommRepository
 
 
 class CommService:
-    def __init__(self, db: DbInstance, table_schema: str | None):
+    def __init__(self, db=None, table_schema: str | None = None):
         self.logger = LoggerManager(type(self).__name__)
-        self.repository = None
-        if db is None:
-            return
         self.repository = CommRepository(db, table_schema)
+        self._router_base_url, self._router_timeout = self._load_router_config()
+
+    @staticmethod
+    def _load_router_config() -> tuple[str | None, float]:
+        try:
+            config = CoreConfig().get_config() or {}
+        except Exception:
+            return None, 5.0
+        comm_conf = ((config.get("graph") or {}).get("communication") or {})
+        router_conf = comm_conf.get("router") or {}
+        if not isinstance(router_conf, dict):
+            return None, 5.0
+        base_url = router_conf.get("base_url")
+        timeout = router_conf.get("timeout_seconds", 5.0)
+        try:
+            timeout_float = float(timeout)
+        except (TypeError, ValueError):
+            timeout_float = 5.0
+        if isinstance(base_url, str) and base_url.strip():
+            return base_url.rstrip("/"), timeout_float
+        return None, timeout_float
 
     def create_table(self):
         if self.repository is None:
@@ -78,7 +98,8 @@ class CommService:
             updates["last_successful_run_at"] = datetime.utcnow()
         updated = self.repository.update_task(task_key, **updates)
         if updated is None:
-            return self.repository.upsert_task(task_key, updates)
+            updated = self.repository.upsert_task(task_key, updates)
+        self._notify_router(task_key, updated)
         return updated
 
     def get_task_status(self, task_key: str) -> dict | None:
@@ -87,6 +108,12 @@ class CommService:
         self.create_table()
         return self.repository.get_task_status(task_key)
 
+    def list_tasks(self) -> list[dict]:
+        if self.repository is None:
+            return []
+        self.create_table()
+        return self.repository.list_tasks()
+
     def reset_all_task_completion_flags(self) -> int:
         if self.repository is None:
             return 0
@@ -94,6 +121,17 @@ class CommService:
         count = self.repository.reset_all_task_completion_flags()
         self.logger.info(f"Reset is_completed=false for {count} comm task(s)")
         return count
+
+    def _notify_router(self, task_key: str, payload) -> None:
+        if not self._router_base_url or payload is None:
+            return
+        url = f"{self._router_base_url}/comm/tasks/{task_key}"
+        try:
+            requests.post(url, json=payload, timeout=self._router_timeout)
+        except Exception as exc:
+            # Router being unreachable must never break the pipeline; state is
+            # already persisted locally and router can poll on reconnect.
+            self.logger.warning(f"Router notify failed for '{task_key}' at {url}: {exc}")
 
     def wait_for_task(
         self,
