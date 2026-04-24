@@ -799,7 +799,7 @@ datasources:
 
   - name: tree
     description: " Get Trees on the side of the road within 50 m distance "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
 #    check_before_update: false # only valid for api call
     class_name: tree
     debug:
@@ -904,7 +904,7 @@ datasources:
 
   - name: pleasant_bicycling
     description: " Get the density of vehicles on the road "
-    enable: false # to use the data source or not
+    enable: true # to use the data source or not
 #    check_before_update: false # only valid for api call
     class_name: pleasantBicycling
     debug:
@@ -916,7 +916,7 @@ datasources:
       check_metadata: # The api doesn't support the implicit header request
         enable: true
         keys: [ "content_type" ] # check for the keys in header metadata
-      file_path: tmp/pleasant_bicycle/aggregated_metrics.parquet
+      file_path: data/pleasant_bicycle/aggregated_metrics.parquet
       fetch: local #http \ local
       stream: True
       save_local: True
