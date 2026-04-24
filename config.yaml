@@ -57,7 +57,7 @@ materialized_views:
 
 scheduler:
   name: APSScheduler
-  enable: false
+  enable: true
   description: "This is a scheduler which helps to orchestrate the background task on either thread or process level"
   timezone: "Europe/Berlin"
   scheduler_type: BackgroundScheduler   #https://apscheduler.readthedocs.io/en/3.x/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
@@ -248,9 +248,9 @@ datasources:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
           name: interval # interval , cron, date
-          start_date: 2025-12-21T11:15:00
+          start_date: 2025-12-21T11:15:00 # Example of start config for the dateTime , if given calculates execution dateTime for next run
           config: # should be same key value pair to for job
-            hours: 1
+            hours: 10
 
       replace_existing: true
       coalesce: true
