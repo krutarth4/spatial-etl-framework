@@ -219,7 +219,7 @@ graph:
 datasources:
   - name: "weather_station_bright_sky"
     description: "gets weather station data with their location"
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
 #    check_before_update: false
     class_name: weatherStation
     debug:
@@ -310,7 +310,7 @@ datasources:
 
   - name: "weather_forecast_bright_sky"
     description: "get weather forecast for the dwd_stations in params with hourly forecast "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
     class_name: weather
     debug:
       endpoint: weather-forecast
@@ -799,7 +799,7 @@ datasources:
 
   - name: tree
     description: " Get Trees on the side of the road within 50 m distance "
-    enable: false # to use the data source or not
+    enable: true # to use the data source or not
 #    check_before_update: false # only valid for api call
     class_name: tree
     debug:
@@ -834,8 +834,8 @@ datasources:
 
 
     job:
-      name: testJob
-      id: testJob
+      name: treeJob
+      id: treeJob
       trigger:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
@@ -895,7 +895,6 @@ datasources:
     storage: # DB storage
       persistent: true # true | false -> to store the values or not
       expires_after: 6h # how long to keep the data before again running the new process for persistency
-      #10h 10m 55s 324ms -> this dataset took around 2-3 hours
       staging:
         table_name: tree_staging
         table_schema: *db_schema
