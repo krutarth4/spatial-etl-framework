@@ -487,7 +487,7 @@ datasources:
 
   - name: elevation_grids_links
     description: " 1m elevation Grid links "
-    enable: false # to use the data source or not
+    enable: true # to use the data source or not
     #    check_before_job_run: true
     check_before_update: true
     class_name: elevationGrid
@@ -514,7 +514,7 @@ datasources:
       enable: true
     post_filter_processing:
       save: true
-      destination: &gridlinks data/grid/elevation_links_test.json # should be explicit the name not the internal naming mechanism
+      destination: &gridlinks data/grid/elevation_grid_links.json # should be explicit the name not the internal naming mechanism
     pre-database-processing:
       enable: false
     post-database-processing:
@@ -525,7 +525,7 @@ datasources:
       trigger:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
-          name: interval # interval , cron, date
+          name: run_once # interval , cron, date
           config: # should be same key value pair to for job
             seconds: 15
       replace_existing: true
@@ -542,16 +542,6 @@ datasources:
         column_type: Integer
     storage: # DB storage
       persistent: false # true | false -> to store the values or not
-      expires_after: 6h # how long to keep the data before again running the new process for persistency
-      staging:
-        table_name: elevationGrid
-        table_schema: *db_schema
-        table_class: ElevationTable
-      enrichment:
-        table_name: elevationGrid
-        table_schema: *db_schema
-        table_class: ElevationTable
-
 
   - name: elevation
     description: " 1m elevation "

@@ -648,12 +648,14 @@ class DataSourceABCImpl(DataSourceABC):
 
     def finalize_after_file_processing(self):
         self.post_database_processing()
-        sync_result = self.sync_raw_to_staging()
-        self.create_indexes_for_table("staging")
-        self.execute_on_staging()
-        self.sync_staging_to_enrichment()
-        self.create_indexes_for_table("enrichment")
-        self.execute_on_enrichment()
+        sync_result = None
+        if self.data_source_config.storage.persistent:
+            sync_result = self.sync_raw_to_staging()
+            self.create_indexes_for_table("staging")
+            self.execute_on_staging()
+            self.sync_staging_to_enrichment()
+            self.create_indexes_for_table("enrichment")
+            self.execute_on_enrichment()
         self.map_to_base()
         self.create_indexes_for_table("mapping")
         self.after_datasource_success()
