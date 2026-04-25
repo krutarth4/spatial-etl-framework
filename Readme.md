@@ -104,6 +104,70 @@ The pipeline reads `config.yaml`, schedules every enabled datasource, and expose
 
 ---
 
+## Selecting which datasources to run
+
+By default, every datasource with `enable: true` in `config.yaml` runs. You can override that at startup — useful for running the same Docker image with different subsets active (e.g. one container only on `elevation`, another on everything except `weather`) without editing `config.yaml`.
+
+Two equivalent surfaces are supported. **CLI args take precedence over env vars, and either one fully overrides the per-datasource `enable` flags in `config.yaml`.**
+
+| Surface | Run only listed sources | Skip listed sources |
+|---|---|---|
+| CLI args | `--only elevation,weather` | `--disable trees` |
+| Env vars | `ENABLE_DATASOURCES=elevation,weather` | `DISABLE_DATASOURCES=trees` |
+
+`--only` and `--disable` are mutually exclusive. Names not present in `config.yaml` produce a warning, not a hard failure. Lists are comma-separated, whitespace-tolerant.
+
+### Local
+
+```bash
+python3 run.py --only elevation,weather
+ENABLE_DATASOURCES=elevation,weather python3 run.py
+DISABLE_DATASOURCES=trees python3 run.py
+```
+
+### `docker run`
+
+The image's `ENTRYPOINT` is `python run.py`, so flags after the image name are forwarded to argparse:
+
+```bash
+# CLI args
+docker run --rm spatial-etl --only elevation,weather
+docker run --rm spatial-etl --disable trees
+
+# Env vars
+docker run --rm -e ENABLE_DATASOURCES=elevation,weather spatial-etl
+docker run --rm -e DISABLE_DATASOURCES=trees spatial-etl
+```
+
+### `docker compose`
+
+Env vars are usually the cleanest fit for compose. To pass CLI flags instead, use `command:`.
+
+```yaml
+services:
+  etl:
+    image: spatial-etl
+    environment:
+      DB_HOST: <HOST>
+      DB_PORT: <PORT>
+      DB_USER: <USER>
+      DB_PASSWORD: <PASS>
+      DB_NAME: <DB_NAME>
+      # Pick ONE of these (or neither, to use config.yaml as-is):
+      ENABLE_DATASOURCES: elevation,weather
+      # DISABLE_DATASOURCES: trees
+    # Or, equivalently, pass CLI args (overrides env vars):
+    # command: ["--only", "elevation,weather"]
+    depends_on:
+      - postgres
+```
+
+### Verifying
+
+On startup, `CoreConfig` logs the active override (e.g. `Datasource override (only): ['elevation', 'weather']`), and `DataSourceMapper` logs `Enable Found N data sources` reflecting the post-override count. Disabled sources are also marked `current_run_status: disabled` in the metadata table.
+
+---
+
 ## How it works
 
 Each datasource follows the same pipeline, implemented in `main_core/data_source_abc_impl.py`:

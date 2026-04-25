@@ -1,3 +1,4 @@
+import argparse
 import hashlib
 import os
 import sys
@@ -13,6 +14,27 @@ import uvicorn
 from core.application import Application
 from log_manager.logger_manager import LoggerManager, setup_file_logging
 from main_core.core_config import CoreConfig
+
+
+def _parse_args():
+    parser = argparse.ArgumentParser(prog="spatial-etl-framework")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--only",
+        help="Comma-separated datasource names to run exclusively (overrides config.yaml enable flags)",
+    )
+    group.add_argument(
+        "--disable",
+        help="Comma-separated datasource names to skip (overrides config.yaml enable flags)",
+    )
+    return parser.parse_args()
+
+
+def _csv_to_list(value):
+    if not value:
+        return None
+    items = [s.strip() for s in value.split(",") if s.strip()]
+    return items or None
 
 
 logger = LoggerManager("RunConfigWatcher").get_logger()
@@ -58,6 +80,11 @@ def _start_config_watcher(runtime_conf: dict | None):
 
 
 if __name__ == "__main__":
+    args = _parse_args()
+    CoreConfig.set_datasource_override(
+        only=_csv_to_list(args.only),
+        disable=_csv_to_list(args.disable),
+    )
     core_conf = CoreConfig()
     setup_file_logging(core_conf.get_config().get("logging") or {})
     conf = core_conf.get_value("server")
