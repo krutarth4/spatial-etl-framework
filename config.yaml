@@ -87,6 +87,14 @@ database:
     enable_batching: true
     default_batch_size: 100000  # Number of rows per batch for INSERT/UPDATE operations
 
+  pool:
+    # SQLAlchemy connection pool configuration
+    pool_size: 10
+    max_overflow: 10
+    pool_pre_ping: true
+    echo: false
+    application_name: "Spatial-ETL-pipeline"
+
 metadata-datasource:
   description: "this will contain all the data realted to data sources to store particular information"
   table_schema: *db_schema
