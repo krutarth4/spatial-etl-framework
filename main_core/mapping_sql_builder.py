@@ -112,19 +112,23 @@ class SpatialRelationshipMappingSelectStrategy:
         base_filter_sql = self._normalize_where_clause(config.get("base_filter_sql"))
         join_where_sql = self._normalize_where_clause(config.get("enrichment_filter_sql"))
 
+        select_columns_sql = ",\n    ".join(select_columns)
+        enrichment_table = f"{enrichment.table_schema}.{enrichment.table_name}"
+        join_sql = self.build_join_sql(
+            config,
+            base_alias=base_alias,
+            enrichment_alias=enrichment_alias,
+            enrichment_table=enrichment_table,
+            base_geometry_sql=base_geometry_sql,
+            enrichment_geometry_sql=enrichment_geometry_sql,
+            join_where_sql=join_where_sql,
+        )
+
         return f"""
                     SELECT
-                        {",\n    ".join(select_columns)}
+                        {select_columns_sql}
                     FROM {base.table_schema}.{base.table_name} {base_alias}
-                    {self.build_join_sql(
-                        config,
-                        base_alias=base_alias,
-                        enrichment_alias=enrichment_alias,
-                        enrichment_table=f"{enrichment.table_schema}.{enrichment.table_name}",
-                        base_geometry_sql=base_geometry_sql,
-                        enrichment_geometry_sql=enrichment_geometry_sql,
-                        join_where_sql=join_where_sql,
-                    )}
+                    {join_sql}
                     {base_filter_sql}
                 """
 
@@ -467,9 +471,10 @@ class AggregateWithinDistanceMappingSelectStrategy(SpatialRelationshipMappingSel
         if enrichment_filter_sql:
             extra_clause = f"\n    AND {enrichment_filter_sql[6:]}" if enrichment_filter_sql.lower().startswith("where ") else f"\n    AND {enrichment_filter_sql}"
 
+        select_columns_sql = ",\n    ".join(select_columns)
         return f"""
                     SELECT
-                        {",\n    ".join(select_columns)}
+                        {select_columns_sql}
                     FROM {base.table_schema}.{base.table_name} {base_alias}
                     LEFT JOIN {enrichment.table_schema}.{enrichment.table_name} {enrichment_alias}
                         ON {join_condition}{extra_clause}
@@ -545,10 +550,11 @@ class AttributeJoinMappingSelectStrategy:
             extra_clause = f"\n    AND {enrichment_filter_sql[6:]}" if enrichment_filter_sql.lower().startswith("where ") else f"\n    AND {enrichment_filter_sql}"
 
         join_type = config.get("join_type", "INNER").upper()
+        select_columns_sql = ",\n    ".join(select_columns)
 
         return f"""
                     SELECT
-                        {",\n    ".join(select_columns)}
+                        {select_columns_sql}
                     FROM {base.table_schema}.{base.table_name} {base_alias}
                     {join_type} JOIN {enrichment.table_schema}.{enrichment.table_name} {enrichment_alias}
                         ON {base_alias}.{base_join_column} = {enrichment_alias}.{enrichment_join_column}{extra_clause}

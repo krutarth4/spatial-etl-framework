@@ -112,7 +112,7 @@ graph:
     enable: false # set false to run standalone without comm/router waits
     state_file: tmp/comm_state.json # JSON snapshot; router reads/writes via HTTP endpoints below
     router:
-      base_url: null # e.g. http://router:9000; when set, pipeline POSTs status changes to {base_url}/comm/tasks/{key}
+      base_url: http://router:8082 # e.g. http://router:9000; when set, pipeline POSTs status changes to {base_url}/comm/tasks/{key}
       timeout_seconds: 5
     tasks:
       - key: read_osm_file
@@ -156,7 +156,7 @@ graph:
   datasource:
     - name: "osm_graph"
       description: "gets weather station data with their location"
-      enable: false # to use the data source or not
+      enable: true # to use the data source or not
   #    check_before_update: false
       class_name: graph
       debug:
@@ -317,7 +317,7 @@ datasources:
 
   - name: "weather_forecast_bright_sky"
     description: "get weather forecast for the dwd_stations in params with hourly forecast "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
     class_name: weather
     debug:
       endpoint: weather-forecast
@@ -659,7 +659,7 @@ datasources:
 
   - name: elevation_python
     description: " 1m elevation "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
 #    check_before_update: false # only valid for api call
     class_name: elevationPython
     debug:
@@ -792,8 +792,6 @@ datasources:
         table_schema: *db_schema
         table_class: TreeTabl
 
-
-
   - name: tree
     description: " Get Trees on the side of the road within 50 m distance "
     enable: false # to use the data source or not
@@ -896,8 +894,6 @@ datasources:
         table_name: tree_staging
         table_schema: *db_schema
         table_class: TreeStaging
-
-
 
   - name: pleasant_bicycling
     description: " Get the density of vehicles on the road "
