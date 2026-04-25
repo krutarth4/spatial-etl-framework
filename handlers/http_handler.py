@@ -1,9 +1,12 @@
 import json
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union, TypedDict, Any
 
 import requests
+from requests.adapters import HTTPAdapter
 import logging
 
 from handlers.file_handler import FileHandler
@@ -14,10 +17,24 @@ from main_core.safe_class import safe_class
 
 class HttpHandler:
     _BASE_DIR = "../"
+    _shared_session: Optional[requests.Session] = None
+    _session_lock = threading.Lock()
 
     def __init__(self, config=None):
         self.logger = LoggerManager(type(self).__name__)
         self.config = config
+
+    @classmethod
+    def _get_session(cls) -> requests.Session:
+        if cls._shared_session is None:
+            with cls._session_lock:
+                if cls._shared_session is None:
+                    s = requests.Session()
+                    adapter = HTTPAdapter(pool_connections=32, pool_maxsize=64)
+                    s.mount("http://", adapter)
+                    s.mount("https://", adapter)
+                    cls._shared_session = s
+        return cls._shared_session
 
     def convert_metadata_in_file_format(self, response) -> dict:
         return {
@@ -48,7 +65,8 @@ class HttpHandler:
 
     def call(self, uri: str, destination_path: Optional[Union[str, Path]] = "../", stream: bool = False,
              chunk_size: int = 8192, headers: Optional[dict] = None, params: Optional[Union[dict, list]] = None,
-             timeout: tuple[int,int] = (30,300), file_extension: str = "json") -> str:
+             timeout: tuple[int,int] = (30,300), file_extension: str = "json",
+             retry_attempts: int = 1, retry_backoff: float = 1.0) -> str:
         uri = uri.strip()
         destination_path = Path(destination_path.strip())
 
@@ -58,45 +76,52 @@ class HttpHandler:
         if headers:
             self.logger.info(f"Query headers: {headers}")
 
-        try:
-            with (requests.get(
-                    uri,
-                    params=params,
-                    headers=headers,
-                    stream=stream,
-                    timeout=timeout
-            ) as response):
-                response.raise_for_status()
-                headers = response.headers
+        session = self._get_session()
+        attempts = max(1, int(retry_attempts))
+        last_err = None
+        for attempt in range(1, attempts + 1):
+            try:
+                with session.get(
+                        uri,
+                        params=params,
+                        headers=headers,
+                        stream=stream,
+                        timeout=timeout
+                ) as response:
+                    response.raise_for_status()
+                    response_headers = response.headers
 
-                # Always read content ONCE
-                if stream:
-                    content_chunks = []
-                    for chunk in response.iter_content(chunk_size=chunk_size):
-                        if chunk:
-                            content_chunks.append(chunk)
-                    content = b"".join(content_chunks)
-                else:
-                    content = response.content
+                    if stream:
+                        content_chunks = []
+                        for chunk in response.iter_content(chunk_size=chunk_size):
+                            if chunk:
+                                content_chunks.append(chunk)
+                        content = b"".join(content_chunks)
+                    else:
+                        content = response.content
 
-                if not destination_path:
-                    raise ValueError("destination_path must be provided when save=True")
+                    if not destination_path:
+                        raise ValueError("destination_path must be provided when save=True")
 
-                data_path, meta_path = self.save_to_file(content,headers, destination_path, file_extension)
-                content_type = response.headers.get("Content-Type", "")
-                result = {
-                    "metadata": response.headers,
-                    "content": {},
-                    "path": data_path,
-                }
+                    data_path, meta_path = self.save_to_file(content, response_headers, destination_path, file_extension)
+                    self.logger.info(f"Saving metadata to {data_path}")
+                    return data_path
 
-                self.logger.info(f"Saving metadata to {result['path']}")
-                return result["path"]
-
-
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"HTTP request failed: {e}")
-            raise
+            except requests.exceptions.RequestException as e:
+                last_err = e
+                status = getattr(getattr(e, "response", None), "status_code", None)
+                retriable = status is None or (500 <= status < 600)
+                if attempt < attempts and retriable:
+                    sleep_for = retry_backoff * (2 ** (attempt - 1))
+                    self.logger.warning(
+                        f"HTTP request failed (attempt {attempt}/{attempts}) for {uri}: {e}. "
+                        f"Retrying in {sleep_for:.1f}s")
+                    time.sleep(sleep_for)
+                    continue
+                self.logger.error(f"HTTP request failed for {uri}: {e}")
+                raise
+        if last_err:
+            raise last_err
 
     def get_metadata_from_call(self, uri: str, params, headers: dict | None = None, timeout:tuple=(30,120)):
         try:

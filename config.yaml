@@ -309,7 +309,7 @@ datasources:
 
   - name: "weather_forecast_bright_sky"
     description: "get weather forecast for the dwd_stations in params with hourly forecast "
-    enable: false # to use the data source or not
+    enable: true # to use the data source or not
     class_name: weather
     debug:
       endpoint: weather-forecast
@@ -903,7 +903,7 @@ datasources:
 
   - name: pleasant_bicycling
     description: " Get the density of vehicles on the road "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
 #    check_before_update: false # only valid for api call
     class_name: pleasantBicycling
     debug:

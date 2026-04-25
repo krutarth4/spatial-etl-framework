@@ -166,6 +166,12 @@ class SourceMultiFetchDTO:
     url_template: Optional[str]
     template_params: Optional[Mapping[str, Any]]
     urls: Optional[Union[list[str]]] | Optional[SourceInputDTO]
+    fetch_workers: Optional[int] = 8
+    request_timeout: Optional[int] = 120
+    retry_attempts: Optional[int] = 3
+    retry_backoff: Optional[float] = 1.0
+    inter_request_delay: Optional[float] = 0.0
+    fail_fast: Optional[bool] = False
 
 
 @dataclass
