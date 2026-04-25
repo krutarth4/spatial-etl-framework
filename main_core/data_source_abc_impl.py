@@ -207,20 +207,91 @@ class DataSourceABCImpl(DataSourceABC):
             self.logger.warning(f"Failed to resolve latest saved path for {candidate_path}: {e}")
             return None
 
-    def process_multi_fetch_expand_list(self, source, urls) -> list[str]:
-        http_handler = HttpHandler()
-        paths = []
-        self.logger.info(f" no. of urls: {len(urls)}, process starting ......")
-        for i, url in enumerate(urls):
-            url_name = url.split("/")[-1:]
-            path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(source, {"url": "_".join(url_name)})
-            self.logger.info(f" count {i + 1}")
+    def _multi_fetch_settings(self, multi_fetch):
+        workers = max(1, int(getattr(multi_fetch, "fetch_workers", 8) or 8))
+        timeout = int(getattr(multi_fetch, "request_timeout", 120) or 120)
+        retries = max(1, int(getattr(multi_fetch, "retry_attempts", 3) or 3))
+        backoff = float(getattr(multi_fetch, "retry_backoff", 1.0) or 1.0)
+        delay = float(getattr(multi_fetch, "inter_request_delay", 0.0) or 0.0)
+        fail_fast = bool(getattr(multi_fetch, "fail_fast", False))
+        return workers, timeout, retries, backoff, delay, fail_fast
+
+    def _execute_fetch_task(self, source, url, params, path, resolve_on_skip,
+                             timeout, retries, backoff, delay):
+        try:
             if self.check_multi_metadata_before_fetch(url=url, headers=source.headers,
-                                                      params=source.params, path=path):
-                path = http_handler.call(uri=url, destination_path=path, stream=source.stream,
-                                         headers=source.headers, params=source.params,
-                                         file_extension=source.response_type)
-            paths.append(path)
+                                                      params=params, path=path):
+                http_handler = HttpHandler()
+                final_path = http_handler.call(uri=url, destination_path=path, stream=source.stream,
+                                                headers=source.headers, params=params,
+                                                file_extension=source.response_type,
+                                                timeout=(min(30, timeout), timeout),
+                                                retry_attempts=retries, retry_backoff=backoff)
+                if delay > 0:
+                    time.sleep(delay)
+                return final_path, True, None
+            else:
+                final_path = self.resolve_latest_saved_path(path) or path if resolve_on_skip else path
+                return final_path, False, None
+        except Exception as e:
+            return path, False, e
+
+    def _run_parallel_fetch(self, source, multi_fetch, tasks):
+        """tasks: list of (url, params, path, resolve_on_skip). Returns (paths, any_downloaded)."""
+        workers, timeout, retries, backoff, delay, fail_fast = self._multi_fetch_settings(multi_fetch)
+        n = len(tasks)
+        results: list[str] = [t[2] for t in tasks]
+        any_downloaded = False
+        failures: list[tuple[int, str, Exception]] = []
+        if n == 0:
+            return results, any_downloaded
+
+        effective_workers = max(1, min(workers, n))
+        self.logger.info(f"multi_fetch: {n} requests, {effective_workers} workers, "
+                         f"timeout={timeout}s, retries={retries}, backoff={backoff}s")
+
+        with ThreadPoolExecutor(max_workers=effective_workers,
+                                 thread_name_prefix=f"multifetch-{self.data_source_name}") as ex:
+            future_to_idx = {
+                ex.submit(self._execute_fetch_task, source, url, params, path, resolve_on_skip,
+                           timeout, retries, backoff, delay): i
+                for i, (url, params, path, resolve_on_skip) in enumerate(tasks)
+            }
+            done_count = 0
+            for fut in as_completed(future_to_idx):
+                idx = future_to_idx[fut]
+                final_path, downloaded, err = fut.result()
+                done_count += 1
+                if err is not None:
+                    failures.append((idx, tasks[idx][0], err))
+                    self.logger.error(f"multi_fetch [{done_count}/{n}] FAILED {tasks[idx][0]}: {err}")
+                    if fail_fast:
+                        for f in future_to_idx:
+                            f.cancel()
+                        raise err
+                else:
+                    results[idx] = final_path
+                    any_downloaded = any_downloaded or downloaded
+                    self.logger.info(f"multi_fetch [{done_count}/{n}] OK "
+                                      f"{'downloaded' if downloaded else 'skipped'}: {tasks[idx][0]}")
+
+        if failures:
+            self.logger.warning(
+                f"multi_fetch completed with {len(failures)}/{n} failures; "
+                f"continuing in degraded mode")
+        return results, any_downloaded
+
+    def process_multi_fetch_expand_list(self, source, urls) -> list[str]:
+        multi_fetch = source.multi_fetch
+        tasks = []
+        for url in urls:
+            url_name = url.split("/")[-1:]
+            path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(
+                source, {"url": "_".join(url_name)})
+            tasks.append((url, source.params, path, False))
+        paths, downloaded = self._run_parallel_fetch(source, multi_fetch, tasks)
+        if downloaded:
+            self._last_fetch_performed_download = True
         return paths
 
     def multi_fetch(self) -> list[str]:
@@ -239,60 +310,48 @@ class DataSourceABCImpl(DataSourceABC):
                     if multi_fetch.strategy == SourceMultiFetchStrategy.EXPAND_PARAMS.value:
                         params = multi_fetch.expand or {}
                         constant_param = multi_fetch.params or {}
-                        http_handler = HttpHandler()
                         keys = list(params.keys())
                         values = list(params.values())
+                        tasks = []
                         for combo in product(*values):
                             call_params = dict(zip(keys, combo))
                             param = {**constant_param, **call_params}
                             path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(source, param)
-                            if self.check_multi_metadata_before_fetch(url=source.url, headers=source.headers,
-                                                                      params=param, path=path):
-                                path = http_handler.call(uri=source.url, destination_path=path, stream=source.stream,
-                                                         headers=source.headers, params=param,
-                                                         file_extension=source.response_type)
-                                any_downloaded = True
-                            else:
-                                path = self.resolve_latest_saved_path(path) or f"{path}"
-                            #     read from the file
-                            paths.append(path)
-                        # return paths
+                            tasks.append((source.url, param, path, True))
+                        paths, any_downloaded = self._run_parallel_fetch(source, multi_fetch, tasks)
                     elif multi_fetch.strategy == SourceMultiFetchStrategy.URL_TEMPLATE.value:
                         template_values = multi_fetch.template_params
-                        http_handler = HttpHandler()
                         keys = list(template_values.keys())
                         values = list(template_values.values())
                         length = len(values[0])
-
+                        tasks = []
                         for i in range(length):
                             params_dict = {key: values[j][i] for j, key in enumerate(keys)}
                             try:
                                 url = multi_fetch.url_template.format(**params_dict)
                             except Exception as e:
                                 self.logger.error(f"URL template and template urls specified not correct {e} ")
+                                continue
                             path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(source, params_dict)
-                            paths.append(path)
-
-                            if self.check_multi_metadata_before_fetch(url=url, headers=source.headers,
-                                                                      params=source.params, path=path):
-                                path = http_handler.call(uri=url, destination_path=path, stream=source.stream,
-                                                         headers=source.headers, params=source.params,
-                                                         file_extension=source.response_type)
-                                any_downloaded = True
-                            else:
-                                path = self.resolve_latest_saved_path(path) or path
-                            paths[-1] = path
+                            tasks.append((url, source.params, path, True))
+                        paths, any_downloaded = self._run_parallel_fetch(source, multi_fetch, tasks)
 
                     elif multi_fetch.strategy == SourceMultiFetchStrategy.EXPLICIT_URL_LIST.value:
+                        url_list = None
                         if isinstance(multi_fetch.urls, list):
-                            paths = self.process_multi_fetch_expand_list(source, multi_fetch.urls)
-
+                            url_list = multi_fetch.urls
                         elif isinstance(multi_fetch.urls, SourceInputDTO):
-
                             file_handler = FileHandler(multi_fetch.urls.input)
-                            print(f"{multi_fetch.urls.input.split('/')[-1]}")
-                            urls = file_handler.read_local_file(f"{multi_fetch.urls.input.split('/')[-1]}")
-                            paths = self.process_multi_fetch_expand_list(source, urls)
+                            url_list = file_handler.read_local_file(
+                                f"{multi_fetch.urls.input.split('/')[-1]}")
+                        if url_list:
+                            tasks = []
+                            for url in url_list:
+                                url_name = url.split("/")[-1:]
+                                path = DataSourceABCImpl.create_file_name_for_multi_fetch_expand_params(
+                                    source, {"url": "_".join(url_name)})
+                                tasks.append((url, source.params, path, False))
+                            paths, any_downloaded = self._run_parallel_fetch(source, multi_fetch, tasks)
 
         elif source.fetch in FetchTypeEnum.LOCAL.value:
             if multi_fetch.enable:
