@@ -33,4 +33,5 @@ COPY . .
 RUN useradd -m appuser
 USER appuser
 
-CMD ["python", "run.py"]
+ENTRYPOINT ["python", "run.py"]
+CMD []
