@@ -682,16 +682,20 @@ class DataSourceABCImpl(DataSourceABC):
 
     def sync_staging_to_enrichment(self):
         if self.data_source_config.storage.enrichment:
+            batch_size = self._get_batch_size() if self._should_use_batching() else None
             self.db.sync_staging_to_enrichment(self.data_source_config.storage.staging.table_schema,
                                                self.data_source_config.storage.staging.table_name,
                                                self.data_source_config.storage.enrichment.table_schema,
-                                               self.data_source_config.storage.enrichment.table_name
+                                               self.data_source_config.storage.enrichment.table_name,
+                                               batch_size=batch_size,
                                                )
 
     def sync_raw_to_staging(self)  :
+        batch_size = self._get_batch_size() if self._should_use_batching() else None
         return self.db.sync_source_to_target_table(self.raw_staging_schema, self.raw_staging_table
                                             , self.data_source_config.storage.staging.table_schema,
-                                            self.data_source_config.storage.staging.table_name)
+                                            self.data_source_config.storage.staging.table_name,
+                                            batch_size=batch_size)
 
 
     def clean_raw_staging_table(self, backup: bool):

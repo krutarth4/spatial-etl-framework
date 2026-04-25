@@ -85,8 +85,7 @@ database:
   performance:
     # Batch processing configuration for large SQL operations
     enable_batching: true
-    default_batch_size: 10000  # Number of rows per batch for INSERT/UPDATE operations
-    batch_commit_interval: 5000  # Commit every N rows (0 = commit per batch only)
+    default_batch_size: 100000  # Number of rows per batch for INSERT/UPDATE operations
 
 metadata-datasource:
   description: "this will contain all the data realted to data sources to store particular information"

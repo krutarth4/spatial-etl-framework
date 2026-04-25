@@ -1023,12 +1023,136 @@ class DBRepository(DbConfiguration):
 
         return update_cols
 
+    def _upsert_in_pk_batches(
+            self,
+            source_table: Table,
+            target_table: Table,
+            insert_cols: list[str],
+            conflict_cols: list[str],
+            update_cols: list[str],
+            batch_size: int,
+            return_xmax: bool = False,
+    ):
+        """
+        Walk source_table in PK-range slices and run an INSERT … SELECT … ON CONFLICT
+        upsert per slice. Each batch commits independently — failures mid-stream leave
+        prior batches durable, same semantics as call_sql_batched.
+        """
+        source_pk_cols = [c.name for c in source_table.primary_key.columns]
+        if len(source_pk_cols) != 1:
+            raise ValueError(
+                f"PK-range batching needs a single-column PK on "
+                f"{source_table.fullname}; found {source_pk_cols}"
+            )
+        pk_name = source_pk_cols[0]
+        pk_col = source_table.c[pk_name]
+
+        with self.session_scope() as session:
+            bounds = session.execute(
+                select(func.min(pk_col), func.max(pk_col))
+            ).one()
+        pk_min, pk_max = bounds[0], bounds[1]
+
+        if pk_min is None:
+            self.logger.info(
+                f"No rows in {source_table.fullname}, skipping batched upsert"
+            )
+            if return_xmax:
+                return {"inserted": 0, "updated": 0, "total": 0, "success": True}
+            return 0
+
+        total_inserted = 0
+        total_updated = 0
+        total_rows = 0
+        lo = pk_min
+        batch_num = 0
+        approx_batches = max(1, (pk_max - pk_min) // batch_size + 1)
+        self.logger.info(
+            f"Batched upsert {source_table.fullname} -> {target_table.fullname}: "
+            f"pk range {pk_min}..{pk_max}, batch_size={batch_size}, "
+            f"~{approx_batches} batches"
+        )
+
+        while lo <= pk_max:
+            hi = lo + batch_size
+            batch_num += 1
+
+            base_insert = Insert(target_table).from_select(
+                insert_cols,
+                select(*(source_table.c[c] for c in insert_cols))
+                    .where(pk_col >= lo)
+                    .where(pk_col < hi)
+            )
+
+            if update_cols:
+                update_map = {
+                    col: getattr(base_insert.excluded, col)
+                    for col in update_cols
+                }
+                where_clause = or_(
+                    *(
+                        target_table.c[col].is_distinct_from(
+                            getattr(base_insert.excluded, col)
+                        )
+                        for col in update_cols
+                    )
+                )
+                stmt = base_insert.on_conflict_do_update(
+                    index_elements=conflict_cols,
+                    set_=update_map,
+                    where=where_clause,
+                )
+            else:
+                stmt = base_insert.on_conflict_do_nothing(
+                    index_elements=conflict_cols
+                )
+
+            if return_xmax:
+                target_pk_cols = [c.name for c in target_table.primary_key.columns]
+                stmt = stmt.returning(
+                    *(target_table.c[c] for c in target_pk_cols),
+                    text("xmax"),
+                )
+
+            t0 = time.perf_counter()
+            with self.session_scope() as session:
+                result = session.execute(stmt)
+                if return_xmax:
+                    rows = result.fetchall()
+                    inserted = sum(1 for r in rows if r.xmax == 0)
+                    total_inserted += inserted
+                    total_updated += len(rows) - inserted
+                    total_rows += len(rows)
+                    batch_rows = len(rows)
+                else:
+                    batch_rows = result.rowcount or 0
+                    total_rows += batch_rows
+
+            elapsed = time.perf_counter() - t0
+            self.logger.info(
+                f"Batch {batch_num}/{approx_batches} "
+                f"(pk {lo}..{hi - 1}) completed in {elapsed:.2f}s "
+                f"({batch_rows} rows, total {total_rows})"
+            )
+
+            lo = hi
+
+        if return_xmax:
+            return {
+                "inserted": total_inserted,
+                "updated": total_updated,
+                "total": total_rows,
+                "success": True,
+            }
+        return total_rows
+
     def sync_staging_to_enrichment(
             self,
             staging_schema: str,
             staging_table_name: str,
             enrichment_schema: str,
             enrichment_table_name: str,
+            batch_size: int | None = None,
     ):
         """
         Sync data from staging → enrichment.
@@ -1036,6 +1160,9 @@ class DBRepository(DbConfiguration):
         - inserts new rows
         - updates rows only if enrichment-relevant columns changed
         - ignores unchanged rows
+
+        When batch_size is a positive int, the upsert is sliced over staging's PK
+        range and committed per batch.
         """
 
         staging_table = self.get_table(staging_table_name, staging_schema)
@@ -1070,6 +1197,29 @@ class DBRepository(DbConfiguration):
             )
 
         insert_cols = conflict_cols + update_cols
+
+        if batch_size and batch_size > 0:
+            try:
+                rowcount = self._upsert_in_pk_batches(
+                    source_table=staging_table,
+                    target_table=enrichment_table,
+                    insert_cols=insert_cols,
+                    conflict_cols=conflict_cols,
+                    update_cols=update_cols,
+                    batch_size=batch_size,
+                    return_xmax=False,
+                )
+                self.logger.info(
+                    f"Synced staging → enrichment (batched): "
+                    f"{staging_schema}.{staging_table_name} → "
+                    f"{enrichment_schema}.{enrichment_table_name}"
+                )
+                return rowcount
+            except Exception as e:
+                self.logger.error(
+                    f"Failed batched sync staging → enrichment: {e}"
+                )
+                raise
 
         base_insert = Insert(enrichment_table).from_select(
             insert_cols,
@@ -1144,6 +1294,7 @@ class DBRepository(DbConfiguration):
             raw_table_name: str,
             staging_schema: str,
             staging_table_name: str,
+            batch_size: int | None = None,
     ):
         """
         Sync data from raw_staging → staging.
@@ -1151,6 +1302,9 @@ class DBRepository(DbConfiguration):
         - inserts new rows
         - updates rows only if data actually changed
         - ignores unchanged rows
+
+        When batch_size is a positive int, the upsert is sliced over raw_staging's
+        PK range and committed per batch.
         """
 
         raw_table = self.get_table(raw_table_name, raw_schema)
@@ -1169,6 +1323,30 @@ class DBRepository(DbConfiguration):
         )
 
         insert_cols = conflict_cols + update_cols
+
+        if batch_size and batch_size > 0:
+            try:
+                stats = self._upsert_in_pk_batches(
+                    source_table=raw_table,
+                    target_table=staging_table,
+                    insert_cols=insert_cols,
+                    conflict_cols=conflict_cols,
+                    update_cols=update_cols,
+                    batch_size=batch_size,
+                    return_xmax=True,
+                )
+                self.logger.info(
+                    f"Synced raw → staging (batched): {raw_schema}.{raw_table_name} → "
+                    f"{staging_schema}.{staging_table_name} "
+                    f"(inserted={stats['inserted']}, updated={stats['updated']})"
+                )
+                return stats
+            except Exception as e:
+                self.logger.error(
+                    f"Failed batched sync raw → staging for "
+                    f"{raw_schema}.{raw_table_name}: {e}"
+                )
+                return {"success": False}
 
         base_insert = Insert(staging_table).from_select(
             insert_cols,
@@ -1272,14 +1450,14 @@ class DBRepository(DbConfiguration):
     def _detect_batchable_query(self, sql: str) -> bool:
         """
         Detect if a query is suitable for batching.
-        Currently detects: INSERT INTO ... SELECT ... FROM
+        Detects any INSERT INTO ... SELECT ... FROM shape (with or without JOIN),
+        so straight raw->staging copies can also be sliced.
         """
         sql_upper = sql.upper().strip()
         return (
             "INSERT INTO" in sql_upper
             and "SELECT" in sql_upper
             and "FROM" in sql_upper
-            and "JOIN" in sql_upper  # Likely a mapping query
         )
 
     @measure_time(label="Batched SQL execution time: ")
@@ -1347,7 +1525,7 @@ class DBRepository(DbConfiguration):
                 # We wrap the base table in a subquery with LIMIT/OFFSET
                 batched_sql = self._add_batch_limits_to_query(
                     sql, base_schema, base_table, base_alias,
-                    batch_size, offset
+                    batch_size, offset, base_id_column
                 )
 
                 self.logger.info(
@@ -1380,7 +1558,8 @@ class DBRepository(DbConfiguration):
         base_table: str,
         base_alias: str,
         limit: int,
-        offset: int
+        offset: int,
+        order_column: str = "id",
     ) -> str:
         """
         Modify SQL query to add LIMIT/OFFSET by wrapping the base table.
@@ -1388,20 +1567,22 @@ class DBRepository(DbConfiguration):
         Converts:
             FROM schema.table b
         To:
-            FROM (SELECT * FROM schema.table LIMIT x OFFSET y) b
+            FROM (SELECT * FROM schema.table ORDER BY <pk> LIMIT x OFFSET y) b
         """
+        # ORDER BY makes LIMIT/OFFSET windows stable across batches; without it,
+        # Postgres can revisit or skip rows under concurrent writes.
         import re
 
-        # Pattern to match the FROM clause with the base table
+        order_clause = f'ORDER BY "{order_column}"'
+
         pattern = rf'(FROM\s+)(?:"{base_schema}"\.)?"{base_table}"(\s+{base_alias})'
-        replacement = rf'\1(SELECT * FROM "{base_schema}"."{base_table}" LIMIT {limit} OFFSET {offset}) {base_alias}'
+        replacement = rf'\1(SELECT * FROM "{base_schema}"."{base_table}" {order_clause} LIMIT {limit} OFFSET {offset}) {base_alias}'
 
         modified_sql = re.sub(pattern, replacement, sql, count=1, flags=re.IGNORECASE)
 
-        # If schema is not quoted
         if modified_sql == sql:
             pattern = rf'(FROM\s+){base_schema}\.{base_table}(\s+{base_alias})'
-            replacement = rf'\1(SELECT * FROM {base_schema}.{base_table} LIMIT {limit} OFFSET {offset}) {base_alias}'
+            replacement = rf'\1(SELECT * FROM {base_schema}.{base_table} {order_clause} LIMIT {limit} OFFSET {offset}) {base_alias}'
             modified_sql = re.sub(pattern, replacement, sql, count=1, flags=re.IGNORECASE)
 
         return modified_sql
