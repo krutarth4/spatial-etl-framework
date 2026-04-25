@@ -487,7 +487,7 @@ datasources:
 
   - name: elevation_grids_links
     description: " 1m elevation Grid links "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
     #    check_before_job_run: true
     check_before_update: true
     class_name: elevationGrid
@@ -659,7 +659,7 @@ datasources:
 
   - name: elevation_python
     description: " 1m elevation "
-    enable: false # to use the data source or not
+    enable: true # to use the data source or not
 #    check_before_update: false # only valid for api call
     class_name: elevationPython
     debug:

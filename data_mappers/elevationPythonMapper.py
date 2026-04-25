@@ -62,18 +62,25 @@ class ElevationPythonMapper(DataSourceABCImpl):
                 "total_ascent": m["ascent"],
                 "total_descent": m["descent"],
                 "max_slope": m["max_slope"],
-                "avg_slope": 0.0,  # compute if needed
+                "avg_slope": 0.0,
                 "sample_count": None,
                 "tile_name": m["tile_name"]
             })
 
-        self.logger.info(f"Writing {len(records)} slope records to staging")
-        #
-        self.db.bulk_insert(
-            self.data_source_config.storage.staging.table_name,
-            self.data_source_config.storage.staging.table_schema,
-            records
-        )
+        staging_name = self.data_source_config.storage.staging.table_name
+        staging_schema = self.data_source_config.storage.staging.table_schema
+        raw_name = staging_name.replace("_staging", "_raw_staging")
+
+        self.logger.info(f"Cloning {staging_schema}.{staging_name} → {raw_name} (no constraints)")
+        self.db.clone_table_structure(staging_schema, staging_name, staging_schema, raw_name)
+
+        self.logger.info(f"Writing {len(records)} slope records to raw staging via COPY")
+        self.db.bulk_insert(raw_name, staging_schema, records)
+
+        self.logger.info(f"Upserting raw → staging (ON CONFLICT way_id)")
+        self.db.sync_source_to_target_table(staging_schema, raw_name, staging_schema, staging_name)
+
+        self.db.drop_table(raw_name, staging_schema)
 
     def load(self, data):
         return
