@@ -1,7 +1,7 @@
 import traceback
 from contextlib import contextmanager
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 import geopandas as gpd
 from dacite import from_dict
@@ -24,6 +24,17 @@ class CredentialDTO:
 
 
 @dataclass
+class PoolDTO:
+    pool_size: int = 10
+    max_overflow: int = 10
+    pool_pre_ping: bool = True
+    echo: bool = False
+    application_name: str = "Modular data pipeline"
+    pool_recycle: Optional[int] = None
+    pool_timeout: Optional[int] = None
+
+
+@dataclass
 class DBConfigDTO:
     description: str
     enable: bool
@@ -33,6 +44,7 @@ class DBConfigDTO:
     database_name: str
     database_schema: str  # not required
     credential: CredentialDTO
+    pool: PoolDTO = field(default_factory=PoolDTO)
 
 
 class DbConfiguration:
@@ -129,16 +141,20 @@ class DbConfiguration:
         return self.db_url
 
     def create_engine(self):
-        return create_engine(self.db_url,
-                             echo=False,
-                             pool_size=10,
-                             max_overflow=10,
-                             pool_pre_ping=True,
-                             plugins=["geoalchemy2"],
-                             connect_args={
-                                 "application_name": "Modular data pipeline",
-                             }
-                             )
+        pool = self.core_config.pool
+        kwargs = dict(
+            echo=pool.echo,
+            pool_size=pool.pool_size,
+            max_overflow=pool.max_overflow,
+            pool_pre_ping=pool.pool_pre_ping,
+            plugins=["geoalchemy2"],
+            connect_args={"application_name": pool.application_name},
+        )
+        if pool.pool_recycle is not None:
+            kwargs["pool_recycle"] = pool.pool_recycle
+        if pool.pool_timeout is not None:
+            kwargs["pool_timeout"] = pool.pool_timeout
+        return create_engine(self.db_url, **kwargs)
 
     def create_session_factory(self):
         return sessionmaker(bind=self.engine,
