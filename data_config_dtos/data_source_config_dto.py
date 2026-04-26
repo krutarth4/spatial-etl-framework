@@ -96,6 +96,7 @@ class StorageDTO:
     persistent: bool
     staging: Optional[StagingConfDTO]
     expires_after: Optional[str]
+    expires_after_column: Optional[str] = "timestamp"
     force_create: Optional[bool] = False
 
 
