@@ -667,6 +667,48 @@ class DataSourceABCImpl(DataSourceABC):
     def cleanup_after_finalize(self, sync_result: dict | None):
         backup_raw = not (sync_result or {}).get("success")
         self.clean_raw_staging_table(backup_raw)
+        self.purge_expired_rows()
+
+    def purge_expired_rows(self):
+        """Delete rows older than expires_after from staging and enrichment tables."""
+        expires_after = getattr(self.data_source_config.storage, "expires_after", None)
+        if not expires_after or self.db is None:
+            return
+
+        interval = self._parse_expires_after(expires_after)
+        if interval is None:
+            self.logger.warning(f"Could not parse expires_after '{expires_after}' — skipping purge")
+            return
+
+        storage = self.data_source_config.storage
+        ts_column = getattr(storage, "expires_after_column", None) or "timestamp"
+        tables = []
+        if storage.staging:
+            tables.append((storage.staging.table_schema, storage.staging.table_name))
+        if storage.enrichment:
+            tables.append((storage.enrichment.table_schema, storage.enrichment.table_name))
+
+        for schema, table in tables:
+            try:
+                sql = f'DELETE FROM "{schema}"."{table}" WHERE "{ts_column}" < NOW() - INTERVAL \'{interval}\''
+                self.db.call_sql(sql)
+                self.logger.info(f"Purged rows older than {interval} from {schema}.{table}")
+            except Exception as e:
+                self.logger.error(f"Failed to purge old rows from {schema}.{table}: {e}")
+                self._note_stage_warning(f"purge_expired_rows:{table}", e)
+
+    @staticmethod
+    def _parse_expires_after(value: str) -> str | None:
+        """Parse '2d', '6h', '30m' into a PostgreSQL interval string."""
+        value = value.strip().lower()
+        units = {"d": "days", "h": "hours", "m": "minutes"}
+        if value and value[-1] in units:
+            try:
+                amount = int(value[:-1])
+                return f"{amount} {units[value[-1]]}"
+            except ValueError:
+                pass
+        return None
 
     def on_run_error(self, error: Exception):
         self.logger.error(f"Error occurred in run {error}")
