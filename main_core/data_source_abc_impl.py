@@ -275,10 +275,39 @@ class DataSourceABCImpl(DataSourceABC):
                     self.logger.info(f"multi_fetch [{done_count}/{n}] OK "
                                       f"{'downloaded' if downloaded else 'skipped'}: {tasks[idx][0]}")
 
+        permanent_failures: list[tuple[int, str, Exception]] = []
         if failures:
             self.logger.warning(
-                f"multi_fetch completed with {len(failures)}/{n} failures; "
-                f"continuing in degraded mode")
+                f"multi_fetch first pass: {len(failures)}/{n} failed after per-URL retries; "
+                f"starting sequential final-retry pass")
+            for idx, url, prev_err in failures:
+                _, params, path, resolve_on_skip = tasks[idx]
+                final_path, downloaded, err = self._execute_fetch_task(
+                    source, url, params, path, resolve_on_skip,
+                    timeout, retries, backoff, delay)
+                if err is None:
+                    results[idx] = final_path
+                    any_downloaded = any_downloaded or downloaded
+                    self.logger.info(f"multi_fetch final-retry OK: {url}")
+                else:
+                    permanent_failures.append((idx, url, err))
+                    self.logger.error(f"multi_fetch final-retry FAILED {url}: {err}")
+
+        ok_count = n - len(permanent_failures)
+        if permanent_failures:
+            lines = [f"  FAILED: {url}  reason: {err}"
+                     for _, url, err in permanent_failures]
+            self.logger.error(
+                f"[multi_fetch summary] datasource={self.data_source_name} "
+                f"total={n} ok={ok_count} failed={len(permanent_failures)}\n"
+                + "\n".join(lines))
+            failed_idxs = {i for i, _, _ in permanent_failures}
+            filtered = [p for i, p in enumerate(results) if i not in failed_idxs]
+            self.logger.error(
+                f"[multi_fetch summary] datasource={self.data_source_name}: "
+                f"filtered out {len(permanent_failures)} failed entries from results; "
+                f"continuing with {len(filtered)}/{n} successful paths")
+            return filtered, any_downloaded
         return results, any_downloaded
 
     def process_multi_fetch_expand_list(self, source, urls) -> list[str]:
