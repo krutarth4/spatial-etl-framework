@@ -952,7 +952,8 @@ class DBRepository(DbConfiguration):
             ),
             schema=target_schema,
         )
-        self.metadata.create_all(bind=self.engine, checkfirst=True, tables=[raw_table])
+        raw_table.metadata.create_all(bind=self.engine, checkfirst=True)
+        self.update_metadata(target_schema)
         self.logger.info(f"Table '{target_table_name}' created successfully.")
         return target_schema, target_table_name
 
