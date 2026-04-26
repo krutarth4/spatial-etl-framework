@@ -30,6 +30,7 @@ class CoreConfig(YamlReader):
         self.config = YamlReader.read(self)
         self._apply_env_overrides()
         self._apply_datasource_overrides()
+        self._merge_mv_configs()
         self._initialized = True
         self.logger.info(f"Config file loaded successfully!")
 
@@ -106,6 +107,32 @@ class CoreConfig(YamlReader):
             self.logger.info(f"Datasource override (only): {only}")
         elif disable:
             self.logger.info(f"Datasource override (disable): {disable}")
+
+    def _merge_mv_configs(self):
+        mv_conf = self.config.get("materialized_views")
+        if not isinstance(mv_conf, dict):
+            return
+        folder = mv_conf.get("mv_folder")
+        if not folder:
+            return
+
+        base_dir = Path(self.filepath).resolve().parent
+        mv_dir = (base_dir / folder).resolve()
+        if not mv_dir.is_dir():
+            self.logger.warning(f"mv_folder '{mv_dir}' does not exist, skipping MV config merge")
+            return
+
+        views = []
+        for mv_file in sorted(mv_dir.glob("*.yaml")):
+            try:
+                view_conf = YamlReader.get_yaml_content(str(mv_file))
+                if isinstance(view_conf, dict):
+                    views.append(view_conf)
+                    self.logger.info(f"Loaded MV config: {mv_file.name}")
+            except Exception as e:
+                self.logger.warning(f"Failed to load MV config {mv_file.name}: {e}")
+
+        mv_conf["views"] = views
 
 
 if __name__ == "__main__":
