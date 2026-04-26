@@ -24,36 +24,7 @@ runtime:
 
 materialized_views:
   enable: true
-  views:
-    - id: mv_weather
-      enable: true
-      schema: test_osm_base_graph
-      name: mv_weather
-      handler_class: WeatherMaterializedViewHandler
-      depends_on:
-        datasources: [ "weather_forecast_bright_sky", "weather_station_bright_sky" ]
-        tables:
-          - "test_osm_base_graph.weather_enrichment"
-          - "test_osm_base_graph.dwd_station_locations_mapping"
-          - "test_osm_base_graph.ways_base"
-      mapping_table: dwd_station_locations_mapping
-      weather_table: weather_enrichment
-      ways_table: ways_base
-      # Optional fixed snapshot filter; remove or set null for all timestamps
-      timestamp_filter: "2026-02-24 16:00:00+00"
-      indexes:
-        - name: mv_weather_way_id_idx
-          column: way_id
-      refresh:
-        enabled: true
-        mode: normal  # normal | concurrently
-        with_data: true
-      # custom_sql:
-      #   create: |
-      #     CREATE MATERIALIZED VIEW test_osm_base_graph.mv_weather AS
-      #     SELECT ...
-      #   refresh: |
-      #     REFRESH MATERIALIZED VIEW test_osm_base_graph.mv_weather
+  mv_folder: ./mv_configs/
 
 scheduler:
   name: APSScheduler
