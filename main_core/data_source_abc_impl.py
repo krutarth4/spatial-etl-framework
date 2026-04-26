@@ -658,11 +658,11 @@ class DataSourceABCImpl(DataSourceABC):
             self.execute_on_enrichment()
         self.map_to_base()
         self.create_indexes_for_table("mapping")
-        self.after_datasource_success()
+        self.after_datasource_success(sync_result)
         self.cleanup_after_finalize(sync_result)
 
-    def after_datasource_success(self):
-        self.trigger_materialized_views()
+    def after_datasource_success(self, sync_result: dict | None = None):
+        self.trigger_materialized_views(sync_result)
 
     def cleanup_after_finalize(self, sync_result: dict | None):
         backup_raw = not (sync_result or {}).get("success")
@@ -772,13 +772,13 @@ class DataSourceABCImpl(DataSourceABC):
         """
         pass
 
-    def trigger_materialized_views(self):
+    def trigger_materialized_views(self, sync_result: dict | None = None):
         if self.db is None:
             return
         try:
             conf = CoreConfig().get_config()
             mv_conf = (conf or {}).get("materialized_views", {})
-            MaterializedViewManager(self.db, mv_conf).on_datasource_success(self.data_source_name)
+            MaterializedViewManager(self.db, mv_conf).on_datasource_success(self.data_source_name, sync_result)
         except Exception as e:
             self.logger.error(f"Materialized view trigger failed for datasource {self.data_source_name}: {e}")
             self._note_stage_warning("trigger_materialized_views", e)

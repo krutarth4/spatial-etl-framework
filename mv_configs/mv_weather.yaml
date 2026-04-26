@@ -21,6 +21,7 @@ refresh:
   enabled: true
   mode: normal  # normal | concurrently
   with_data: true
+  only_on_data_change: true  # skip refresh if datasource produced no new or updated rows
 # custom_sql:
 #   create: |
 #     CREATE MATERIALIZED VIEW test_osm_base_graph.mv_weather AS
