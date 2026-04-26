@@ -96,11 +96,8 @@ class DbConfiguration:
         self.update_metadata(schema)
         if table_name not in self.base.metadata.tables:
             self.logger.warning(
-                f"Table '{table_name}' not found in schema '{schema or self.schema}'. Reflecting metadata...")
-            # return None
-            if table_name not in self.base.metadata.tables:
-                return None
-                raise ValueError(f"Table '{table_name}' does not exist in schema '{self.schema}'")
+                f"Table '{table_name}' not found in schema '{schema or self.schema}' after reflection.")
+            return None
 
         return self.base.metadata.tables[f"{table_name}"]
 
