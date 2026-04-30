@@ -81,10 +81,9 @@ def _start_config_watcher(runtime_conf: dict | None):
 
 if __name__ == "__main__":
     args = _parse_args()
-    CoreConfig.set_datasource_override(
-        only=_csv_to_list(args.only),
-        disable=_csv_to_list(args.disable),
-    )
+    only = _csv_to_list(args.only) or _csv_to_list(os.getenv("ETL_ONLY"))
+    disable = _csv_to_list(args.disable) or _csv_to_list(os.getenv("ETL_DISABLE"))
+    CoreConfig.set_datasource_override(only=only, disable=disable)
     core_conf = CoreConfig()
     setup_file_logging(core_conf.get_config().get("logging") or {})
     conf = core_conf.get_value("server")

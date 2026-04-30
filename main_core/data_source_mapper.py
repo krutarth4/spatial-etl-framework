@@ -1,4 +1,5 @@
 import importlib
+import os
 
 from data_config_dtos.data_source_config_dto import DataSourceDTO
 from dacite import from_dict, Config
@@ -55,16 +56,49 @@ class DataSourceMapper:
                 source_name = source.get("name") if isinstance(source, dict) else getattr(source, "name", "unknown")
                 self.logger.error(f"Metadata registration failed for datasource {source_name}: {e}")
 
+    @staticmethod
+    def _parse_env_list(var: str) -> set[str]:
+        raw = os.getenv(var, "").strip()
+        if not raw:
+            return set()
+        return {name.strip() for name in raw.split(",") if name.strip()}
+
     def check_enable_data_sources(self):
+        only = self._parse_env_list("ETL_ONLY")
+        disable = self._parse_env_list("ETL_DISABLE")
+        if only:
+            self.logger.info(f"ETL_ONLY set — activating only: {only}")
+        if disable:
+            self.logger.info(f"ETL_DISABLE set — skipping: {disable}")
+
         try:
             result = []
             for source in self.data_sources:
                 data = self._to_datasource_dto(source)
-                if data is not None and data.enable:
+                if data is None:
+                    continue
+                name = data.name
+
+                if only:
+                    active = name in only
+                elif disable:
+                    active = name not in disable and data.enable
+                else:
+                    active = data.enable
+
+                if active:
                     result.append(data)
+                elif (only or disable) and self.metadata_service:
+                    reason = "excluded by ETL_ONLY" if only else "excluded by ETL_DISABLE"
+                    self.metadata_service.update(name, {
+                        "is_active": False,
+                        "current_run_status": "disabled",
+                        "last_run_status": "disabled",
+                        "last_run_message": reason,
+                    })
             return result
         except Exception as e:
-            self.logger.error(f"Error loading data sources for {source.get('name')} {e}")
+            self.logger.error(f"Error loading data sources: {e}")
 
     def run_data_source_mapper(self):
         for source in self.data_sources:
