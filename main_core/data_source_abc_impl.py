@@ -1205,6 +1205,19 @@ class DataSourceABCImpl(DataSourceABC):
 
         trigger_conf = self.job_configuration.trigger.type
 
+        REQUIRES_CONFIG = {"interval", "cron", "calendar_interval"}
+        FORBIDS_CONFIG = {"run_once", "date"}
+
+        if trigger_conf.name in FORBIDS_CONFIG and trigger_conf.config:
+            self.logger.warning(
+                "Trigger type '%s' does not use 'config' — remove it from the job definition for datasource '%s'.",
+                trigger_conf.name, self.data_source_name
+            )
+        if trigger_conf.name in REQUIRES_CONFIG and not trigger_conf.config:
+            raise ValueError(
+                f"Trigger type '{trigger_conf.name}' requires a 'config' block for datasource '{self.data_source_name}'."
+            )
+
         TRIGGER_MAP = {
             "interval": IntervalTrigger,
             "date": DateTrigger,
