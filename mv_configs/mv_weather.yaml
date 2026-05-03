@@ -1,30 +1,85 @@
-id: mv_weather
-enable: true
-schema: test_osm_base_graph
-name: mv_weather
-handler_class: WeatherMaterializedViewHandler
+# =============================================================================
+# Materialized View: mv_weather
+# Per-way weather snapshot joining base ways with mapped DWD station forecasts.
+# Schema reference: docs/materialized-views-reference.md
+# =============================================================================
+
+# ---- Identity --------------------------------------------------------------
+id: mv_weather                     # stable id for logs / metadata; defaults to "<schema>.<name>"
+name: mv_weather                   # MV object name in Postgres
+schema: trial                      # target schema (the MV is created here)
+description: "Per-way weather snapshot joining base ways with mapped DWD station forecast"
+enable: true                       # set false to keep the file but skip create/refresh
+
+# ---- Handler selection -----------------------------------------------------
+# `class` decides how the CREATE/REFRESH SQL is built:
+#   - GenericMaterializedViewHandler  -> uses `definition.select_sql` or `definition.custom_sql`
+#   - WeatherMaterializedViewHandler  -> builds SQL from `definition.source` (domain-specific)
+#   - <YourCustomHandler>             -> implement in `materialized_views/handlers.py`
+handler:
+  class: WeatherMaterializedViewHandler
+  module: materialized_views.handlers
+
+# ---- Triggers --------------------------------------------------------------
+# When the manager should call `ensure()` (create if missing) and `refresh()`.
+triggers:
+  on_datasource_success:           # fire after these ETL datasources finish a successful run
+    - weather_forecast_bright_sky
+    - weather_station_bright_sky
+  only_on_data_change: true        # skip REFRESH when the triggering run inserted/updated 0 rows
+
+# ---- Dependencies (declarative; for documentation & dependency graphs) -----
 depends_on:
-  datasources: ["weather_forecast_bright_sky", "weather_station_bright_sky"]
+  datasources:
+    - weather_forecast_bright_sky
+    - weather_station_bright_sky
   tables:
-    - "test_osm_base_graph.weather_enrichment"
-    - "test_osm_base_graph.dwd_station_locations_mapping"
-    - "test_osm_base_graph.ways_base"
-mapping_table: dwd_station_locations_mapping
-weather_table: weather_enrichment
-ways_table: ways_base
-# Optional fixed snapshot filter; remove or set null for all timestamps
-timestamp_filter: "2026-02-24 16:00:00+00"
+    - { schema: trial, name: weather_enrichment }
+    - { schema: trial, name: dwd_station_locations_mapping }
+    - { schema: trial, name: ways_base }
+
+# ---- Definition ------------------------------------------------------------
+# Provide exactly ONE of: select_sql | custom_sql | source.
+definition:
+  # Domain-specific config consumed by WeatherMaterializedViewHandler.
+  # The handler builds the JOIN SQL from these table references.
+  source:
+    mapping_table:    { schema: trial, name: dwd_station_locations_mapping }
+    enrichment_table: { schema: trial, name: weather_enrichment }
+    base_table:       { schema: trial, name: ways_base }
+    filters:
+      # Pin the MV to one forecast snapshot. Set to null / omit for all timestamps.
+      timestamp_eq: "2026-02-24 16:00:00+00"
+
+  # --- Alternative options (mutually exclusive with `source`) ---------------
+  # select_sql: |                    # used by GenericMaterializedViewHandler
+  #   SELECT ... FROM ...
+  #
+  # custom_sql:                      # full control: bypass auto-generated CREATE/REFRESH
+  #   create: |
+  #     CREATE MATERIALIZED VIEW trial.mv_weather AS SELECT ...;
+  #   refresh: |
+  #     REFRESH MATERIALIZED VIEW CONCURRENTLY trial.mv_weather;
+
+# ---- Build options ---------------------------------------------------------
+build:
+  with_data: true                  # CREATE ... WITH [NO] DATA — `false` defers initial population
+  tablespace: null                 # optional Postgres tablespace for large MVs
+  storage_parameters: {}           # reserved (e.g. {fillfactor: 80}) — currently unused
+
+# ---- Indexes ---------------------------------------------------------------
+# Created after `ensure()` and re-asserted with IF NOT EXISTS on every refresh.
+# A UNIQUE index is required if `refresh.mode: concurrently`.
 indexes:
   - name: mv_weather_way_id_idx
-    column: way_id
+    columns: [way_id]
+    unique: false
+    method: btree                  # btree | gist | gin | brin
+    where: null                    # optional partial-index predicate
+  # - sql: "CREATE INDEX ... ON trial.mv_weather USING gist (geom);"  # fully custom
+
+# ---- Refresh behavior ------------------------------------------------------
 refresh:
   enabled: true
-  mode: normal  # normal | concurrently
-  with_data: true
-  only_on_data_change: true  # skip refresh if datasource produced no new or updated rows
-# custom_sql:
-#   create: |
-#     CREATE MATERIALIZED VIEW test_osm_base_graph.mv_weather AS
-#     SELECT ...
-#   refresh: |
-#     REFRESH MATERIALIZED VIEW test_osm_base_graph.mv_weather
+  mode: normal                     # normal | concurrently  (concurrently needs a UNIQUE index)
+  with_data: true                  # `false` => REFRESH ... WITH NO DATA (marks MV as unpopulated)

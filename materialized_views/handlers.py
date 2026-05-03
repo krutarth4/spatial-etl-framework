@@ -4,8 +4,16 @@ from typing import Any
 
 @dataclass
 class MaterializedViewConfig:
+    """
+    Wrapper around a single MV YAML document.
+
+    Reads the v2 nested schema (`definition.*`, `build.*`, `triggers.*`) and falls
+    back to the legacy flat keys (`select_sql`, `custom_sql`, `mapping_table`, ...)
+    so old configs keep working.
+    """
     raw: dict[str, Any]
 
+    # ---- identity ----------------------------------------------------------
     @property
     def schema(self) -> str:
         return self.raw.get("schema")
@@ -18,29 +26,80 @@ class MaterializedViewConfig:
     def identifier(self) -> str:
         return self.raw.get("id") or f"{self.schema}.{self.name}"
 
+    # ---- definition (select / custom_sql / source) -------------------------
     @property
-    def create_sql(self) -> str | None:
-        custom = self.raw.get("custom_sql", {}) or {}
-        return custom.get("create")
-
-    @property
-    def refresh_sql(self) -> str | None:
-        custom = self.raw.get("custom_sql", {}) or {}
-        return custom.get("refresh")
+    def _definition(self) -> dict[str, Any]:
+        return self.raw.get("definition") or {}
 
     @property
     def select_sql(self) -> str | None:
-        return self.raw.get("select_sql")
+        return self._definition.get("select_sql") or self.raw.get("select_sql")
 
     @property
-    def refresh_mode(self) -> str:
-        refresh = self.raw.get("refresh", {}) or {}
-        return (refresh.get("mode") or "normal").lower()
+    def _custom_sql(self) -> dict[str, Any]:
+        return self._definition.get("custom_sql") or self.raw.get("custom_sql") or {}
+
+    @property
+    def create_sql(self) -> str | None:
+        return self._custom_sql.get("create")
+
+    @property
+    def refresh_sql(self) -> str | None:
+        return self._custom_sql.get("refresh")
+
+    @property
+    def source(self) -> dict[str, Any]:
+        """Domain-specific source config (used by specialized handlers)."""
+        return self._definition.get("source") or {}
+
+    # ---- build options -----------------------------------------------------
+    @property
+    def _build(self) -> dict[str, Any]:
+        return self.raw.get("build") or {}
 
     @property
     def with_data(self) -> bool:
-        refresh = self.raw.get("refresh", {}) or {}
+        # New: build.with_data; legacy: refresh.with_data
+        if "with_data" in self._build:
+            return bool(self._build.get("with_data", True))
+        refresh = self.raw.get("refresh") or {}
         return bool(refresh.get("with_data", True))
+
+    @property
+    def tablespace(self) -> str | None:
+        return self._build.get("tablespace")
+
+    # ---- refresh -----------------------------------------------------------
+    @property
+    def _refresh(self) -> dict[str, Any]:
+        return self.raw.get("refresh") or {}
+
+    @property
+    def refresh_enabled(self) -> bool:
+        return bool(self._refresh.get("enabled", True))
+
+    @property
+    def refresh_mode(self) -> str:
+        return (self._refresh.get("mode") or "normal").lower()
+
+    @property
+    def only_on_data_change(self) -> bool:
+        # New: triggers.only_on_data_change; legacy: refresh.only_on_data_change
+        triggers = self.raw.get("triggers") or {}
+        if "only_on_data_change" in triggers:
+            return bool(triggers.get("only_on_data_change"))
+        return bool(self._refresh.get("only_on_data_change", False))
+
+    # ---- triggers ----------------------------------------------------------
+    @property
+    def trigger_datasources(self) -> list[str]:
+        # New: triggers.on_datasource_success; legacy: depends_on.datasources
+        triggers = self.raw.get("triggers") or {}
+        names = triggers.get("on_datasource_success")
+        if names:
+            return list(names)
+        deps = self.raw.get("depends_on") or {}
+        return list(deps.get("datasources") or [])
 
 
 class BaseMaterializedViewHandler:
@@ -60,93 +119,23 @@ class BaseMaterializedViewHandler:
             self.logger.info(f"MV SQL ({self.conf.identifier}): {sql}")
         self.db.call_sql(sql, raise_on_error=True)
 
-
-class GenericMaterializedViewHandler(BaseMaterializedViewHandler):
-    """
-    Generic MV handler.
-    Uses `custom_sql` if provided, otherwise builds SQL from config keys.
-    """
-
-    def ensure(self):
-        if self.db is None:
-            return
-        if self.db.materialized_view_exists(self.conf.name, self.conf.schema):
-            return
-
-        sql = self.conf.create_sql
-        if sql is None:
-            if not self.conf.select_sql:
-                raise ValueError(
-                    f"Materialized view '{self.conf.identifier}' missing `select_sql` and `custom_sql.create`"
-                )
-            sql = (
-                f'CREATE MATERIALIZED VIEW "{self.conf.schema}"."{self.conf.name}" AS '
-                f"{self.conf.select_sql}"
-            )
-            if not self.conf.with_data:
-                sql = f"{sql} WITH NO DATA"
-
-        self._exec(sql)
-
-    def refresh(self):
-        if self.db is None:
-            return
-
-        if self.conf.refresh_sql:
-            self._exec(self.conf.refresh_sql)
-            return
-
-        concurrently = "CONCURRENTLY " if self.conf.refresh_mode == "concurrently" else ""
-        with_data = "" if self.conf.with_data else " WITH NO DATA"
-        sql = (
-            f'REFRESH MATERIALIZED VIEW {concurrently}"{self.conf.schema}"."{self.conf.name}"{with_data}'
-        )
-        self._exec(sql)
-
-
-class WeatherMaterializedViewHandler(BaseMaterializedViewHandler):
-    """
-    Minimal weather MV handler based on config tables and optional timestamp filter.
-    Supports optional custom SQL override.
-    """
-
-    def _cfg(self, key: str, default=None):
-        return self.conf.raw.get(key, default)
-
+    # ---- shared helpers ----------------------------------------------------
     def _qualified(self, schema: str, table: str) -> str:
         return f'"{schema}"."{table}"'
 
-    def _build_select_sql(self) -> str:
-        schema = self.conf.schema
-        mapping_table = self._cfg("mapping_table", "dwd_station_locations_mapping")
-        weather_table = self._cfg("weather_table", "weather_enrichment")
-        ways_table = self._cfg("ways_table", "ways_base")
-        timestamp_filter = self._cfg("timestamp_filter")
-
-        where_clause = ""
-        if timestamp_filter:
-            where_clause = f"\nWHERE e.\"timestamp\" = TIMESTAMPTZ '{timestamp_filter}'"
-
-        return f"""
-SELECT
-    m.dwd_station_id,
-    w.way_id,
-    w.way_link_index,
-    m.bearing_degree AS bearing_deg,
-    e."timestamp",
-    e.visibility,
-    e.wind_direction,
-    e.wind_speed
-FROM {self._qualified(schema, mapping_table)} m
-JOIN {self._qualified(schema, weather_table)} e
-    ON e.dwd_station_id::INTEGER = m.dwd_station_id::INTEGER
-JOIN {self._qualified(schema, ways_table)} w
-    ON w.id = m.way_id{where_clause}
-""".strip()
+    def _wrap_create(self, body_sql: str) -> str:
+        tablespace = self.conf.tablespace
+        ts_clause = f' TABLESPACE "{tablespace}"' if tablespace else ""
+        sql = (
+            f'CREATE MATERIALIZED VIEW "{self.conf.schema}"."{self.conf.name}"'
+            f"{ts_clause} AS {body_sql}"
+        )
+        if not self.conf.with_data:
+            sql = f"{sql} WITH NO DATA"
+        return sql
 
     def _ensure_indexes(self):
-        indexes = self._cfg("indexes", []) or []
-        for idx in indexes:
+        for idx in (self.conf.raw.get("indexes") or []):
             if isinstance(idx, str):
                 self._exec(idx)
                 continue
@@ -155,15 +144,31 @@ JOIN {self._qualified(schema, ways_table)} w
                 continue
 
             index_name = idx.get("name")
-            column = idx.get("column")
-            unique = "UNIQUE " if idx.get("unique", False) else ""
-            if not index_name or not column:
+            columns = idx.get("columns")
+            # legacy single-column form
+            if not columns and idx.get("column"):
+                columns = [idx["column"]]
+            if not index_name or not columns:
                 continue
+
+            unique = "UNIQUE " if idx.get("unique", False) else ""
+            method = idx.get("method")
+            using = f" USING {method}" if method else ""
+            cols_sql = ", ".join(columns)
+            where = idx.get("where")
+            where_sql = f" WHERE {where}" if where else ""
             sql = (
                 f'CREATE {unique}INDEX IF NOT EXISTS "{index_name}" '
-                f'ON "{self.conf.schema}"."{self.conf.name}" ({column})'
+                f'ON "{self.conf.schema}"."{self.conf.name}"{using} ({cols_sql}){where_sql}'
             )
             self._exec(sql)
+
+
+class GenericMaterializedViewHandler(BaseMaterializedViewHandler):
+    """
+    Generic handler. Builds CREATE/REFRESH SQL from `definition.select_sql`
+    or uses `definition.custom_sql.{create,refresh}` verbatim when provided.
+    """
 
     def ensure(self):
         if self.db is None:
@@ -174,10 +179,12 @@ JOIN {self._qualified(schema, ways_table)} w
 
         sql = self.conf.create_sql
         if sql is None:
-            sql = (
-                f'CREATE MATERIALIZED VIEW "{self.conf.schema}"."{self.conf.name}" AS\n'
-                f"{self._build_select_sql()}"
-            )
+            if not self.conf.select_sql:
+                raise ValueError(
+                    f"Materialized view '{self.conf.identifier}' missing "
+                    f"`definition.select_sql` and `definition.custom_sql.create`"
+                )
+            sql = self._wrap_create(self.conf.select_sql)
 
         self._exec(sql)
         self._ensure_indexes()
@@ -192,6 +199,89 @@ JOIN {self._qualified(schema, ways_table)} w
             return
 
         concurrently = "CONCURRENTLY " if self.conf.refresh_mode == "concurrently" else ""
-        sql = f'REFRESH MATERIALIZED VIEW {concurrently}"{self.conf.schema}"."{self.conf.name}"'
+        with_data = "" if self.conf.with_data else " WITH NO DATA"
+        sql = (
+            f'REFRESH MATERIALIZED VIEW {concurrently}'
+            f'"{self.conf.schema}"."{self.conf.name}"{with_data}'
+        )
+        self._exec(sql)
+        self._ensure_indexes()
+
+
+class WeatherMaterializedViewHandler(BaseMaterializedViewHandler):
+    """
+    Domain-specific MV: per-way weather snapshot built from a station-mapping
+    table, the weather enrichment table and the base ways table.
+
+    Reads `definition.source.{mapping_table,enrichment_table,base_table,filters}`.
+    Falls back to legacy flat keys (`mapping_table`, `weather_table`, `ways_table`,
+    `timestamp_filter`) for backward compatibility.
+    """
+
+    # ---- config helpers ----------------------------------------------------
+    def _table_ref(self, key: str, legacy_key: str, default_name: str) -> tuple[str, str]:
+        src = self.conf.source.get(key)
+        if isinstance(src, dict) and src.get("name"):
+            return src.get("schema") or self.conf.schema, src["name"]
+        legacy = self.conf.raw.get(legacy_key, default_name)
+        return self.conf.schema, legacy
+
+    def _filters(self) -> dict[str, Any]:
+        filters = (self.conf.source.get("filters") or {}) if self.conf.source else {}
+        ts = filters.get("timestamp_eq") or self.conf.raw.get("timestamp_filter")
+        return {"timestamp_eq": ts}
+
+    # ---- SQL building ------------------------------------------------------
+    def _build_select_sql(self) -> str:
+        m_schema, m_name = self._table_ref("mapping_table", "mapping_table", "dwd_station_locations_mapping")
+        e_schema, e_name = self._table_ref("enrichment_table", "weather_table", "weather_enrichment")
+        w_schema, w_name = self._table_ref("base_table", "ways_table", "ways_base")
+
+        ts = self._filters().get("timestamp_eq")
+        where_clause = f"\nWHERE e.\"timestamp\" = TIMESTAMPTZ '{ts}'" if ts else ""
+
+        return f"""
+SELECT
+    m.dwd_station_id,
+    w.way_id,
+    w.way_link_index,
+    m.bearing_degree AS bearing_deg,
+    e."timestamp",
+    e.visibility,
+    e.wind_direction,
+    e.wind_speed
+FROM {self._qualified(m_schema, m_name)} m
+JOIN {self._qualified(e_schema, e_name)} e
+    ON e.dwd_station_id::INTEGER = m.dwd_station_id::INTEGER
+JOIN {self._qualified(w_schema, w_name)} w
+    ON w.id = m.way_id{where_clause}
+""".strip()
+
+    # ---- lifecycle ---------------------------------------------------------
+    def ensure(self):
+        if self.db is None:
+            return
+        if self.db.materialized_view_exists(self.conf.name, self.conf.schema):
+            self._ensure_indexes()
+            return
+
+        sql = self.conf.create_sql or self._wrap_create(self._build_select_sql())
+        self._exec(sql)
+        self._ensure_indexes()
+
+    def refresh(self):
+        if self.db is None:
+            return
+
+        if self.conf.refresh_sql:
+            self._exec(self.conf.refresh_sql)
+            self._ensure_indexes()
+            return
+
+        concurrently = "CONCURRENTLY " if self.conf.refresh_mode == "concurrently" else ""
+        sql = (
+            f'REFRESH MATERIALIZED VIEW {concurrently}'
+            f'"{self.conf.schema}"."{self.conf.name}"'
+        )
         self._exec(sql)
         self._ensure_indexes()
