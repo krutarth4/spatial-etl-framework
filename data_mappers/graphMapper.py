@@ -29,7 +29,11 @@ class GraphMapper(DataSourceABCImpl):
             )
 
         try:
-            paths = self.extract()
+            try:
+                paths = self.extract()
+            except Exception as download_error:
+                paths = self._fallback_to_cached_osm(download_error)
+
             self._update_metadata_runtime_paths(paths)
             self._publish_metadata_before_comm_signal(paths)
             downloaded = self._last_fetch_performed_download
@@ -61,6 +65,20 @@ class GraphMapper(DataSourceABCImpl):
                     is_completed=False,
                 )
             raise
+
+    def _fallback_to_cached_osm(self, download_error: Exception) -> list[str]:
+        source = self.data_source_config.source
+        destination = getattr(source, "destination", None)
+        cached_path = self.resolve_latest_saved_path(destination)
+        if cached_path:
+            self.logger.warning(
+                f"OSM download failed ({download_error}); falling back to cached file: {cached_path}"
+            )
+            self._last_fetch_performed_download = False
+            return [cached_path]
+        raise RuntimeError(
+            f"OSM download failed and no cached file found at '{destination}': {download_error}"
+        ) from download_error
 
     def _publish_metadata_before_comm_signal(self, paths):
         if self.metadata_service is None:
