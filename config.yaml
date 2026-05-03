@@ -325,10 +325,6 @@ datasources:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
           name: run_once # interval , cron, date, calendar_interval
-          start_format: 00:05:00
-          config: # should be same key value pair to for job
-            hour: 1
-#            run_date:
 
       replace_existing: true
       coalesce: true
@@ -498,8 +494,6 @@ datasources:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
           name: run_once # interval , cron, date
-          config: # should be same key value pair to for job
-            seconds: 15
       replace_existing: true
       coalesce: true
       max_instances: 1
@@ -547,8 +541,6 @@ datasources:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
           name: run_once # interval , cron, date
-          config: # should be same key value pair to for job
-            seconds: 15
       replace_existing: true
       coalesce: true
       max_instances: 1
@@ -661,8 +653,6 @@ datasources:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
           name: run_once # interval , cron, date
-          config: # should be same key value pair to for job
-            seconds: 15
       replace_existing: true
       coalesce: true
       max_instances: 1
@@ -737,8 +727,6 @@ datasources:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
           name: run_once # interval , cron, date
-          config: # should be same key value pair to for job
-            seconds: 15
       replace_existing: true
       coalesce: true
       max_instances: 1
@@ -807,8 +795,6 @@ datasources:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
           name: run_once # interval , cron, date
-          config: # should be same key value pair to for job
-            hours: 1
       replace_existing: true
       coalesce: true
       max_instances: 1
@@ -897,8 +883,6 @@ datasources:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
           name: run_once # interval , cron, date
-          config: # should be same key value pair to for job
-            hours: 1
       replace_existing: true
       coalesce: true
       max_instances: 1
