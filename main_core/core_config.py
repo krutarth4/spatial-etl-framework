@@ -3,6 +3,7 @@ from pathlib import Path
 
 from log_manager.logger_manager import LoggerManager
 from readers.yaml_reader import YamlReader
+from validators.job_trigger_validator import validate_all_job_triggers
 
 def _split_csv_env(name):
     raw = os.getenv(name, "")
@@ -31,6 +32,7 @@ class CoreConfig(YamlReader):
         self._apply_env_overrides()
         self._apply_datasource_overrides()
         self._merge_mv_configs()
+        self._validate_job_triggers()
         self._initialized = True
         self.logger.info(f"Config file loaded successfully!")
 
@@ -107,6 +109,22 @@ class CoreConfig(YamlReader):
             self.logger.info(f"Datasource override (only): {only}")
         elif disable:
             self.logger.info(f"Datasource override (disable): {disable}")
+
+    def _validate_job_triggers(self):
+        datasources = self.config.get("datasources")
+        if not isinstance(datasources, list):
+            return
+
+        errors, warnings = validate_all_job_triggers(datasources)
+
+        for w in warnings:
+            self.logger.warning(str(w))
+
+        if errors:
+            lines = "\n".join(f"  {e}" for e in errors)
+            raise ValueError(
+                f"Job trigger configuration errors in {self.filepath}:\n{lines}"
+            )
 
     def _merge_mv_configs(self):
         mv_conf = self.config.get("materialized_views")
