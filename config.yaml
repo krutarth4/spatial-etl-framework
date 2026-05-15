@@ -394,7 +394,7 @@ datasources:
         type:
           name: interval # interval , cron, date
           config: # should be same key value pair to for job
-            hour: 8
+            hours: 8
 
       replace_existing: true
       coalesce: true
