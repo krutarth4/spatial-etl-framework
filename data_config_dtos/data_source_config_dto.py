@@ -138,6 +138,9 @@ class MappingDTO:
     enable: bool
     base_table: BaseDataMappingSourceDTO
     config: Optional[Mapping[str, Any]] = None
+    # When true, the mapping step runs only for ways present in the
+    # ways_base_changes diff table instead of full-rescanning ways_base.
+    incremental: bool = False
 
 
 @dataclass
