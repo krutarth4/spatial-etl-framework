@@ -16,6 +16,10 @@ data/
 CLAUDE.md
 **/CLAUDE.md
 
+# Benchmark results — generated at runtime
+tests/bench/results/*.json
+tests/bench/results/*.csv
+
 # OS / editor noise
 .DS_Store
 *.swp
