@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from config_features.registry import DatasourceFeatureRegistry
 from log_manager.logger_manager import LoggerManager
 from readers.yaml_reader import YamlReader
 from validators.job_trigger_validator import validate_all_job_triggers
@@ -33,6 +34,7 @@ class CoreConfig(YamlReader):
         self._apply_datasource_overrides()
         self._merge_mv_configs()
         self._validate_job_triggers()
+        self._validate_datasource_features()
         self._initialized = True
         self.logger.info(f"Config file loaded successfully!")
 
@@ -124,6 +126,23 @@ class CoreConfig(YamlReader):
             lines = "\n".join(f"  {e}" for e in errors)
             raise ValueError(
                 f"Job trigger configuration errors in {self.filepath}:\n{lines}"
+            )
+
+    def _validate_datasource_features(self):
+        datasources = self.config.get("datasources")
+        if not isinstance(datasources, list):
+            return
+
+        DatasourceFeatureRegistry.load_all()
+        errors, warnings = DatasourceFeatureRegistry.validate_all(datasources)
+
+        for w in warnings:
+            self.logger.warning(str(w))
+
+        if errors:
+            lines = "\n".join(f"  {e}" for e in errors)
+            raise ValueError(
+                f"Datasource feature configuration errors in {self.filepath}:\n{lines}"
             )
 
     def _merge_mv_configs(self):
