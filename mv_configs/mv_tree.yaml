@@ -1,0 +1,65 @@
+# =============================================================================
+# Materialized View: mv_tree
+# Per-way tree snapshot joining base ways with aggregated tree_mapping data.
+# Schema reference: docs/materialized-views-reference.md
+# =============================================================================
+
+# ---- Identity --------------------------------------------------------------
+id: mv_tree
+name: mv_tree
+schema: test_osm_base_graph
+description: "Per-way tree aggregation (JSONB) within 50 m of each base way"
+enable: true
+
+# ---- Handler selection -----------------------------------------------------
+handler:
+  class: GenericMaterializedViewHandler
+  module: materialized_views.handlers
+
+# ---- Triggers --------------------------------------------------------------
+triggers:
+  on_datasource_success:
+    - tree
+  only_on_data_change: true
+
+# ---- Dependencies ----------------------------------------------------------
+depends_on:
+  datasources:
+    - tree
+  tables:
+    - { schema: test_osm_base_graph, name: ways_base }
+    - { schema: test_osm_base_graph, name: tree_mapping }
+
+# ---- Definition ------------------------------------------------------------
+definition:
+  select_sql: |
+    SELECT
+        w.id,
+        w.way_id,
+        w.from_node_id,
+        w.to_node_id,
+        w.way_link_index,
+        COALESCE(m.trees, '[]'::jsonb) AS trees
+    FROM test_osm_base_graph.ways_base w
+    LEFT JOIN test_osm_base_graph.tree_mapping m
+        ON m.way_id = w.id
+
+# ---- Build options ---------------------------------------------------------
+build:
+  with_data: true
+  tablespace: null
+  storage_parameters: {}
+
+# ---- Indexes ---------------------------------------------------------------
+indexes:
+  - name: idx_mv_tree_way_id
+    columns: [way_id]
+    unique: false
+    method: btree
+    where: null
+
+# ---- Refresh behavior ------------------------------------------------------
+refresh:
+  enabled: true
+  mode: normal
+  with_data: true
