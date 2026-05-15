@@ -163,6 +163,7 @@ graph:
         next_run_time: none
       mapping:
         enable: true
+        incremental: false
         joins_on: dwd_station_id # link id column to join the table to
         table_name: dwd_mapping_stations
         table_schema: *db_schema
@@ -236,6 +237,7 @@ datasources:
       next_run_time: none
     mapping:
       enable: true
+      incremental: true   # PILOT: weather station mapping is the first datasource opted into the ways_base diff-driven path
       joins_on: dwd_station_id # link id column to join the table to
       strategy:
         type: knn
@@ -332,6 +334,7 @@ datasources:
       next_run_time: none
     mapping:
       enable: false
+      incremental: false
       joins_on: way_id # link id column to join the table to
 #      table_name: weather_mapping
 #      table_schema: *db_schema
@@ -399,6 +402,7 @@ datasources:
       next_run_time: none
     mapping:
       enable: true
+      incremental: false
       joins_on: way_id
       table_name: air_pollution_grid_mapping
       table_schema: *db_schema
@@ -500,6 +504,7 @@ datasources:
       next_run_time: none
     mapping:
       enable: false
+      incremental: false
       joins_on: id # link id column to join the table to
       base_table:
         table_name: *base_table_name
@@ -547,6 +552,7 @@ datasources:
       next_run_time: none
     mapping:
       enable: true
+      incremental: false
       joins_on: id
       table_name: elevation_mapping
       table_schema: *db_schema
@@ -659,6 +665,7 @@ datasources:
       next_run_time: none
     mapping:
       enable: true
+      incremental: false
       joins_on: way_id
       table_name: elevation_python_mapping
       table_schema: *db_schema
@@ -734,6 +741,7 @@ datasources:
       executor: process
     mapping:
       enable: false
+      incremental: false
       joins_on: id # link id column to join the table to
       base_table:
         table_name: *base_table_name
@@ -801,6 +809,7 @@ datasources:
       next_run_time: 00:00:00
     mapping:
       enable: true
+      incremental: false
       table_schema: *db_schema
       table_name: tree_mapping
       joins_on: id # link id column to join the table to
@@ -889,6 +898,7 @@ datasources:
       next_run_time: 00:00:00
     mapping:
       enable: true
+      incremental: false
       table_schema: *db_schema
       table_name: pleasant_mapping
       joins_on: connection_id

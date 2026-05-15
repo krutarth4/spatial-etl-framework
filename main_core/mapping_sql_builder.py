@@ -56,6 +56,38 @@ class MappingInsertBuilder:
         )
 
 
+def _build_incremental_filter_sql(datasource: "DataSourceABCImpl", base_alias: str, base_id_column: str) -> str | None:
+    """Returns the SQL fragment that scopes the SELECT to changed ways, or
+    None when the datasource isn't opted into incremental mapping. The fragment
+    is bare (no WHERE prefix) so callers can AND-merge it with user filters."""
+    mapping = datasource.data_source_config.mapping
+    if not getattr(mapping, "incremental", False):
+        return None
+    changes_fqn = datasource.base_graph.get_changes_table_fqn()
+    return (
+        f"{base_alias}.{base_id_column} IN ("
+        f"SELECT base_id FROM {changes_fqn} "
+        f"WHERE op IN ('added','modified'))"
+    )
+
+
+def _merge_where_clauses(*clauses: str) -> str:
+    """AND-merge any number of normalized WHERE clauses (each either '' or
+    'WHERE ...'). Returns either '' or a single 'WHERE a AND b ...'."""
+    parts: list[str] = []
+    for c in clauses:
+        if not c:
+            continue
+        c = c.strip()
+        if c.lower().startswith("where "):
+            c = c[6:].strip()
+        if c:
+            parts.append(f"({c})")
+    if not parts:
+        return ""
+    return "WHERE " + " AND ".join(parts)
+
+
 class SpatialRelationshipMappingSelectStrategy:
     name = ""
     aliases: tuple[str, ...] = ()
@@ -111,6 +143,12 @@ class SpatialRelationshipMappingSelectStrategy:
 
         base_filter_sql = self._normalize_where_clause(config.get("base_filter_sql"))
         join_where_sql = self._normalize_where_clause(config.get("enrichment_filter_sql"))
+
+        # When incremental mapping is on, AND-merge a `b.id IN (changed)` filter
+        # into base_filter_sql so the SELECT only emits rows for changed ways.
+        incremental_pred = _build_incremental_filter_sql(datasource, base_alias, base_id_column)
+        if incremental_pred:
+            base_filter_sql = _merge_where_clauses(base_filter_sql, incremental_pred)
 
         select_columns_sql = ",\n    ".join(select_columns)
         enrichment_table = f"{enrichment.table_schema}.{enrichment.table_name}"
@@ -388,6 +426,15 @@ class AggregateWithinDistanceMappingSelectStrategy(SpatialRelationshipMappingSel
         return True
 
     def build_select(self, datasource: "DataSourceABCImpl") -> str:
+        if getattr(datasource.data_source_config.mapping, "incremental", False):
+            raise ValueError(
+                f"Datasource {datasource.data_source_name} uses 'aggregate_within_distance' "
+                f"with mapping.incremental=true. This combination is unsafe: changes to one "
+                f"way require recomputing aggregates for all neighbors within max_distance, "
+                f"which the per-way diff filter does not cover. Disable incremental for "
+                f"this datasource or implement a spatial-expansion of the changed-ways set."
+            )
+
         base = datasource.data_source_config.mapping.base_table
         storage = datasource.data_source_config.storage
 

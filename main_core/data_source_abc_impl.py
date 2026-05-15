@@ -1108,6 +1108,22 @@ class DataSourceABCImpl(DataSourceABC):
             enrichment_table = storage.staging.table_name
             enrichment_schema = storage.staging.table_schema
 
+        # Incremental-mapping placeholders. When the datasource opts into
+        # incremental mapping, sql_template SQL can reference {changed_ways_filter}
+        # or {changed_ways_subquery} to scope work to changed ways. When the
+        # datasource is NOT incremental, both render as no-ops so any template
+        # that uses them keeps working unconditionally.
+        if mapping.incremental:
+            changes_fqn = self.base_graph.get_changes_table_fqn()
+            changed_ways_subquery = (
+                f"SELECT base_id FROM {changes_fqn} "
+                f"WHERE op IN ('added','modified')"
+            )
+            changed_ways_filter = f"w.id IN ({changed_ways_subquery})"
+        else:
+            changed_ways_subquery = f"SELECT id FROM {base.table_schema}.{base.table_name}"
+            changed_ways_filter = "TRUE"
+
         return {
             "datasource_name": self.data_source_name,
             "mapping_table": mapping.table_name,
@@ -1123,6 +1139,8 @@ class DataSourceABCImpl(DataSourceABC):
             "link_mapping_column": link_fields.get("mapping_column"),
             "link_base_column": link_fields.get("base_column"),
             "link_basis": link_fields.get("basis"),
+            "changed_ways_filter": changed_ways_filter,
+            "changed_ways_subquery": changed_ways_subquery,
         }
 
     def execute_mapping_strategy(self):
@@ -1185,20 +1203,65 @@ class DataSourceABCImpl(DataSourceABC):
         pass
 
     def map_to_base(self):
-        if self.data_source_config.mapping.enable:
-            try:
-                if self.db is not None:
-                    self.logger.info(f"Mapping started on Mapping Table.....")
-                    total_ways_count = self.base_graph.get_base_graph_row_counts()
-                    mapped_ways_count = self.db.get_table_count(self.data_source_config.mapping.table_name,
-                                                                self.data_source_config.mapping.table_schema)
-                    if mapped_ways_count != total_ways_count:
-                        self.execute_mapping_strategy()
-                    else:
-                        self.logger.info(f"Skipping mapping as all ways geometry mapped....")
-            except Exception as e:
-                self.logger.error(f"Error occurred during base table update {e}")
-                raise
+        if not self.data_source_config.mapping.enable:
+            return
+        if self.db is None:
+            return
+        try:
+            self.logger.info(f"Mapping started on Mapping Table.....")
+            if self.data_source_config.mapping.incremental:
+                self._map_to_base_incremental()
+            else:
+                self._map_to_base_full_rescan()
+        except Exception as e:
+            self.logger.error(f"Error occurred during base table update {e}")
+            raise
+
+    def _map_to_base_full_rescan(self):
+        """Original count-based skip gate. Runs the mapping strategy iff the
+        mapping table row count diverges from ways_base."""
+        total_ways_count = self.base_graph.get_base_graph_row_counts()
+        mapped_ways_count = self.db.get_table_count(
+            self.data_source_config.mapping.table_name,
+            self.data_source_config.mapping.table_schema,
+        )
+        if mapped_ways_count != total_ways_count:
+            self.execute_mapping_strategy()
+        else:
+            self.logger.info(f"Skipping mapping as all ways geometry mapped....")
+
+    def _map_to_base_incremental(self):
+        """Diff-driven mapping. Runs only if ways_base_changes is non-empty;
+        first deletes stale mapping rows for changed/removed ways, then
+        executes the strategy SQL (which the builder/template scopes via the
+        changed-ways filter)."""
+        if not self.base_graph.has_pending_changes():
+            self.logger.info(
+                f"Skipping incremental mapping for {self.data_source_name}: "
+                f"no ways_base changes pending."
+            )
+            return
+        self._delete_mapping_for_changed_ways()
+        self.execute_mapping_strategy()
+
+    def _delete_mapping_for_changed_ways(self):
+        """Remove mapping rows whose way_id is in the 'removed' or 'modified'
+        partition of ways_base_changes. The 'added' partition can't have
+        existing mapping rows, so it's excluded. Note: mapping tables alias
+        ways_base.id AS way_id, so the column to match against is `way_id`."""
+        mapping = self.data_source_config.mapping
+        changes_fqn = self.base_graph.get_changes_table_fqn()
+        sql = (
+            f"DELETE FROM {mapping.table_schema}.{mapping.table_name} "
+            f"WHERE way_id IN ("
+            f"  SELECT base_id FROM {changes_fqn} "
+            f"  WHERE op IN ('removed','modified')"
+            f");"
+        )
+        self.logger.info(
+            f"[incremental] Cleaning stale mapping rows for {mapping.table_schema}.{mapping.table_name}"
+        )
+        self.db.call_sql(sql)
 
     def create_job(self):
         self.logger.info(f"Job creation started for {self.job_configuration.name}")
