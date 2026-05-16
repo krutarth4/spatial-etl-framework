@@ -1068,6 +1068,8 @@ class DataSourceABCImpl(DataSourceABC):
 
         select_sql = select_strategy.build_select(self)
         insert_spec = self.get_mapping_insert_spec()
+        if insert_spec is None and hasattr(select_strategy, "infer_insert_spec"):
+            insert_spec = select_strategy.infer_insert_spec(self)
         if insert_spec is None:
             return select_sql
 
