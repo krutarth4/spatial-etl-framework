@@ -75,12 +75,22 @@ base:
   table_schema: *db_schema
   force_generate: false # To generate brand new table the other base tabkle will be backed up
 
+# Reusable base_table block — merge into per-datasource mapping with <<: *base_table_conf
+_base_table_conf: &base_table_conf
+  table_name: *base_table_name
+  table_schema: *db_schema
+
+# Defaults merged into every datasource mapping block (fills missing keys only)
+mapping_defaults:
+  table_schema: *db_schema
+  incremental: false
+
 
 graph:
   enable: true # TODO prepare main graph tables for nodes and links
   tool: external_ingest # terminal or custom local tool either use osm2pgrouting with config.xml to create the initial tables or custom osmosis class with the help of handler
   communication:
-    enable: false # set false to run standalone without comm/router waits
+    enable: true # set false to run standalone without comm/router waits
     state_file: tmp/comm_state.json # JSON snapshot; router reads/writes via HTTP endpoints below
     router:
       base_url: http://router:8082 # e.g. http://router:9000; when set, pipeline POSTs status changes to {base_url}/comm/tasks/{key}
@@ -198,7 +208,7 @@ graph:
 datasources:
   - name: "weather_station_bright_sky"
     description: "gets weather station data with their location"
-    enable: false # to use the data source or not
+    enable: true # to use the data source or not
 #    check_before_update: false
     class_name: weatherStation
     debug:
@@ -237,11 +247,11 @@ datasources:
       next_run_time: none
     mapping:
       enable: true
-      incremental: true   # PILOT: weather station mapping is the first datasource opted into the ways_base diff-driven path
-      joins_on: dwd_station_id # link id column to join the table to
+      incremental: true
+      joins_on: dwd_station_id
+      table_name: dwd_station_locations_mapping
       strategy:
         type: knn
-        description: map each base way to its nearest weather station
         link_on:
           mapping_column: dwd_station_id
           base_column: dwd_station_id
@@ -263,15 +273,8 @@ datasources:
                 360
               )
             alias: bearing_degree
-        insert:
-          columns: [way_id, dwd_station_id, distance, bearing_degree]
-          conflict_columns: [way_id]
-          update_columns: [dwd_station_id, distance, bearing_degree]
-      table_name: dwd_station_locations_mapping
-      table_schema: *db_schema
       base_table:
-        table_name: *base_table_name
-        table_schema: *db_schema
+        <<: *base_table_conf
         column_name: "dwd_station_id"
         column_type: String
     storage:
@@ -334,16 +337,11 @@ datasources:
       next_run_time: none
     mapping:
       enable: false
-      incremental: false
-      joins_on: way_id # link id column to join the table to
-#      table_name: weather_mapping
-#      table_schema: *db_schema
+      joins_on: way_id
       base_table:
-        table_name: *base_table_name
-        table_schema: *db_schema
+        <<: *base_table_conf
         column_name: "station"
         column_type: Integer
-    #      maps_on:
     storage: # this information will be used to for metadata storage
       force_create: false
       enrichment:
@@ -402,47 +400,14 @@ datasources:
       next_run_time: none
     mapping:
       enable: true
-      incremental: false
       joins_on: way_id
       table_name: air_pollution_grid_mapping
-      table_schema: *db_schema
       strategy:
         type: sql_template
-        description: map each base way to the nearest latest air quality grid point
-      # Optional: Override global batch size for this specific datasource
-      # batch_size: 5000
       config:
-        sql: |
-          INSERT INTO {mapping_schema}.{mapping_table} (way_id, grid_uid, grid_id, intersection_length_m)
-          SELECT
-              w.id AS way_id,
-              lpg.uid AS grid_uid,
-              lpg.grid_id,
-              ST_Length(
-                  ST_Intersection(
-                      COALESCE(w.geometry_25833, ST_Transform(w.geometry, 25833)),
-                      ST_Expand(lpg.geom_25833, 25)
-                  )
-              ) AS intersection_length_m
-          FROM {base_schema}.{base_table} w
-          JOIN LATERAL (
-              SELECT DISTINCT ON (e.grid_id)
-                  e.uid,
-                  e.grid_id,
-                  e.geom_25833
-              FROM {enrichment_schema}.{enrichment_table} e
-              WHERE e.geom_25833 IS NOT NULL
-                AND ST_DWithin(COALESCE(w.geometry_25833, ST_Transform(w.geometry, 25833)), e.geom_25833, 36)
-              ORDER BY e.grid_id, e.forecast_time DESC NULLS LAST, e.uid DESC
-          ) lpg ON ST_Intersects(COALESCE(w.geometry_25833, ST_Transform(w.geometry, 25833)), ST_Expand(lpg.geom_25833, 25))
-          WHERE (w.geometry_25833 IS NOT NULL OR w.geometry IS NOT NULL)
-            AND ST_Length(ST_Intersection(COALESCE(w.geometry_25833, ST_Transform(w.geometry, 25833)), ST_Expand(lpg.geom_25833, 25))) > 0
-          ON CONFLICT (way_id, grid_id) DO UPDATE
-              SET grid_uid = EXCLUDED.grid_uid,
-                  intersection_length_m = EXCLUDED.intersection_length_m;
+        sql_file: mapping_sql/air_quality.sql
       base_table:
-        table_name: *base_table_name
-        table_schema: *db_schema
+        <<: *base_table_conf
         column_name: "air_pollution"
         column_type: Integer
     storage: # this information will be used to for metadata storage
@@ -504,11 +469,9 @@ datasources:
       next_run_time: none
     mapping:
       enable: false
-      incremental: false
-      joins_on: id # link id column to join the table to
+      joins_on: id
       base_table:
-        table_name: *base_table_name
-        table_schema: *db_schema
+        <<: *base_table_conf
         column_name: "elevation_factor"
         column_type: Integer
     storage: # DB storage
@@ -552,66 +515,14 @@ datasources:
       next_run_time: none
     mapping:
       enable: true
-      incremental: false
       joins_on: id
       table_name: elevation_mapping
-      table_schema: *db_schema
       strategy:
         type: sql_template
-        description: sample elevation profile along each base way from raster tiles
       config:
-        sql: |
-          WITH sampled_points AS (
-              SELECT
-                  w.id AS way_id,
-                  dp.path[1] AS path_idx,
-                  dp.geom AS geom_25833
-              FROM {base_schema}.{base_table} w
-              CROSS JOIN LATERAL ST_DumpPoints(
-                  ST_Segmentize(
-                      ST_Transform(w.geometry, 25833),
-                      100.0
-                  )
-              ) AS dp
-          ),
-          points_with_elevation AS (
-              SELECT
-                  sp.way_id,
-                  sp.path_idx,
-                  sp.geom_25833,
-                  z_lookup.z
-              FROM sampled_points sp
-              LEFT JOIN LATERAL (
-                  SELECT z
-                  FROM (
-                      SELECT ST_Value(r.rast, sp.geom_25833) AS z
-                      FROM {enrichment_schema}.{enrichment_table} r
-                      WHERE ST_Intersects(r.footprint_4326, ST_Transform(sp.geom_25833, 4326))
-                  ) sampled_z
-                  WHERE sampled_z.z IS NOT NULL
-                  LIMIT 1
-              ) AS z_lookup ON TRUE
-          )
-          INSERT INTO {mapping_schema}.{mapping_table} (way_id, elevation_profile)
-          SELECT
-              p.way_id AS way_id,
-              jsonb_agg(
-                  jsonb_build_object(
-                      'x', ST_X(ST_Transform(p.geom_25833, 4326)),
-                      'y', ST_Y(ST_Transform(p.geom_25833, 4326)),
-                      'z', p.z
-                  )
-                  ORDER BY p.path_idx
-              ) AS elevation_profile
-          FROM points_with_elevation p
-          WHERE p.z IS NOT NULL
-          GROUP BY p.way_id
-          ON CONFLICT (way_id)
-          DO UPDATE SET
-              elevation_profile = EXCLUDED.elevation_profile;
+        sql_file: mapping_sql/elevation.sql
       base_table:
-        table_name: *base_table_name
-        table_schema: *db_schema
+        <<: *base_table_conf
         column_name: "elevation_factor"
         column_type: Integer
     storage: # DB storage
@@ -665,28 +576,14 @@ datasources:
       next_run_time: none
     mapping:
       enable: true
-      incremental: false
       joins_on: way_id
       table_name: elevation_python_mapping
-      table_schema: *db_schema
       strategy:
         type: sql_template
-        description: copy per-way elevation stats from staging into mapping table
       config:
-        sql: |
-          INSERT INTO {mapping_schema}.{mapping_table}
-              (way_id, total_ascent, total_descent, max_slope, avg_slope, sample_count)
-          SELECT way_id, total_ascent, total_descent, max_slope, avg_slope, sample_count
-          FROM {staging_schema}.{staging_table}
-          ON CONFLICT (way_id) DO UPDATE SET
-              total_ascent  = EXCLUDED.total_ascent,
-              total_descent = EXCLUDED.total_descent,
-              max_slope     = EXCLUDED.max_slope,
-              avg_slope     = EXCLUDED.avg_slope,
-              sample_count  = EXCLUDED.sample_count;
+        sql_file: mapping_sql/elevation_python.sql
       base_table:
-        table_name: *base_table_name
-        table_schema: *db_schema
+        <<: *base_table_conf
         column_name: "elevation_factor"
         column_type: Integer
     storage: # DB storage
@@ -741,11 +638,9 @@ datasources:
       executor: process
     mapping:
       enable: false
-      incremental: false
-      joins_on: id # link id column to join the table to
+      joins_on: id
       base_table:
-        table_name: *base_table_name
-        table_schema: *db_schema
+        <<: *base_table_conf
         column_name: "elevation_factor"
         column_type: Integer
     storage: # DB storage
@@ -809,49 +704,30 @@ datasources:
       next_run_time: 00:00:00
     mapping:
       enable: true
-      incremental: false
-      table_schema: *db_schema
       table_name: tree_mapping
-      joins_on: id # link id column to join the table to
+      joins_on: id
       strategy:
-        type: sql_template
-        description: aggregate trees within 50m of each base way using jsonb
+        type: aggregate_within_distance
       config:
-        sql: |
-          INSERT INTO {mapping_schema}.{mapping_table} (way_id, trees)
-          SELECT
-              w.id AS way_id,
-              COALESCE(
-                  jsonb_agg(
-                      jsonb_build_object(
-                          'tree_id', t.id,
-                          'source_id', t.source_id,
-                          'distance_m', ST_Distance(
-                              t.geometry_25833,
-                              w.geometry_25833
-                          )
-                      )
-                      ORDER BY ST_Distance(
-                          t.geometry_25833,
-                          w.geometry_25833
-                      )
-                  ) FILTER (WHERE t.id IS NOT NULL),
-                  '[]'::jsonb
-              ) AS trees
-          FROM {base_schema}.{base_table} w
-          LEFT JOIN {staging_schema}.{staging_table} t
-            ON t.geometry_25833 && ST_Expand(w.geometry_25833, 50)
-           AND ST_DWithin(
-                  t.geometry_25833,
-                  w.geometry_25833,
-                  50
-               )
-          GROUP BY w.id
-          ON CONFLICT (way_id)
-          DO UPDATE SET trees = EXCLUDED.trees;
+        max_distance: 50
+        base_geometry_column: geometry_25833
+        enrichment_geometry_column: geometry_25833
+        aggregation_type: jsonb_build_object
+        aggregation_expression: |
+          COALESCE(
+            jsonb_agg(
+              jsonb_build_object(
+                'tree_id', {enrichment_alias}.id,
+                'source_id', {enrichment_alias}.source_id,
+                'distance_m', ST_Distance({enrichment_alias}.geometry_25833, {base_geometry})
+              )
+              ORDER BY ST_Distance({enrichment_alias}.geometry_25833, {base_geometry})
+            ) FILTER (WHERE {enrichment_alias}.id IS NOT NULL),
+            '[]'::jsonb
+          )
+        aggregation_alias: trees
       base_table:
-        table_name: *base_table_name
-        table_schema: *db_schema
+        <<: *base_table_conf
         column_name: "elevation_factor"
         column_type: Integer
     storage: # DB storage
@@ -898,13 +774,10 @@ datasources:
       next_run_time: 00:00:00
     mapping:
       enable: true
-      incremental: false
-      table_schema: *db_schema
       table_name: pleasant_mapping
       joins_on: connection_id
       strategy:
         type: knn
-        description: map each base way to nearest pleasant bicycling data within 20m
         link_on:
           mapping_column: connection_id
           basis: nearest_within_distance
@@ -915,13 +788,8 @@ datasources:
         order_by_sql: "connection_id, {base_geometry} <-> {enrichment_geometry}"
         distance_sql: "ST_Distance({base_geometry}, {enrichment_geometry})"
         distance_alias: distance_m
-        insert:
-          columns: [way_id, connection_id, distance_m]
-          conflict_columns: [way_id]
-          update_columns: [connection_id, distance_m]
       base_table:
-        table_name: *base_table_name
-        table_schema: *db_schema
+        <<: *base_table_conf
         column_name: "pleasant_score"
         column_type: Float
     storage: # DB storage
