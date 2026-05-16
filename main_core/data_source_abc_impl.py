@@ -605,9 +605,16 @@ class DataSourceABCImpl(DataSourceABC):
         #
         # self.load(transformed_data)
 
-    def run(self):
+    def _reset_run_state(self):
+        """Reset all per-run instance state so consecutive runs are fully independent."""
+        self.raw_staging_table = None
+        self.raw_staging_schema = None
+        self._last_fetch_performed_download = None
         self._run_degraded = False
-        self._run_stage_warnings: list[tuple[str, str]] = []
+        self._run_stage_warnings = []
+
+    def run(self):
+        self._reset_run_state()
         self.start_execution()
         self._mark_metadata_run_started()
         run_started_at = datetime.utcnow()
