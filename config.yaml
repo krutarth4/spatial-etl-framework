@@ -482,12 +482,12 @@ datasources:
       header:
         Accept: "application/atom+xml"
       params:
-    pre-filter-processing:
+    before_filter_hook:
       enable: true
-    post_filter_processing:
+    after_filter_hook:
       save: true
       destination: &gridlinks data/grid/elevation_grid_links.json # should be explicit the name not the internal naming mechanism
-    pre-database-processing:
+    before_load_hook:
       enable: false
     post-database-processing:
       enable: false

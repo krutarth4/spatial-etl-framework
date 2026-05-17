@@ -195,7 +195,7 @@ class SourceDTO:
 
 
 @dataclass
-class PostFilterDTO:
+class HookConfigDTO:
     save: bool
     destination: Union[str, Path]
 
@@ -208,11 +208,11 @@ class DataSourceDTO:
     class_name: str
     data_type: str
     source: SourceDTO
-    pre_filter_processing: Optional[PostFilterDTO]
-    post_filter_processing: Optional[PostFilterDTO]
-    pre_database_processing: Optional[PostFilterDTO]
-    pro_database_processing: Optional[PostFilterDTO]
-    cleanup_processing: Optional[PostFilterDTO]
+    before_filter_hook: Optional[HookConfigDTO]
+    after_filter_hook: Optional[HookConfigDTO]
+    before_load_hook: Optional[HookConfigDTO]
+    after_load_hook: Optional[HookConfigDTO]
+    cleanup_hook: Optional[HookConfigDTO]
     mapping: MappingDTO
     storage: StorageDTO
     job: JobConfigurationDTO
