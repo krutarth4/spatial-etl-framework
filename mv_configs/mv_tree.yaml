@@ -7,7 +7,7 @@
 # ---- Identity --------------------------------------------------------------
 id: mv_tree
 name: mv_tree
-schema: test_osm_base_graph
+schema: trial
 description: "Per-way tree aggregation (JSONB) within 50 m of each base way"
 enable: true
 
@@ -27,8 +27,8 @@ depends_on:
   datasources:
     - tree
   tables:
-    - { schema: test_osm_base_graph, name: ways_base }
-    - { schema: test_osm_base_graph, name: tree_mapping }
+    - { schema: trial, name: ways_base }
+    - { schema: trial, name: tree_mapping }
 
 # ---- Definition ------------------------------------------------------------
 definition:
@@ -40,8 +40,8 @@ definition:
         w.to_node_id,
         w.way_link_index,
         COALESCE(m.trees, '[]'::jsonb) AS trees
-    FROM test_osm_base_graph.ways_base w
-    LEFT JOIN test_osm_base_graph.tree_mapping m
+    FROM {schema}.ways_base w
+    LEFT JOIN {schema}.tree_mapping m
         ON m.way_id = w.id
 
 # ---- Build options ---------------------------------------------------------

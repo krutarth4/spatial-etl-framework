@@ -7,7 +7,7 @@
 # ---- Identity --------------------------------------------------------------
 id: mv_ways_with_elevation
 name: mv_ways_with_elevation
-schema: test_osm_base_graph
+schema: trial
 description: "Per-way elevation stats (ascent, descent, max slope) from the Python elevation pipeline"
 enable: true
 
@@ -27,8 +27,8 @@ depends_on:
   datasources:
     - elevation_python
   tables:
-    - { schema: test_osm_base_graph, name: ways_base }
-    - { schema: test_osm_base_graph, name: elevation_python_staging }
+    - { schema: trial, name: ways_base }
+    - { schema: trial, name: elevation_python_staging }
 
 # ---- Definition ------------------------------------------------------------
 definition:
@@ -39,8 +39,8 @@ definition:
         COALESCE(e.total_ascent, 0.0)  AS total_ascent,
         COALESCE(e.total_descent, 0.0) AS total_descent,
         COALESCE(e.max_slope, 0.0)     AS max_slope
-    FROM test_osm_base_graph.ways_base w
-    LEFT JOIN test_osm_base_graph.elevation_python_staging e
+    FROM {schema}.ways_base w
+    LEFT JOIN {schema}.elevation_python_staging e
         ON w.id = e.way_id
 
 # ---- Build options ---------------------------------------------------------

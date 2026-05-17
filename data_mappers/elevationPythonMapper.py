@@ -6,6 +6,7 @@ from shapely import wkb
 from shapely.geometry import box
 from sqlalchemy import Column, Integer, Float, ARRAY, UniqueConstraint, String, BigInteger, DateTime, func
 
+from core.globalconstants import GlobalConstants
 from database_tables.mapping_table import MappingTable
 from database_tables.staging_table import StagingTable
 from main_core.data_source_abc_impl import DataSourceABCImpl
@@ -112,9 +113,9 @@ class ElevationPythonMapper(DataSourceABCImpl):
         tree = cKDTree(xy)
         tile_polygon = box(min_x, min_y, max_x, max_y)
 
-        sql = """
+        sql = f"""
               SELECT id, ST_AsBinary(geometry) AS geom_wkb
-              FROM test_osm_base_graph.ways_base
+              FROM {GlobalConstants.base_schema}.{GlobalConstants.base_table}
               WHERE ST_Intersects(
                         ST_Transform(geometry, 25833),
                         ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, 25833)

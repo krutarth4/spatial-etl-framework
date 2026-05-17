@@ -7,7 +7,7 @@
 # ---- Identity --------------------------------------------------------------
 id: mv_pleasant
 name: mv_pleasant
-schema: test_osm_base_graph
+schema: trial
 description: "Per-way SPI (speed performance index) across all pleasant bicycling intervals"
 enable: true
 
@@ -27,16 +27,16 @@ depends_on:
   datasources:
     - pleasant_bicycling
   tables:
-    - { schema: test_osm_base_graph, name: ways_base }
-    - { schema: test_osm_base_graph, name: pleasant_mapping }
-    - { schema: test_osm_base_graph, name: pleasant_enrichment }
+    - { schema: trial, name: ways_base }
+    - { schema: trial, name: pleasant_mapping }
+    - { schema: trial, name: pleasant_enrichment }
 
 # ---- Definition ------------------------------------------------------------
 definition:
   select_sql: |
     WITH intervals AS (
         SELECT DISTINCT interval_start, interval_end
-        FROM test_osm_base_graph.pleasant_enrichment
+        FROM {schema}.pleasant_enrichment
     )
     SELECT
         w.id,
@@ -45,11 +45,11 @@ definition:
         i.interval_start,
         i.interval_end,
         COALESCE(pe.avg_speed_performance_index, -1)          AS spi
-    FROM test_osm_base_graph.ways_base w
+    FROM {schema}.ways_base w
     CROSS JOIN intervals i
-    LEFT JOIN test_osm_base_graph.pleasant_mapping pm
+    LEFT JOIN {schema}.pleasant_mapping pm
         ON pm.way_id = w.id
-    LEFT JOIN test_osm_base_graph.pleasant_enrichment pe
+    LEFT JOIN {schema}.pleasant_enrichment pe
         ON pe.connection_id = pm.connection_id
        AND pe.interval_start = i.interval_start
        AND pe.interval_end   = i.interval_end
@@ -75,7 +75,7 @@ indexes:
     where: null
   - sql: |
       CREATE INDEX IF NOT EXISTS idx_mv_pleasant_way_id_covering
-      ON test_osm_base_graph.mv_pleasant (way_id)
+      ON {schema}.mv_pleasant (way_id)
       INCLUDE (way_link_index, interval_start, interval_end, spi);
 
 # ---- Refresh behavior ------------------------------------------------------
