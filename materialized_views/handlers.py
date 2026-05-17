@@ -184,7 +184,7 @@ class GenericMaterializedViewHandler(BaseMaterializedViewHandler):
                     f"Materialized view '{self.conf.identifier}' missing "
                     f"`definition.select_sql` and `definition.custom_sql.create`"
                 )
-            sql = self._wrap_create(self.conf.select_sql)
+            sql = self._wrap_create(self.conf.select_sql.format(schema=self.conf.schema))
 
         self._exec(sql)
         self._ensure_indexes()
