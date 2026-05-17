@@ -37,6 +37,10 @@ class DataSourceMetadata(Base):
     last_run_message = Column(Text)
     last_run_duration_seconds = Column(Integer)
 
+    # --- retention policy (mirrors storage.expires_after in datasource config)
+    expires_after = Column(String)
+    expires_after_column = Column(String)
+
     # --- config tracking (VERY useful)
     config_hash = Column(String)
     config_snapshot = Column(JSON)

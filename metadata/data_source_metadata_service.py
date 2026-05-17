@@ -67,6 +67,7 @@ class DataSourceMetadataService:
         config_hash = self._hash_config(config_snapshot)
         source_conf = getattr(data_source_conf, "source", None)
 
+        storage_conf = getattr(data_source_conf, "storage", None)
         payload = {
             "source_name": source_key,
             "description": getattr(data_source_conf, "description", None),
@@ -76,6 +77,8 @@ class DataSourceMetadataService:
             "file_path": self._extract_source_paths(source_conf),
             "is_active": bool(getattr(data_source_conf, "enable", True)),
             "current_run_status": "idle" if bool(getattr(data_source_conf, "enable", True)) else "disabled",
+            "expires_after": getattr(storage_conf, "expires_after", None),
+            "expires_after_column": getattr(storage_conf, "expires_after_column", None),
             "config_hash": config_hash,
             "config_snapshot": config_snapshot,
         }
