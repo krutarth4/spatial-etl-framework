@@ -875,8 +875,8 @@ class DataSourceABCImpl(DataSourceABC):
         file_handler.save_data(conf.destination, data, True)
 
     def post_filter_processing(self, data):
-        if self.data_source_config.post_filter_processing is not None and self.data_source_config.post_filter_processing.save:
-            conf = self.data_source_config.post_filter_processing
+        if self.data_source_config.after_filter_hook is not None and self.data_source_config.after_filter_hook.save:
+            conf = self.data_source_config.after_filter_hook
             if conf is not None and conf.save:
                 self.post_filter_processing_save_data(conf,data)
 
