@@ -605,9 +605,16 @@ class DataSourceABCImpl(DataSourceABC):
         #
         # self.load(transformed_data)
 
-    def run(self):
+    def _reset_run_state(self):
+        """Reset all per-run instance state so consecutive runs are fully independent."""
+        self.raw_staging_table = None
+        self.raw_staging_schema = None
+        self._last_fetch_performed_download = None
         self._run_degraded = False
-        self._run_stage_warnings: list[tuple[str, str]] = []
+        self._run_stage_warnings = []
+
+    def run(self):
+        self._reset_run_state()
         self.start_execution()
         self._mark_metadata_run_started()
         run_started_at = datetime.utcnow()
@@ -875,8 +882,8 @@ class DataSourceABCImpl(DataSourceABC):
         file_handler.save_data(conf.destination, data, True)
 
     def post_filter_processing(self, data):
-        if self.data_source_config.post_filter_processing is not None and self.data_source_config.post_filter_processing.save:
-            conf = self.data_source_config.post_filter_processing
+        if self.data_source_config.after_filter_hook is not None and self.data_source_config.after_filter_hook.save:
+            conf = self.data_source_config.after_filter_hook
             if conf is not None and conf.save:
                 self.post_filter_processing_save_data(conf,data)
 
@@ -1061,6 +1068,8 @@ class DataSourceABCImpl(DataSourceABC):
 
         select_sql = select_strategy.build_select(self)
         insert_spec = self.get_mapping_insert_spec()
+        if insert_spec is None and hasattr(select_strategy, "infer_insert_spec"):
+            insert_spec = select_strategy.infer_insert_spec(self)
         if insert_spec is None:
             return select_sql
 

@@ -247,6 +247,25 @@ class NearestNeighbourMappingSelectStrategy(SpatialRelationshipMappingSelectStra
     def includes_distance(self) -> bool:
         return True
 
+    def infer_insert_spec(self, datasource: "DataSourceABCImpl") -> "MappingInsertSpec":
+        config = datasource.get_mapping_config()
+        link_fields = datasource.get_mapping_strategy_link_fields()
+        mapping_column = link_fields.get("mapping_column") or config.get("mapping_column")
+        distance_alias = str(config.get("distance_alias") or "distance")
+
+        columns = ["way_id"]
+        if mapping_column:
+            columns.append(str(mapping_column))
+        columns.append(distance_alias)
+        for item in (config.get("select_columns") or []):
+            if isinstance(item, dict):
+                alias = item.get("alias")
+                if alias:
+                    columns.append(str(alias))
+
+        update_cols = [c for c in columns if c != "way_id"]
+        return MappingInsertSpec(columns=columns, conflict_columns=["way_id"], update_columns=update_cols)
+
     def build_join_sql(
         self,
         config: dict[str, Any],
@@ -480,8 +499,15 @@ class AggregateWithinDistanceMappingSelectStrategy(SpatialRelationshipMappingSel
         elif agg_type == "max":
             agg_expr = f"MAX({enrichment_alias}.{agg_column})"
         elif agg_type.startswith("jsonb_build_object"):
-            # Custom jsonb object builder
-            agg_expr = config.get("aggregation_expression", agg_type)
+            raw_expr = config.get("aggregation_expression", agg_type)
+            agg_expr = str(raw_expr).format(
+                enrichment_alias=enrichment_alias,
+                base_geometry=base_geometry_sql,
+                enrichment_geometry=enrichment_geometry_sql,
+                base_alias=base_alias,
+                base_geometry_column=base_geometry_column,
+                enrichment_geometry_column=enrichment_geometry_column,
+            )
         else:
             agg_expr = agg_type
 
@@ -528,6 +554,25 @@ class AggregateWithinDistanceMappingSelectStrategy(SpatialRelationshipMappingSel
                     {base_filter_sql}
                     GROUP BY {base_alias}.{base_id_column}
                 """
+
+    def infer_insert_spec(self, datasource: "DataSourceABCImpl") -> "MappingInsertSpec":
+        config = datasource.get_mapping_config()
+        link_fields = datasource.get_mapping_strategy_link_fields()
+        mapping_column = link_fields.get("mapping_column") or config.get("mapping_column")
+        agg_alias = str(
+            config.get("aggregation_alias")
+            or ((str(mapping_column) + "_agg") if mapping_column else "agg")
+        )
+
+        columns = ["way_id", agg_alias]
+        for item in (config.get("select_columns") or []):
+            if isinstance(item, dict):
+                alias = item.get("alias")
+                if alias:
+                    columns.append(str(alias))
+
+        update_cols = [c for c in columns if c != "way_id"]
+        return MappingInsertSpec(columns=columns, conflict_columns=["way_id"], update_columns=update_cols)
 
     def build_join_sql(
         self,

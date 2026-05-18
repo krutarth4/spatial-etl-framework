@@ -32,6 +32,8 @@ class CoreConfig(YamlReader):
         self.config = YamlReader.read(self)
         self._apply_env_overrides()
         self._apply_datasource_overrides()
+        self._merge_mapping_defaults()
+        self._resolve_mapping_sql_files()
         self._merge_mv_configs()
         self._validate_job_triggers()
         self._validate_datasource_features()
@@ -144,6 +146,53 @@ class CoreConfig(YamlReader):
             raise ValueError(
                 f"Datasource feature configuration errors in {self.filepath}:\n{lines}"
             )
+
+    def _merge_mapping_defaults(self):
+        """Fill missing top-level mapping keys from mapping_defaults for every datasource."""
+        defaults = self.config.get("mapping_defaults")
+        if not isinstance(defaults, dict) or not defaults:
+            return
+        datasources = self.config.get("datasources")
+        if not isinstance(datasources, list):
+            return
+        for ds in datasources:
+            if not isinstance(ds, dict):
+                continue
+            mapping = ds.get("mapping")
+            if not isinstance(mapping, dict):
+                continue
+            for key, value in defaults.items():
+                if key not in mapping:
+                    mapping[key] = value
+
+    def _resolve_mapping_sql_files(self):
+        """Replace mapping.config.sql_file references with the file's SQL content."""
+        base_dir = Path(self.filepath).resolve().parent
+        datasources = self.config.get("datasources")
+        if not isinstance(datasources, list):
+            return
+        for ds in datasources:
+            if not isinstance(ds, dict):
+                continue
+            mapping = ds.get("mapping")
+            if not isinstance(mapping, dict):
+                continue
+            config = mapping.get("config")
+            if not isinstance(config, dict):
+                continue
+            sql_file = config.get("sql_file")
+            if not sql_file:
+                continue
+            sql_path = (base_dir / str(sql_file)).resolve()
+            try:
+                config["sql"] = sql_path.read_text(encoding="utf-8")
+                config.pop("sql_file")
+                self.logger.info(f"Datasource '{ds.get('name')}': loaded mapping SQL from {sql_path.name}")
+            except FileNotFoundError:
+                raise FileNotFoundError(
+                    f"Datasource '{ds.get('name')}' mapping.config.sql_file "
+                    f"'{sql_file}' not found: {sql_path}"
+                )
 
     def _merge_mv_configs(self):
         mv_conf = self.config.get("materialized_views")
