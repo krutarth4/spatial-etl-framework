@@ -37,7 +37,7 @@ scheduler:
 data_folder: ./data_source_configs/
 
 env_variables:
-  base_schema: &db_schema trial
+  base_schema: &db_schema exp_null
   base_table: &base_table_name ways_base
 
 database:
@@ -93,7 +93,7 @@ graph:
     enable: true # set false to run standalone without comm/router waits
     state_file: tmp/comm_state.json # JSON snapshot; router reads/writes via HTTP endpoints below
     router:
-      base_url: http://router:8082 # e.g. http://router:9000; when set, pipeline POSTs status changes to {base_url}/comm/tasks/{key}
+      base_url: http://localhost:8082 # e.g. http://router:9000; when set, pipeline POSTs status changes to {base_url}/comm/tasks/{key}
       timeout_seconds: 5
     tasks:
       - key: read_osm_file

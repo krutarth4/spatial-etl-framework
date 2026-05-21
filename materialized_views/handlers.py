@@ -101,12 +101,40 @@ class MaterializedViewConfig:
         deps = self.raw.get("depends_on") or {}
         return list(deps.get("datasources") or [])
 
+    @property
+    def depends_on_tables(self) -> list[dict[str, str]]:
+        """Return list of {schema, name} dicts from depends_on.tables."""
+        deps = self.raw.get("depends_on") or {}
+        return list(deps.get("tables") or [])
+
 
 class BaseMaterializedViewHandler:
     def __init__(self, db, conf: dict[str, Any]):
         self.db = db
         self.conf = MaterializedViewConfig(conf)
         self.logger = getattr(db, "logger", None)
+
+    def check_dependency_tables(self) -> bool:
+        """
+        Warn and return False if any table listed in depends_on.tables is missing.
+        Returns True when all tables exist (or no dependencies are declared).
+        """
+        if self.db is None:
+            return True
+        all_present = True
+        for entry in self.conf.depends_on_tables:
+            schema = entry.get("schema") or self.conf.schema
+            name = entry.get("name")
+            if not name:
+                continue
+            if not self.db.table_exists(name, schema):
+                if self.logger:
+                    self.logger.warning(
+                        f"Materialized view '{self.conf.identifier}' depends on table "
+                        f"'{schema}.{name}' which does not exist — skipping view creation."
+                    )
+                all_present = False
+        return all_present
 
     def ensure(self):
         raise NotImplementedError

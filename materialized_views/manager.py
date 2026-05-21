@@ -76,6 +76,8 @@ class MaterializedViewManager:
             try:
                 self.logger.info(f"Materialized view trigger matched for datasource '{datasource_name}' -> {view_id}")
                 handler = self._build_handler(view_conf)
+                if not handler.check_dependency_tables():
+                    continue
                 handler.ensure()
                 if not refresh_conf.get("enabled", True):
                     continue
