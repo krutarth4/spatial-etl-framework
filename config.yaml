@@ -280,7 +280,6 @@ datasources:
     storage:
       force_create: false
       persistent: true # true | false -> to store the values or not
-      expires_after: 6h # how long to keep the data before again running the new process for persistency
       staging:
         table_name: dwd_station_locations_staging
         table_schema: *db_schema
@@ -302,8 +301,7 @@ datasources:
       fetch: http #http \ local
       mode: multi
       check_metadata:
-        enable: true
-        keys: [ "last_modified" ]
+        enable: false
       url: https://api.brightsky.dev/weather
       multi_fetch:
         enable: true
@@ -350,7 +348,6 @@ datasources:
         table_class: WeatherEnrichmentTable # create class file to be liknked to the table
       persistent: true # true | false -> to store the values or not
       expires_after: 1d # how long to keep the data before again running the new process for persistency
-      expires_after_column: timestamp
       staging:
         table_name: weather_staging
         table_schema: *db_schema

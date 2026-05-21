@@ -1,7 +1,8 @@
 import hashlib
 import json
+import re
 from dataclasses import asdict, is_dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from enum import Enum
 from pathlib import Path
 
@@ -78,7 +79,6 @@ class DataSourceMetadataService:
             "is_active": bool(getattr(data_source_conf, "enable", True)),
             "current_run_status": "idle" if bool(getattr(data_source_conf, "enable", True)) else "disabled",
             "expires_after": getattr(storage_conf, "expires_after", None),
-            "expires_after_column": getattr(storage_conf, "expires_after_column", None),
             "config_hash": config_hash,
             "config_snapshot": config_snapshot,
         }
@@ -207,6 +207,27 @@ class DataSourceMetadataService:
         if normalized.startswith("./tmp/"):
             return normalized[2:]
         return normalized
+
+    def is_dataset_expired(self, source_key: str, expires_after: str | None) -> bool:
+        """Return True if last_successful_run_at + expires_after < now, or no run recorded."""
+        if not expires_after or self.metadata_repository is None:
+            return False
+        delta = self._parse_expires_after_timedelta(expires_after)
+        if delta is None:
+            self.logger.warning(f"Cannot parse expires_after '{expires_after}' for {source_key} — treating as not expired")
+            return False
+        metadata = self.metadata_repository.get_metadata(source_key)
+        if metadata is None or metadata.last_successful_run_at is None:
+            return True
+        return datetime.utcnow() - metadata.last_successful_run_at > delta
+
+    @staticmethod
+    def _parse_expires_after_timedelta(value: str) -> timedelta | None:
+        match = re.fullmatch(r"(\d+)\s*(d|h|m)", value.strip().lower())
+        if not match:
+            return None
+        amount, unit = int(match.group(1)), match.group(2)
+        return {"d": timedelta(days=amount), "h": timedelta(hours=amount), "m": timedelta(minutes=amount)}[unit]
 
     def _to_jsonable(self, value):
         if value is None:
