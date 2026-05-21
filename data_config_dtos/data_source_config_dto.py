@@ -196,8 +196,8 @@ class SourceDTO:
 
 @dataclass
 class HookConfigDTO:
-    save: bool
-    destination: Union[str, Path]
+    save: bool = False
+    destination: Optional[Union[str, Path]] = None
 
 
 @dataclass
