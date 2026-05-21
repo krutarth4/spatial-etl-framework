@@ -622,6 +622,9 @@ class DataSourceABCImpl(DataSourceABC):
         run_error: Exception | None = None
         run_result = None
         try:
+            if self._is_dataset_expired():
+                self.logger.info(f"Dataset '{self.data_source_name}' has expired — clearing tables for fresh load")
+                self._clear_dataset_tables()
             result = self.execute_run_pipeline()
             run_result = result
             run_succeeded = True
@@ -703,48 +706,27 @@ class DataSourceABCImpl(DataSourceABC):
     def cleanup_after_finalize(self, sync_result: dict | None):
         backup_raw = not (sync_result or {}).get("success")
         self.clean_raw_staging_table(backup_raw)
-        self.purge_expired_rows()
 
-    def purge_expired_rows(self):
-        """Delete rows older than expires_after from staging and enrichment tables."""
+    def _is_dataset_expired(self) -> bool:
         expires_after = getattr(self.data_source_config.storage, "expires_after", None)
-        if not expires_after or self.db is None:
-            return
+        if not expires_after or self.metadata_service is None:
+            return False
+        return self.metadata_service.is_dataset_expired(self.data_source_name, expires_after)
 
-        interval = self._parse_expires_after(expires_after)
-        if interval is None:
-            self.logger.warning(f"Could not parse expires_after '{expires_after}' — skipping purge")
-            return
-
+    def _clear_dataset_tables(self):
+        """Drop staging and enrichment tables so they are force-recreated on this run."""
         storage = self.data_source_config.storage
-        ts_column = getattr(storage, "expires_after_column", None) or "timestamp"
         tables = []
-        if storage.staging:
+        if storage and storage.staging:
             tables.append((storage.staging.table_schema, storage.staging.table_name))
-        if storage.enrichment:
+        if storage and storage.enrichment:
             tables.append((storage.enrichment.table_schema, storage.enrichment.table_name))
-
         for schema, table in tables:
             try:
-                sql = f'DELETE FROM "{schema}"."{table}" WHERE "{ts_column}" < NOW() - INTERVAL \'{interval}\''
-                self.db.call_sql(sql)
-                self.logger.info(f"Purged rows older than {interval} from {schema}.{table}")
+                self.db.drop_table(table, schema, backup=False, check_exist=True, cascade=True)
+                self.logger.info(f"Expired dataset: dropped {schema}.{table}")
             except Exception as e:
-                self.logger.error(f"Failed to purge old rows from {schema}.{table}: {e}")
-                self._note_stage_warning(f"purge_expired_rows:{table}", e)
-
-    @staticmethod
-    def _parse_expires_after(value: str) -> str | None:
-        """Parse '2d', '6h', '30m' into a PostgreSQL interval string."""
-        value = value.strip().lower()
-        units = {"d": "days", "h": "hours", "m": "minutes"}
-        if value and value[-1] in units:
-            try:
-                amount = int(value[:-1])
-                return f"{amount} {units[value[-1]]}"
-            except ValueError:
-                pass
-        return None
+                self.logger.error(f"Failed to drop expired table {schema}.{table}: {e}")
 
     def on_run_error(self, error: Exception):
         self.logger.error(f"Error occurred in run {error}")

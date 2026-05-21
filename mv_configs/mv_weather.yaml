@@ -7,7 +7,7 @@
 # ---- Identity --------------------------------------------------------------
 id: mv_weather                     # stable id for logs / metadata; defaults to "<schema>.<name>"
 name: mv_weather                   # MV object name in Postgres
-schema: trial                      # target schema (the MV is created here)
+schema: &dbschema exp_null                      # target schema (the MV is created here)
 description: "Per-way weather snapshot joining base ways with mapped DWD station forecast"
 enable: true                       # set false to keep the file but skip create/refresh
 
@@ -34,9 +34,9 @@ depends_on:
     - weather_forecast_bright_sky
     - weather_station_bright_sky
   tables:
-    - { schema: trial, name: weather_enrichment }
-    - { schema: trial, name: dwd_station_locations_mapping }
-    - { schema: trial, name: ways_base }
+    - { schema: *dbschema, name: weather_enrichment }
+    - { schema: *dbschema, name: dwd_station_locations_mapping }
+    - { schema: *dbschema, name: ways_base }
 
 # ---- Definition ------------------------------------------------------------
 # Provide exactly ONE of: select_sql | custom_sql | source.
@@ -44,12 +44,12 @@ definition:
   # Domain-specific config consumed by WeatherMaterializedViewHandler.
   # The handler builds the JOIN SQL from these table references.
   source:
-    mapping_table:    { schema: trial, name: dwd_station_locations_mapping }
-    enrichment_table: { schema: trial, name: weather_enrichment }
-    base_table:       { schema: trial, name: ways_base }
+    mapping_table:    { schema: *dbschema, name: dwd_station_locations_mapping }
+    enrichment_table: { schema: *dbschema, name: weather_enrichment }
+    base_table:       { schema: *dbschema, name: ways_base }
     filters:
       # Pin the MV to one forecast snapshot. Set to null / omit for all timestamps.
-      timestamp_eq: "2026-02-24 16:00:00+00"
+      timestamp_eq: null
 
   # --- Alternative options (mutually exclusive with `source`) ---------------
   # select_sql: |                    # used by GenericMaterializedViewHandler
