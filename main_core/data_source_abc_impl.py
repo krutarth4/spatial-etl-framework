@@ -488,10 +488,11 @@ class DataSourceABCImpl(DataSourceABC):
         if old_metadata is None or current_metadata is None:
             # Metadata changed
             return True
-        else:
-            for key in keys:
-                if old_metadata.get(key) != current_metadata.get(key):
-                    return True
+        if not keys:
+            return old_metadata != current_metadata
+        for key in keys:
+            if old_metadata.get(key) != current_metadata.get(key):
+                return True
         return False
 
     def source_filter(self, data: list[Any]) -> List[Any]:

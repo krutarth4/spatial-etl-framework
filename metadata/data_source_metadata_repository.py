@@ -89,6 +89,14 @@ class DataSourceMetadataRepository:
             )
             return session.execute(stmt).scalar_one_or_none()
 
+    def get_last_successful_run_at(self, source_key: str):
+        with self.db.session_scope() as session:
+            stmt = (
+                select(DataSourceMetadata.last_successful_run_at)
+                .where(DataSourceMetadata.source_key == source_key)
+            )
+            return session.execute(stmt).scalar_one_or_none()
+
     def get_metadata_file_paths(self, source_key: str) -> list[str] | None:
         with self.db.session_scope() as session:
             stmt = (

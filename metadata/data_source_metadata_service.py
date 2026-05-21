@@ -216,10 +216,10 @@ class DataSourceMetadataService:
         if delta is None:
             self.logger.warning(f"Cannot parse expires_after '{expires_after}' for {source_key} — treating as not expired")
             return False
-        metadata = self.metadata_repository.get_metadata(source_key)
-        if metadata is None or metadata.last_successful_run_at is None:
+        last_successful_run_at = self.metadata_repository.get_last_successful_run_at(source_key)
+        if last_successful_run_at is None:
             return True
-        return datetime.utcnow() - metadata.last_successful_run_at > delta
+        return datetime.utcnow() - last_successful_run_at > delta
 
     @staticmethod
     def _parse_expires_after_timedelta(value: str) -> timedelta | None:
