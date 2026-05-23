@@ -1,8 +1,7 @@
 import gzip
 
-import ijson
-from geoalchemy2 import Geometry, WKTElement
-from pyproj import Transformer
+import orjson
+from geoalchemy2 import Geometry
 from sqlalchemy import Integer, Column, DateTime, Float, ARRAY, UniqueConstraint, String, Index, ForeignKey
 
 from core.globalconstants import GlobalConstants
@@ -27,11 +26,9 @@ class AirPollutionGridStagingTable(StagingTable):
     pm10 = Column(ARRAY(Float))
     pm25 = Column(ARRAY(Float))
 
-    # Coordinates
+    # Coordinates (UTM 33N, mirrors geom_25833 for convenience)
     x_utm = Column(Float, nullable=False)
     y_utm = Column(Float, nullable=False)
-    lat = Column(Float)
-    lon = Column(Float)
 
     # Geometry in source CRS (ETRS89 / UTM zone 33N)
     geom_25833 = Column(Geometry("POINT", srid=25833), nullable=False)
@@ -57,8 +54,6 @@ class AirPollutionGridEnrichmentTable(EnrichmentTable):
 
     x_utm = Column(Float, nullable=False)
     y_utm = Column(Float, nullable=False)
-    lat = Column(Float)
-    lon = Column(Float)
 
     geom_25833 = Column(Geometry("POINT", srid=25833), nullable=False)
     geom_4326 = Column(Geometry("POINT", srid=4326))
@@ -90,8 +85,6 @@ class AirPollutionGridMappingTable(MappingTable):
 class AirQualityDataMapper(DataSourceABCImpl):
     # f"https://werkzeug.dcaiti.tu-berlin.de/fairqberlin/inwt_fairq_cache_skip_{skip}_limit_100000.json.gz",f"./airw_{skip}.json.gz")
 
-    transformer = Transformer.from_crs(25833, 4326, always_xy=True)
-
     def enrichment_db_query(self) -> None | str:
         enrichment = self.data_source_config.storage.enrichment
         sql = f"""
@@ -106,35 +99,30 @@ class AirQualityDataMapper(DataSourceABCImpl):
         return self.load_and_store_gz_json(path)
 
     def load_and_store_gz_json(self, gz_path):
-        print(f"📖 Reading and inserting data from {gz_path}")
-        row_to_insert = []
-        with gzip.open(gz_path, "rt", encoding="utf-8") as f:
-            # Stream each feature
-            for feature in ijson.items(f, "features.item"):
-                try:
-                    props = feature["properties"]
-                    geom = feature["geometry"]
-                    x, y = geom["coordinates"]
-                    lon, lat = self.transformer.transform(x, y)
+        self.logger.info(f"Reading and parsing {gz_path}")
+        with gzip.open(gz_path, "rb") as f:
+            payload = orjson.loads(f.read())
 
-                    point_25833 = WKTElement(f"POINT({x} {y})", srid=25833)
-                    row = {
-                        "grid_id": props["id"],
-                        "forecast_time": props["date_time_forecast_iso8601"],
-                        "forecast_range": props["forecast_range_iso8601"],
-                        "no2": props.get("no2"),
-                        "pm10": props.get("pm10"),
-                        "pm25": props.get("pm2.5"),
-                        "x_utm": x,
-                        "y_utm": y,
-                        "lon": lon,
-                        "lat": lat,
-                        "geom_25833": point_25833,
-                    }
-                    row_to_insert.append(row)
-                    # return row_to_insert
-                except Exception as e:
-                    print(f"⚠️ Skipped one feature due to error: {e}")
-
-        # print(f"✅ Finished inserting {count} records from {gz_path}")
-        return row_to_insert
+        features = payload.get("features", []) or []
+        rows = []
+        skipped = 0
+        for feature in features:
+            try:
+                props = feature["properties"]
+                x, y = feature["geometry"]["coordinates"]
+                rows.append({
+                    "grid_id": props["id"],
+                    "forecast_time": props["date_time_forecast_iso8601"],
+                    "forecast_range": props["forecast_range_iso8601"],
+                    "no2": props.get("no2"),
+                    "pm10": props.get("pm10"),
+                    "pm25": props.get("pm2.5"),
+                    "x_utm": x,
+                    "y_utm": y,
+                    "geom_25833": f"SRID=25833;POINT({x} {y})",
+                })
+            except Exception:
+                skipped += 1
+        if skipped:
+            self.logger.warning(f"Skipped {skipped} malformed features in {gz_path}")
+        return rows

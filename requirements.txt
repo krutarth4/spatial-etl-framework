@@ -2,6 +2,7 @@ rasterio
 pandas
 celery
 ijson
+orjson
 pyproj
 pygments
 geopandas
