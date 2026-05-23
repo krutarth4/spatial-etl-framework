@@ -677,6 +677,23 @@ class DataSourceABCImpl(DataSourceABC):
         if not self.is_run_input_available(paths):
             return self.run_job_response("No files available")
 
+        # _last_fetch_performed_download is explicitly False when a metadata check
+        # ran and found no new data (files were already up-to-date).  None means
+        # no metadata check was done (e.g. local-file source) — still process.
+        if self._last_fetch_performed_download is False:
+            populated, reason = self._downstream_tables_are_populated()
+            if populated:
+                self.logger.info(
+                    f"[{self.data_source_name}] No new data and tables are healthy — "
+                    f"skipping transform / load / mapping stages."
+                )
+                return self.run_job_response("Skipped — no new data, tables already populated")
+            else:
+                self.logger.warning(
+                    f"[{self.data_source_name}] No new data downloaded but tables need (re)building: "
+                    f"{reason} — forcing full pipeline run."
+                )
+
         with self._time_stage("prepare_tables"):
             self.prepare_run_resources(paths)
         with self._time_stage("process_files_wall"):
@@ -691,6 +708,73 @@ class DataSourceABCImpl(DataSourceABC):
 
     def is_run_input_available(self, paths: list | None) -> bool:
         return DataSourceABCImpl.is_file_available(paths)
+
+    # ------------------------------------------------------------------
+    # Table-population health checks (used by the no-new-data skip gate)
+    # ------------------------------------------------------------------
+
+    def _safe_table_count(self, table_name: str, schema: str) -> int:
+        """Return row count of a table, or 0 if it doesn't exist yet."""
+        try:
+            if not self.db.table_exists(table_name, schema):
+                return 0
+            return self.db.get_table_count(table_name, schema)
+        except Exception as e:
+            self.logger.warning(
+                f"[{self.data_source_name}] Could not count {schema}.{table_name}: {e}"
+            )
+            return 0
+
+    def _downstream_tables_are_populated(self) -> tuple[bool, str]:
+        """Check that staging, enrichment, and mapping tables all have data.
+
+        For the mapping table the threshold is >= ways_base row count, since
+        some datasources map multiple rows per way (e.g. air quality grids).
+
+        Returns:
+            (True, "")                       — all tables healthy, safe to skip
+            (False, "<human-readable reason>")— at least one table is missing /
+                                               empty / under-populated
+        """
+        if self.db is None:
+            return False, "no db connection"
+
+        storage = self.data_source_config.storage
+        reasons: list[str] = []
+
+        # ── staging ──────────────────────────────────────────────────────────
+        if storage and storage.staging:
+            s = storage.staging
+            count = self._safe_table_count(s.table_name, s.table_schema)
+            if count == 0:
+                reasons.append(f"staging table {s.table_schema}.{s.table_name} is empty or missing")
+
+        # ── enrichment ───────────────────────────────────────────────────────
+        if storage and storage.enrichment:
+            e = storage.enrichment
+            count = self._safe_table_count(e.table_name, e.table_schema)
+            if count == 0:
+                reasons.append(f"enrichment table {e.table_schema}.{e.table_name} is empty or missing")
+
+        # ── mapping: must have >= ways_base row count ─────────────────────────
+        mapping_conf = getattr(self.data_source_config, "mapping", None)
+        if mapping_conf and getattr(mapping_conf, "enable", False):
+            mapped_count = self._safe_table_count(mapping_conf.table_name, mapping_conf.table_schema)
+            ways_count = self.base_graph.get_base_graph_row_counts()
+            if mapped_count < ways_count:
+                reasons.append(
+                    f"mapping table {mapping_conf.table_schema}.{mapping_conf.table_name} "
+                    f"has {mapped_count} rows but ways_base has {ways_count}"
+                )
+            else:
+                self.logger.info(
+                    f"[{self.data_source_name}] Mapping table healthy: "
+                    f"{mapped_count} mapping rows >= {ways_count} ways_base rows"
+                )
+
+        if reasons:
+            return False, "; ".join(reasons)
+        return True, ""
 
     def prepare_run_resources(self, paths: list[str]):
         self.create_data_tables()
@@ -1366,17 +1450,30 @@ class DataSourceABCImpl(DataSourceABC):
             raise
 
     def _map_to_base_full_rescan(self):
-        """Original count-based skip gate. Runs the mapping strategy iff the
-        mapping table row count diverges from ways_base."""
+        """Count-based skip gate. Runs the mapping strategy only if the mapping
+        table has fewer rows than ways_base.
+
+        Using '<' (not '!=') is intentional: datasources like air quality map
+        multiple rows per way (one per grid cell), so their mapping table will
+        always have MORE rows than ways_base — that is healthy and should not
+        trigger a re-run.  We only re-run when coverage is genuinely incomplete.
+        """
         total_ways_count = self.base_graph.get_base_graph_row_counts()
         mapped_ways_count = self.db.get_table_count(
             self.data_source_config.mapping.table_name,
             self.data_source_config.mapping.table_schema,
         )
-        if mapped_ways_count != total_ways_count:
+        if mapped_ways_count < total_ways_count:
+            self.logger.info(
+                f"Mapping table has {mapped_ways_count} rows but ways_base has "
+                f"{total_ways_count} — running mapping strategy."
+            )
             self.execute_mapping_strategy()
         else:
-            self.logger.info(f"Skipping mapping as all ways geometry mapped....")
+            self.logger.info(
+                f"Skipping mapping — table already has {mapped_ways_count} rows "
+                f">= {total_ways_count} ways_base rows."
+            )
 
     def _map_to_base_incremental(self):
         """Diff-driven mapping. Runs only if this datasource hasn't already
