@@ -910,11 +910,8 @@ class DataSourceABCImpl(DataSourceABC):
     def execute_query(self, table_key: str, query: str | None, params= None):
         if query is not None:
             # self.logger.info(f"calling the query for {table_key} -->, {query}")
-            # Use batched execution for mapping queries if configured
-            if table_key.lower() == "mapping" and self._should_use_batching():
-                batch_size = self._get_batch_size()
-                self.logger.info(f"Using batched execution for {table_key} with batch size: {batch_size}")
-                self.db.call_sql_batched(query, batch_size=batch_size, params=params)
+            if table_key.lower() == "mapping":
+                self._execute_mapping_query(query, params)
             else:
                 self.db.call_sql(query, params)
         else:
@@ -922,6 +919,47 @@ class DataSourceABCImpl(DataSourceABC):
                 self.logger.info(
                     "No mapping Query given. Please write a postgresql query in the respective mapper class. Implement "
                     "func map_to_link_db_query")
+
+    def _execute_mapping_query(self, query: str, params=None) -> None:
+        """Decide between single-shot vs batched execution for a mapping query.
+
+        Incremental mappings carry a `b.id IN (changed)` WHERE filter, so a
+        single transaction already touches only the changed-ways subset — the
+        full-base LIMIT/OFFSET batching path would just scan the entire base
+        in windows for nothing. We short-circuit it unless the diff is huge
+        enough that one transaction would hold locks too long."""
+        mapping_conf = getattr(self.data_source_config, "mapping", None)
+        if getattr(mapping_conf, "incremental", False):
+            batch_size = self._get_batch_size()
+            change_count = self.base_graph.pending_change_count()
+            if change_count == 0:
+                self.logger.info(
+                    f"[incremental] No changed ways to map for {self.data_source_name}, skipping query"
+                )
+                return
+            if change_count <= batch_size or not self._should_use_batching():
+                self.logger.info(
+                    f"[incremental] Running mapping in single transaction "
+                    f"({change_count} changed ways, batch_size={batch_size})"
+                )
+                self.db.call_sql(query, params)
+                return
+            # Large diff: fall through to the existing batched executor. It
+            # still slices the full base, but the WHERE filter keeps each
+            # window cheap, and segmenting the transaction caps lock duration.
+            self.logger.info(
+                f"[incremental] Large diff ({change_count} changed ways) — "
+                f"using batched execution with batch size {batch_size}"
+            )
+            self.db.call_sql_batched(query, batch_size=batch_size, params=params)
+            return
+
+        if self._should_use_batching():
+            batch_size = self._get_batch_size()
+            self.logger.info(f"Using batched execution for Mapping with batch size: {batch_size}")
+            self.db.call_sql_batched(query, batch_size=batch_size, params=params)
+        else:
+            self.db.call_sql(query, params)
 
     def _should_use_batching(self) -> bool:
         """
@@ -1223,18 +1261,28 @@ class DataSourceABCImpl(DataSourceABC):
             self.logger.info(f"Skipping mapping as all ways geometry mapped....")
 
     def _map_to_base_incremental(self):
-        """Diff-driven mapping. Runs only if ways_base_changes is non-empty;
-        first deletes stale mapping rows for changed/removed ways, then
-        executes the strategy SQL (which the builder/template scopes via the
-        changed-ways filter)."""
-        if not self.base_graph.has_pending_changes():
+        """Diff-driven mapping. Runs only if this datasource hasn't already
+        consumed the current change-set generation; first deletes stale mapping
+        rows for changed/removed ways, then executes the strategy SQL (which
+        the builder/template scopes via the changed-ways filter). On success,
+        records the generation so subsequent runs short-circuit until a new
+        populate produces a new diff."""
+        if not self.base_graph.has_pending_changes_for(self.data_source_name):
             self.logger.info(
                 f"Skipping incremental mapping for {self.data_source_name}: "
-                f"no ways_base changes pending."
+                f"already consumed current ways_base change-set."
             )
             return
+        # Snapshot generation BEFORE mapping so a concurrent populate doesn't
+        # cause us to mark consumed > what we actually processed.
+        generation = self.base_graph.current_generation()
         self._delete_mapping_for_changed_ways()
         self.execute_mapping_strategy()
+        self.base_graph.mark_consumed(self.data_source_name, generation)
+        self.logger.info(
+            f"[incremental] Marked {self.data_source_name} consumed at "
+            f"ways_base_changes generation {generation}"
+        )
 
     def _delete_mapping_for_changed_ways(self):
         """Remove mapping rows whose way_id is in the 'removed' or 'modified'
