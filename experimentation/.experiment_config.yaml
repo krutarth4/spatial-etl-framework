@@ -300,7 +300,7 @@ datasources:
         - '00430'
         - '00433'
       params:
-        date: '2026-05-23T20:44:51.247881+02:00'
+        date: '2026-05-23T21:04:29.798906+02:00'
     stream: true
     save_local: true
     destination: tmp/brightsky/weather-data/weather_forecast.json
