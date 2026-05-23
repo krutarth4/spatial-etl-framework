@@ -510,6 +510,7 @@ class DataSourceABCImpl(DataSourceABC):
     def start_execution(self):
         self.logger.info(f"Executing starting for datasource {self.data_source_config.name}")
         self.start_timer = time.perf_counter()
+        self._run_started_at = datetime.utcnow()
 
     def extract(self):
         paths = self.source(self.data_source_config.source)
@@ -622,6 +623,7 @@ class DataSourceABCImpl(DataSourceABC):
         self._run_degraded = False
         self._run_stage_warnings = []
         self._stage_timings = {}
+        self._run_started_at = None
 
     @contextmanager
     def _time_stage(self, name: str):
@@ -1001,9 +1003,12 @@ class DataSourceABCImpl(DataSourceABC):
             log_dir.mkdir(parents=True, exist_ok=True)
             csv_path = log_dir / "stage_timings.csv"
             stage_keys = [key for key, _ in self._STAGE_REPORT_ORDER]
-            fieldnames = ["timestamp", "datasource", "status", "message", "total_s", *stage_keys]
+            fieldnames = ["start_timestamp", "end_timestamp", "datasource", "status", "message", "total_s", *stage_keys]
+            end_dt = datetime.utcnow()
+            start_dt = self._run_started_at or end_dt
             row = {
-                "timestamp": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                "start_timestamp": start_dt.isoformat(timespec="seconds") + "Z",
+                "end_timestamp": end_dt.isoformat(timespec="seconds") + "Z",
                 "datasource": ds_name,
                 "status": level,
                 "message": message,
