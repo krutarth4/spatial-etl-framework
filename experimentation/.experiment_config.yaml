@@ -1,0 +1,769 @@
+logging:
+  enable: true
+  dir: logs
+  filename: pipeline.log
+  level: INFO
+  rotation:
+    max_bytes: 10485760
+    backup_count: 7
+    encoding: utf-8
+server:
+  app_type: core.main:app
+  enable: true
+  name: fastAPI
+  description: this is a API server used for debugging purpose to see the data call
+    for faster development
+  host: 0.0.0.0
+  port: 8000
+  reload: true
+runtime:
+  config_watch:
+    enable: true
+    poll_seconds: 30
+materialized_views:
+  enable: true
+  mv_folder: ./mv_configs/
+scheduler:
+  name: APSScheduler
+  enable: true
+  description: This is a scheduler which helps to orchestrate the background task
+    on either thread or process level
+  timezone: Europe/Berlin
+  scheduler_type: BackgroundScheduler
+  wait_before_shutdown: false
+data_folder: ./data_source_configs/
+env_variables:
+  base_schema: exp_null
+  base_table: ways_base
+database:
+  description: Database used for APSScheduler + data storage
+  enable: true
+  driver: postgresql+psycopg
+  url: localhost
+  port: '5432'
+  database_name: test
+  database_schema: exp_null
+  credential:
+    username: postgres
+    password: admin123
+  performance:
+    enable_batching: true
+    default_batch_size: 100000
+  pool:
+    pool_size: 10
+    max_overflow: 10
+    pool_pre_ping: true
+    echo: false
+    application_name: Spatial-ETL-pipeline
+metadata-datasource:
+  description: this will contain all the data realted to data sources to store particular
+    information
+  table_schema: exp_null
+base:
+  table_name: ways_base
+  table_schema: exp_null
+  force_generate: false
+_base_table_conf:
+  table_name: ways_base
+  table_schema: exp_null
+mapping_defaults:
+  table_schema: exp_null
+  incremental: false
+graph:
+  enable: false
+  tool: external_ingest
+  communication:
+    enable: true
+    state_file: tmp/comm_state.json
+    router:
+      base_url: http://localhost:8082
+      timeout_seconds: 5
+    tasks:
+    - key: read_osm_file
+      owner: router
+      status: idle
+      is_completed: false
+    - key: main_ways_table
+      owner: router
+      status: idle
+      is_completed: false
+    - key: ways_base_table
+      owner: mdp
+      status: idle
+      is_completed: false
+    - key: osm_file_update
+      owner: mdp
+      status: idle
+      is_completed: false
+    - key: osm_file_download
+      owner: mdp
+      status: idle
+      is_completed: false
+    waits:
+      router_coupled:
+        enable: false
+        task_key: osm_graph
+        poll_seconds: 5
+        timeout_seconds: null
+      main_ways_before_base:
+        enable: true
+        task_key: main_ways_table
+        poll_seconds: 5
+        timeout_seconds: null
+        require_is_completed: true
+  schema: exp_null
+  table_name: way_segment
+  env:
+    pass: admin123
+  osm_file_path: ./tmp/osm_graph/berlin.osm.pbf
+  datasource:
+  - name: osm_graph
+    description: gets weather station data with their location
+    enable: true
+    class_name: graph
+    debug:
+      endpoint: osm-graph
+    data_type: static
+    source:
+      fetch: http
+      mode: single
+      check_metadata:
+        enable: true
+        keys:
+        - last_modified
+      url: https://download.geofabrik.de/europe/germany/berlin-latest.osm.pbf
+      stream: true
+      save_local: true
+      destination: ./tmp/osm_graph/berlin.osm.pbf
+      response_type: pbf
+    job:
+      name: graphJob
+      id: graphJob
+      trigger:
+        type:
+          name: interval
+          start_date: 2025-12-21 11:15:00
+          config:
+            days: 15
+      replace_existing: true
+      coalesce: true
+      max_instances: 1
+      next_run_time: none
+    mapping:
+      enable: true
+      incremental: false
+      joins_on: dwd_station_id
+      table_name: dwd_mapping_stations
+      table_schema: exp_null
+      base_table:
+        table_name: ways_base
+        table_schema: exp_null
+        column_name: dwd_station_id
+        column_type: String
+    storage:
+      force_create: false
+      persistent: false
+      expires_after: 6h
+      staging:
+        table_name: dwd_station_locations
+        table_schema: exp_null
+        table_class: DwdStationsTable
+        persistent: false
+      enrichment:
+        table_name: dwd_weather_station_enrichment
+        table_schema: exp_null
+        table_class: StationLocationLink
+  cmd:
+  - osm2pgrouting
+  - -f
+  - ./tmp/osm_graph/berlin_latest.osm
+  - -d
+  - test
+  - -p
+  - '5432'
+  - -U
+  - postgres
+  - -W
+  - admin123
+  - -c
+  - mapconfig.xml
+  - --schema
+  - exp_null
+  - --no-index
+datasources:
+- name: weather_station_bright_sky
+  description: gets weather station data with their location
+  enable: false
+  class_name: weatherStation
+  debug:
+    endpoint: weather-station
+  table_name: dwd_station_locations
+  data_type: static
+  source:
+    fetch: http
+    mode: single
+    check_metadata:
+      enable: true
+      keys:
+      - last_modified
+    url: https://api.brightsky.dev/sources
+    stream: true
+    save_local: true
+    destination: tmp/brightsky/stations/weatherStation.json
+    response_type: json
+    header:
+      Accept: application/json
+    params:
+      dwd_station_id:
+      - 00399
+      - '00403'
+      - '00400'
+      - '00410'
+      - '00420'
+      - '00427'
+      - '00430'
+      - '00433'
+  job:
+    name: weatherJob
+    id: weatherJob
+    trigger:
+      type:
+        name: interval
+        start_date: 2025-12-21 11:15:00
+        config:
+          hours: 10
+    replace_existing: true
+    coalesce: true
+    max_instances: 1
+    next_run_time: none
+  mapping:
+    enable: true
+    incremental: true
+    joins_on: dwd_station_id
+    table_name: dwd_station_locations_mapping
+    strategy:
+      type: knn
+      link_on:
+        mapping_column: dwd_station_id
+        base_column: dwd_station_id
+        basis: nearest_by_distance
+    config:
+      base_geometry_column: geometry
+      enrichment_geometry_column: point
+      distance_sql: ST_Distance({base_geometry}::geography, {enrichment_geometry}::geography)
+      order_by_sql: ST_Distance({base_geometry}::geography, {enrichment_geometry}::geography)
+      select_columns:
+      - expression: MOD(  (DEGREES(    ST_Azimuth(      ST_StartPoint({base_geometry}),      ST_EndPoint({base_geometry})    )  )
+          + 360)::NUMERIC,  360)
+        alias: bearing_degree
+    base_table:
+      table_name: ways_base
+      table_schema: exp_null
+      column_name: dwd_station_id
+      column_type: String
+  storage:
+    force_create: false
+    persistent: true
+    staging:
+      table_name: dwd_station_locations_staging
+      table_schema: exp_null
+      table_class: DwdStationsTable
+      persistent: false
+    enrichment:
+      table_name: dwd_station_locations_enrichment
+      table_schema: exp_null
+      table_class: DwdWeatherStationEnrichmentTable
+- name: weather_forecast_bright_sky
+  description: get weather forecast for the dwd_stations in params with hourly forecast
+  enable: true
+  class_name: weather
+  debug:
+    endpoint: weather-forecast
+  data_type: dynamic
+  source:
+    fetch: http
+    mode: multi
+    check_metadata:
+      enable: false
+    url: https://api.brightsky.dev/weather
+    multi_fetch:
+      enable: true
+      strategy: expand_params
+      expand:
+        dwd_station_id:
+        - 00399
+        - '00403'
+        - '00400'
+        - '00410'
+        - '00420'
+        - '00427'
+        - '00430'
+        - '00433'
+      params:
+        date: '2026-05-23T20:44:51.247881+02:00'
+    stream: true
+    save_local: true
+    destination: tmp/brightsky/weather-data/weather_forecast.json
+    response_type: json
+    header:
+      Accept: application/json
+  job:
+    name: weatherForecastJob
+    id: weatherForecastJob
+    trigger:
+      type:
+        name: run_once
+    replace_existing: true
+    coalesce: true
+    max_instances: 1
+    next_run_time: none
+  mapping:
+    enable: false
+    joins_on: way_id
+    base_table:
+      table_name: ways_base
+      table_schema: exp_null
+      column_name: station
+      column_type: Integer
+  storage:
+    force_create: false
+    enrichment:
+      table_name: weather_enrichment
+      table_schema: exp_null
+      table_class: WeatherEnrichmentTable
+    persistent: true
+    expires_after: 1d
+    staging:
+      table_name: weather_staging
+      table_schema: exp_null
+      table_class: WeatherStagingTable
+      persistent: false
+- name: air_quality_data_download
+  description: Air quality data from the dcaiti Tu Berlin server
+  enable: true
+  class_name: airQualityData
+  debug:
+    endpoint: air-quality
+  data_type: dynamic
+  source:
+    fetch: http
+    mode: multi
+    check_metadata:
+      enable: true
+      keys:
+      - last_modified
+    url: https://werkzeug.dcaiti.tu-berlin.de/fairqberlin/
+    multi_fetch:
+      enable: true
+      strategy: url_template
+      url_template: https://werkzeug.dcaiti.tu-berlin.de/fairqberlin/inwt_fairq_cache_skip_{skip}_limit_100000.json.gz
+      template_params:
+        skip:
+        - 0
+        - 100000
+        - 200000
+        - 300000
+    stream: true
+    save_local: true
+    destination: tmp/dcaiti/airqualityAPI/fairq.gz
+    response_type: json.gz
+    header:
+      Accept: null
+  job:
+    name: airPollutionJob
+    id: airPollutionJob
+    trigger:
+      type:
+        name: run_once
+        start_date: null
+        end_date: null
+        config: null
+    replace_existing: true
+    coalesce: true
+    max_instances: 1
+    next_run_time: none
+  mapping:
+    enable: true
+    joins_on: way_id
+    table_name: air_pollution_grid_mapping
+    strategy:
+      type: sql_template
+    config:
+      sql_file: mapping_sql/air_quality.sql
+    base_table:
+      table_name: ways_base
+      table_schema: exp_null
+      column_name: air_pollution
+      column_type: Integer
+  storage:
+    persistent: true
+    expires_after: 6h
+    staging:
+      table_name: air_pollution_grid
+      table_schema: exp_null
+      table_class: AirPollutionGridStagingTable
+    enrichment:
+      table_name: air_pollution_grid_enrichment
+      table_schema: exp_null
+      table_class: AirPollutionGridEnrichmentTable
+- name: elevation_grids_links
+  description: 1m elevation Grid links
+  enable: true
+  check_before_update: true
+  class_name: elevationGrid
+  debug:
+    endpoint: elevation-grids
+  data_type: dynamic
+  source:
+    input: none
+    mode: single
+    check_metadata:
+      enable: true
+      keys:
+      - last_modified
+    url: https://gdi.berlin.de/data/dgm1/atom/0.atom
+    file_path: ''
+    fetch: http
+    stream: true
+    save_local: true
+    destination: tmp/elevation_grid/elevation.xml
+    response_type: xml
+    header:
+      Accept: application/atom+xml
+    params: null
+  before_filter_hook:
+    enable: true
+  after_filter_hook:
+    save: true
+    destination: data/grid/elevation_grid_links.json
+  before_load_hook:
+    enable: false
+  post-database-processing:
+    enable: false
+  job:
+    name: elevationJob
+    id: elevationJob
+    trigger:
+      type:
+        name: run_once
+    replace_existing: true
+    coalesce: true
+    max_instances: 1
+    next_run_time: none
+  mapping:
+    enable: false
+    joins_on: id
+    base_table:
+      table_name: ways_base
+      table_schema: exp_null
+      column_name: elevation_factor
+      column_type: Integer
+  storage:
+    persistent: false
+- name: elevation
+  description: 1m elevation
+  enable: false
+  class_name: elevation
+  debug:
+    endpoint: elevation
+  data_type: static
+  source:
+    input: none
+    mode: multi
+    check_metadata:
+      enable: true
+      keys:
+      - last_modified
+    file_path: ''
+    fetch: http
+    stream: true
+    save_local: true
+    destination: tmp/elevation_zips/elevation.zip
+    response_type: zip
+    multi_fetch:
+      enable: true
+      strategy: explicit_url_list
+      urls:
+        input: data/grid/elevation_grid_links.json
+  job:
+    name: elevationJob
+    id: elevationJob
+    trigger:
+      type:
+        name: run_once
+    replace_existing: true
+    coalesce: true
+    max_instances: 1
+    next_run_time: none
+  mapping:
+    enable: true
+    joins_on: id
+    table_name: elevation_mapping
+    strategy:
+      type: sql_template
+    config:
+      sql_file: mapping_sql/elevation.sql
+    base_table:
+      table_name: ways_base
+      table_schema: exp_null
+      column_name: elevation_factor
+      column_type: Integer
+  storage:
+    persistent: true
+    expires_after: 6h
+    staging:
+      table_name: elevation_staging
+      table_schema: exp_null
+      table_class: ElevationStagingTable
+    enrichment:
+      table_name: elevation_enrichment
+      table_schema: exp_null
+      table_class: ElevationEnrichmentTable
+- name: elevation_python
+  description: 1m elevation
+  enable: false
+  class_name: elevationPython
+  debug:
+    endpoint: elevation-python
+  data_type: static
+  source:
+    input: none
+    mode: multi
+    check_metadata:
+      enable: true
+      keys:
+      - last_modified
+    file_path: ''
+    fetch: http
+    stream: true
+    save_local: true
+    destination: tmp/elevation_zips/elevation.zip
+    response_type: zip
+    multi_fetch:
+      enable: true
+      strategy: explicit_url_list
+      urls:
+        input: data/grid/elevation_grid_links.json
+  job:
+    name: elevationPythonJob
+    id: elevationPythonJob
+    trigger:
+      type:
+        name: run_once
+    replace_existing: true
+    coalesce: true
+    max_instances: 1
+    next_run_time: none
+  mapping:
+    enable: true
+    joins_on: way_id
+    table_name: elevation_python_mapping
+    strategy:
+      type: sql_template
+    config:
+      sql_file: mapping_sql/elevation_python.sql
+    base_table:
+      table_name: ways_base
+      table_schema: exp_null
+      column_name: elevation_factor
+      column_type: Integer
+  storage:
+    persistent: true
+    expires_after: 6h
+    staging:
+      table_name: elevation_python_staging
+      table_schema: exp_null
+      table_class: ElevationPythonStagingTable
+- name: tree_wfs_capabilities
+  description: tree data for the streets
+  enable: false
+  class_name: treeWfsCapabilities
+  debug:
+    endpoint: tree-wfs-capabilities
+  data_type: static
+  source:
+    input: none
+    mode: single
+    check_metadata:
+      enable: true
+      keys:
+      - content_length
+    file_path: ''
+    fetch: http
+    url: https://gdi.berlin.de/services/wfs/baumbestand
+    stream: true
+    save_local: true
+    destination: tmp/tree_wfs/capabilities/tree_capabilities.xml
+    response_type: xml
+    params:
+      service: wfs
+      version: 2.0.0
+      request: GetCapabilities
+  job:
+    name: treeJob
+    id: treeJob
+    trigger:
+      type:
+        name: run_once
+    replace_existing: true
+    coalesce: true
+    max_instances: 1
+    next_run_time: none
+    executor: process
+  mapping:
+    enable: false
+    joins_on: id
+    base_table:
+      table_name: ways_base
+      table_schema: exp_null
+      column_name: elevation_factor
+      column_type: Integer
+  storage:
+    persistent: false
+    expires_after: 6h
+    staging:
+      table_name: tree
+      table_schema: exp_null
+      table_class: TreeTabl
+    enrichment:
+      table_name: tree
+      table_schema: exp_null
+      table_class: TreeTabl
+- name: tree
+  description: Get Trees on the side of the road within 50 m distance
+  enable: false
+  class_name: tree
+  debug:
+    endpoint: tree
+  data_type: static
+  source:
+    input: none
+    mode: multi
+    check_metadata:
+      enable: true
+      keys:
+      - content_type
+    file_path: ''
+    fetch: http
+    url: https://gdi.berlin.de/services/wfs/baumbestand
+    stream: true
+    save_local: true
+    destination: tmp/tree_wfs/tree_ablage/gpkg_packet.gpkg
+    response_type: gpkg
+    multi_fetch:
+      enable: true
+      strategy: expand_params
+      expand:
+        typenames:
+        - baumbestand:anlagenbaeume
+        - baumbestand:strassenbaeume
+      params:
+        service: wfs
+        version: 2.0.0
+        request: GetFeature
+        outputFormat: geopackage
+        sortBy: gisid
+  job:
+    name: treeJob
+    id: treeJob
+    trigger:
+      type:
+        name: run_once
+    replace_existing: true
+    coalesce: true
+    max_instances: 1
+    next_run_time: 00:00:00
+  mapping:
+    enable: true
+    table_name: tree_mapping
+    joins_on: id
+    strategy:
+      type: aggregate_within_distance
+    config:
+      max_distance: 50
+      base_geometry_column: geometry_25833
+      enrichment_geometry_column: geometry_25833
+      aggregation_type: jsonb_build_object
+      aggregation_expression: COALESCE(  jsonb_agg(    jsonb_build_object(      'tree_id',
+        {enrichment_alias}.id,      'source_id', {enrichment_alias}.source_id,      'distance_m',
+        ST_Distance({enrichment_alias}.geometry_25833, {base_geometry})    )    ORDER
+        BY ST_Distance({enrichment_alias}.geometry_25833, {base_geometry})  ) FILTER
+        (WHERE {enrichment_alias}.id IS NOT NULL),  '[]'::jsonb)
+      aggregation_alias: trees
+    base_table:
+      table_name: ways_base
+      table_schema: exp_null
+      column_name: elevation_factor
+      column_type: Integer
+  storage:
+    persistent: true
+    expires_after: 6h
+    staging:
+      table_name: tree_staging
+      table_schema: exp_null
+      table_class: TreeStaging
+- name: pleasant_bicycling
+  description: Get the density of vehicles on the road
+  enable: false
+  class_name: pleasantBicycling
+  debug:
+    endpoint: pleasant-bicycling
+  data_type: dynamic
+  source:
+    input: none
+    mode: single
+    check_metadata:
+      enable: true
+      keys:
+      - content_type
+    file_path: data/pleasant_bicycle/aggregated_metrics.parquet
+    fetch: local
+    stream: true
+    save_local: true
+    destination: tmp/pleasant_bicycle/pleasant.csv
+    response_type: csv
+    multi_fetch:
+      enable: false
+      strategy: expand_params
+  job:
+    name: pleasantJob
+    id: pleasantJob
+    trigger:
+      type:
+        name: run_once
+    replace_existing: true
+    coalesce: true
+    max_instances: 1
+    next_run_time: 00:00:00
+  mapping:
+    enable: true
+    table_name: pleasant_mapping
+    joins_on: connection_id
+    strategy:
+      type: knn
+      link_on:
+        mapping_column: connection_id
+        basis: nearest_within_distance
+    config:
+      base_geometry_column: geometry_25833
+      enrichment_geometry_column: geometry_25833
+      enrichment_filter_sql: ST_DWithin(b.geometry_25833, e.geometry_25833, 20)
+      order_by_sql: connection_id, {base_geometry} <-> {enrichment_geometry}
+      distance_sql: ST_Distance({base_geometry}, {enrichment_geometry})
+      distance_alias: distance_m
+    base_table:
+      table_name: ways_base
+      table_schema: exp_null
+      column_name: pleasant_score
+      column_type: Float
+  storage:
+    persistent: true
+    expires_after: 6h
+    staging:
+      table_name: pleasant_staging
+      table_schema: exp_null
+      table_class: PleasantStagingTable
+    enrichment:
+      table_name: pleasant_enrichment
+      table_schema: exp_null
+      table_class: PleasantEnrichmentTable
