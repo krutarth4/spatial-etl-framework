@@ -1,8 +1,10 @@
+import csv
 import os
 import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
 from itertools import product
@@ -72,6 +74,8 @@ class DataSourceABCImpl(DataSourceABC):
         self.raw_staging_table = None
         self.raw_staging_schema = None
         self._last_fetch_performed_download: bool | None = None
+        self._stage_timings: dict[str, float] = {}
+        self._stage_lock = threading.Lock()
         self._register_datasource_metadata()
         self.scheduler = scheduler_core
 
@@ -565,7 +569,8 @@ class DataSourceABCImpl(DataSourceABC):
         try:
             self.before_process_file(path)
             t0 = time.monotonic()
-            transformed_data = self.transform(path)
+            with self._accumulate_stage("transform"):
+                transformed_data = self.transform(path)
             self.logger.info(
                 f"[THREAD TRANSFORM DONE] name={thread.name} "
                 f"rows={len(transformed_data) if transformed_data else 0} "
@@ -579,7 +584,8 @@ class DataSourceABCImpl(DataSourceABC):
                 return
 
             t1 = time.monotonic()
-            self.load(transformed_data)
+            with self._accumulate_stage("load_raw_staging"):
+                self.load(transformed_data)
             self.logger.info(
                 f"[THREAD LOAD DONE] name={thread.name} "
                 f"time={time.monotonic() - t1:.2f}s"
@@ -613,6 +619,27 @@ class DataSourceABCImpl(DataSourceABC):
         self._last_fetch_performed_download = None
         self._run_degraded = False
         self._run_stage_warnings = []
+        self._stage_timings = {}
+
+    @contextmanager
+    def _time_stage(self, name: str):
+        """Record wall-clock duration of a single (serial) pipeline stage."""
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            self._stage_timings[name] = self._stage_timings.get(name, 0.0) + (time.perf_counter() - t0)
+
+    @contextmanager
+    def _accumulate_stage(self, name: str):
+        """Thread-safe accumulator for stages that run inside parallel workers (sum across workers)."""
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            dt = time.perf_counter() - t0
+            with self._stage_lock:
+                self._stage_timings[name] = self._stage_timings.get(name, 0.0) + dt
 
     def run(self):
         self._reset_run_state()
@@ -640,13 +667,16 @@ class DataSourceABCImpl(DataSourceABC):
             self.run_end_cleanup(run_succeeded, run_error)
 
     def execute_run_pipeline(self):
-        paths = self.extract()
+        with self._time_stage("extract"):
+            paths = self.extract()
         self._update_metadata_runtime_paths(paths)
         if not self.is_run_input_available(paths):
             return self.run_job_response("No files available")
 
-        self.prepare_run_resources(paths)
-        self.process_extracted_paths(paths)
+        with self._time_stage("prepare_tables"):
+            self.prepare_run_resources(paths)
+        with self._time_stage("process_files_wall"):
+            self.process_extracted_paths(paths)
         self.finalize_after_file_processing()
         if self._run_degraded:
             return self.run_job_response(
@@ -690,19 +720,28 @@ class DataSourceABCImpl(DataSourceABC):
         self.post_database_processing()
         sync_result = None
         if self.data_source_config.storage.persistent:
-            sync_result = self.sync_raw_to_staging()
-            self.create_indexes_for_table("staging")
-            self.execute_on_staging()
-            self.sync_staging_to_enrichment()
-            self.create_indexes_for_table("enrichment")
-            self.execute_on_enrichment()
-        self.map_to_base()
-        self.create_indexes_for_table("mapping")
+            with self._time_stage("raw->staging"):
+                sync_result = self.sync_raw_to_staging()
+            with self._time_stage("idx_staging"):
+                self.create_indexes_for_table("staging")
+            with self._time_stage("exec_on_staging"):
+                self.execute_on_staging()
+            with self._time_stage("staging->enrichment"):
+                self.sync_staging_to_enrichment()
+            with self._time_stage("idx_enrichment"):
+                self.create_indexes_for_table("enrichment")
+            with self._time_stage("exec_on_enrichment"):
+                self.execute_on_enrichment()
+        with self._time_stage("map_to_base"):
+            self.map_to_base()
+        with self._time_stage("idx_mapping"):
+            self.create_indexes_for_table("mapping")
         self.after_datasource_success(sync_result)
         self.cleanup_after_finalize(sync_result)
 
     def after_datasource_success(self, sync_result: dict | None = None):
-        self.trigger_materialized_views(sync_result)
+        with self._time_stage("mv_refresh"):
+            self.trigger_materialized_views(sync_result)
 
     def cleanup_after_finalize(self, sync_result: dict | None):
         backup_raw = not (sync_result or {}).get("success")
@@ -905,7 +944,78 @@ class DataSourceABCImpl(DataSourceABC):
         log_fn = getattr(self.logger, level, self.logger.info)
         log_fn(log_line)
 
+        self._emit_stage_timing_report(duration, level, message)
+
         return {"message": message, "duration": formatted_duration, "level": level}
+
+    # Fixed order so the table reads top-to-bottom along the pipeline.
+    # `(Σ)` suffix marks cumulative-across-workers (parallel) stages; others are wall-clock.
+    _STAGE_REPORT_ORDER = [
+        ("extract", "extract"),
+        ("prepare_tables", "prepare_tables"),
+        ("process_files_wall", "process_files (wall)"),
+        ("transform", "  transform (Σ)"),
+        ("load_raw_staging", "  load_raw_staging (Σ)"),
+        ("raw->staging", "raw -> staging"),
+        ("idx_staging", "idx_staging"),
+        ("exec_on_staging", "exec_on_staging"),
+        ("staging->enrichment", "staging -> enrichment"),
+        ("idx_enrichment", "idx_enrichment"),
+        ("exec_on_enrichment", "exec_on_enrichment"),
+        ("map_to_base", "map_to_base"),
+        ("idx_mapping", "idx_mapping"),
+        ("mv_refresh", "mv_refresh"),
+    ]
+
+    def _emit_stage_timing_report(self, total_seconds: float, level: str, message: str):
+        timings = self._stage_timings or {}
+        ds_name = self.data_source_config.name
+        rows = []
+        for key, label in self._STAGE_REPORT_ORDER:
+            if key in timings:
+                rows.append((label, format_duration(timings[key]), timings[key]))
+            else:
+                rows.append((label, "-", None))
+
+        label_w = max(len(r[0]) for r in rows)
+        value_w = max(len(r[1]) for r in rows)
+        header = f" {ds_name} — total {format_duration(total_seconds)} "
+        inner_w = max(label_w + value_w + 4, len(header))
+        top = f"┌{header.center(inner_w, '─')}┐"
+        bot = "└" + "─" * inner_w + "┘"
+        body_lines = [
+            f"│ {label.ljust(label_w)}  {value.rjust(value_w)}{' ' * (inner_w - label_w - value_w - 4)} │"
+            for label, value, _ in rows
+        ]
+        table = "\n".join(["", top, *body_lines, bot])
+        self.logger.report(table)
+
+        self._append_stage_timing_csv(ds_name, total_seconds, level, message, timings)
+
+    def _append_stage_timing_csv(self, ds_name: str, total_seconds: float, level: str, message: str, timings: dict[str, float]):
+        try:
+            log_dir = Path("logs")
+            log_dir.mkdir(parents=True, exist_ok=True)
+            csv_path = log_dir / "stage_timings.csv"
+            stage_keys = [key for key, _ in self._STAGE_REPORT_ORDER]
+            fieldnames = ["timestamp", "datasource", "status", "message", "total_s", *stage_keys]
+            row = {
+                "timestamp": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                "datasource": ds_name,
+                "status": level,
+                "message": message,
+                "total_s": f"{total_seconds:.3f}",
+            }
+            for key in stage_keys:
+                row[key] = f"{timings[key]:.3f}" if key in timings else ""
+            write_header = not csv_path.exists()
+            with open(csv_path, "a", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                if write_header:
+                    writer.writeheader()
+                writer.writerow(row)
+        except Exception as e:
+            self.logger.error(f"Failed to append stage timings CSV: {e}", exc_info=False)
 
     def execute_query(self, table_key: str, query: str | None, params= None):
         if query is not None:
