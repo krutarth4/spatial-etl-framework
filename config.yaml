@@ -87,7 +87,7 @@ mapping_defaults:
 
 
 graph:
-  enable: true # TODO prepare main graph tables for nodes and links
+  enable: false # TODO prepare main graph tables for nodes and links
   tool: external_ingest # terminal or custom local tool either use osm2pgrouting with config.xml to create the initial tables or custom osmosis class with the help of handler
   communication:
     enable: true # set false to run standalone without comm/router waits
