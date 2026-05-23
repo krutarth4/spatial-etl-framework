@@ -31,6 +31,10 @@ def setup_file_logging(conf: dict) -> None:
     root.addHandler(handler)
 
 
+REPORT_LEVEL = 25
+logging.addLevelName(REPORT_LEVEL, "REPORT")
+
+
 class ColorFormatter(logging.Formatter):
     """
     Adds ANSI color codes to log messages based on log level.
@@ -38,6 +42,7 @@ class ColorFormatter(logging.Formatter):
     COLORS = {
         logging.DEBUG: "\033[94m",  # Blue
         # logging.INFO: "\033[92m",      # Green
+        REPORT_LEVEL: "\033[96m",  # Cyan — per-run stage-timing reports
         logging.WARNING: "\033[93m",  # Yellow
         logging.ERROR: "\033[91m",  # Red
         logging.CRITICAL: "\033[95m",  # Magenta
@@ -102,6 +107,9 @@ class LoggerManager:
 
     def critical(self, msg: str):
         self.logger.critical(msg)
+
+    def report(self, msg: str):
+        self.logger.log(REPORT_LEVEL, msg)
 
     def get_logger(self):
         """Return underlying logger (for compatibility with libraries)."""
