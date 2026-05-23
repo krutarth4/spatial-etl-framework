@@ -142,9 +142,10 @@ class DataSourceABCImpl(DataSourceABC):
             if check:
                 self._last_fetch_performed_download = True
                 http_handler = HttpHandler()
-                path = http_handler.call(uri=source.url, destination_path=source.destination, stream=source.stream,
-                                         headers=source.headers, params=source.params,
-                                         file_extension=source.response_type)
+                with self._accumulate_stage("download"):
+                    path = http_handler.call(uri=source.url, destination_path=source.destination, stream=source.stream,
+                                             headers=source.headers, params=source.params,
+                                             file_extension=source.response_type)
                 paths.append(path)
             else:
                 self._last_fetch_performed_download = False
@@ -226,11 +227,12 @@ class DataSourceABCImpl(DataSourceABC):
             if self.check_multi_metadata_before_fetch(url=url, headers=source.headers,
                                                       params=params, path=path):
                 http_handler = HttpHandler()
-                final_path = http_handler.call(uri=url, destination_path=path, stream=source.stream,
-                                                headers=source.headers, params=params,
-                                                file_extension=source.response_type,
-                                                timeout=(min(30, timeout), timeout),
-                                                retry_attempts=retries, retry_backoff=backoff)
+                with self._accumulate_stage("download"):
+                    final_path = http_handler.call(uri=url, destination_path=path, stream=source.stream,
+                                                    headers=source.headers, params=params,
+                                                    file_extension=source.response_type,
+                                                    timeout=(min(30, timeout), timeout),
+                                                    retry_attempts=retries, retry_backoff=backoff)
                 if delay > 0:
                     time.sleep(delay)
                 return final_path, True, None
@@ -952,6 +954,7 @@ class DataSourceABCImpl(DataSourceABC):
     # `(Σ)` suffix marks cumulative-across-workers (parallel) stages; others are wall-clock.
     _STAGE_REPORT_ORDER = [
         ("extract", "extract"),
+        ("download", "  download (Σ)"),
         ("prepare_tables", "prepare_tables"),
         ("process_files_wall", "process_files (wall)"),
         ("transform", "  transform (Σ)"),
