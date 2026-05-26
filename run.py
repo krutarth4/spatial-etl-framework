@@ -10,6 +10,36 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
+
+def _print_banner():
+    # ANSI colour codes
+    CYAN   = "\033[96m"
+    YELLOW = "\033[93m"
+    BOLD   = "\033[1m"
+    RESET  = "\033[0m"
+    DIM    = "\033[2m"
+
+    banner = f"""
+{CYAN}{BOLD}
+  ███████╗██████╗  █████╗ ████████╗██╗ █████╗ ██╗      ███████╗████████╗██╗
+  ██╔════╝██╔══██╗██╔══██╗╚══██╔══╝██║██╔══██╗██║      ██╔════╝╚══██╔══╝██║
+  ███████╗██████╔╝███████║   ██║   ██║███████║██║      █████╗     ██║   ██║
+  ╚════██║██╔═══╝ ██╔══██║   ██║   ██║██╔══██║██║      ██╔══╝     ██║   ╚═╝
+  ███████║██║     ██║  ██║   ██║   ██║██║  ██║███████╗ ███████╗   ██║   ██╗
+  ╚══════╝╚═╝     ╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═╝╚══════╝ ╚══════╝   ╚═╝   ╚═╝
+{RESET}
+{YELLOW}{BOLD}   ███████╗████████╗██╗         ███████╗██████╗  █████╗ ███╗   ███╗███████╗██╗    ██╗ ██████╗ ██████╗ ██╗  ██╗
+   ██╔════╝╚══██╔══╝██║         ██╔════╝██╔══██╗██╔══██╗████╗ ████║██╔════╝██║    ██║██╔═══██╗██╔══██╗██║ ██╔╝
+   █████╗     ██║   ██║         █████╗  ██████╔╝███████║██╔████╔██║█████╗  ██║ █╗ ██║██║   ██║██████╔╝█████╔╝
+   ██╔══╝     ██║   ██║         ██╔══╝  ██╔══██╗██╔══██║██║╚██╔╝██║██╔══╝  ██║███╗██║██║   ██║██╔══██╗██╔═██╗
+   ███████╗   ██║   ███████╗    ██║     ██║  ██║██║  ██║██║ ╚═╝ ██║███████╗╚███╔███╔╝╚██████╔╝██║  ██║██║  ██╗
+   ╚══════╝   ╚═╝   ╚══════╝    ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝ ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝{RESET}
+
+{DIM}  Geospatial bicycle routing · Berlin · PostGIS + Python ETL + Java Router{RESET}
+{DIM}  ─────────────────────────────────────────────────────────────────────────{RESET}
+"""
+    print(banner)
+
 import uvicorn
 from core.application import Application
 from log_manager.logger_manager import LoggerManager, setup_file_logging
@@ -40,11 +70,9 @@ def _csv_to_list(value):
 logger = LoggerManager("RunConfigWatcher").get_logger()
 
 
-def _file_signature(path: Path) -> tuple[int, str] | None:
+def _file_signature(path: Path) -> str | None:
     try:
-        stat = path.stat()
-        content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
-        return stat.st_mtime_ns, content_hash
+        return hashlib.sha256(path.read_bytes()).hexdigest()
     except FileNotFoundError:
         return None
 
@@ -80,6 +108,7 @@ def _start_config_watcher(runtime_conf: dict | None):
 
 
 if __name__ == "__main__":
+    _print_banner()
     args = _parse_args()
     only = _csv_to_list(args.only) or _csv_to_list(os.getenv("ETL_ONLY"))
     disable = _csv_to_list(args.disable) or _csv_to_list(os.getenv("ETL_DISABLE"))
