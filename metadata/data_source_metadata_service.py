@@ -208,6 +208,16 @@ class DataSourceMetadataService:
             return normalized[2:]
         return normalized
 
+    def has_completed_successfully(self, source_key: str) -> bool:
+        """Return True if this datasource has at least one recorded successful run."""
+        if self.metadata_repository is None or not source_key:
+            return False
+        try:
+            return self.metadata_repository.get_last_successful_run_at(source_key) is not None
+        except Exception as e:
+            self.logger.warning(f"Could not check run history for {source_key}: {e}")
+            return False
+
     def is_dataset_expired(self, source_key: str, expires_after: str | None) -> bool:
         """Return True if last_successful_run_at + expires_after < now, or no run recorded."""
         if not expires_after or self.metadata_repository is None:

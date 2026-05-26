@@ -1,5 +1,6 @@
 import importlib
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from data_config_dtos.data_source_config_dto import DataSourceDTO
 from dacite import from_dict, Config
@@ -100,23 +101,32 @@ class DataSourceMapper:
         except Exception as e:
             self.logger.error(f"Error loading data sources: {e}")
 
+    def _run_one_datasource(self, source):
+        data = source
+        class_name = (data.class_name or "").strip()
+        if class_name.endswith("Mapper"):
+            class_name = class_name[:-6]
+        try:
+            module_path = f"{self._prefix_path}.{class_name}Mapper"
+            module = importlib.import_module(module_path)
+            mapper_class = getattr(module, f"{class_name[0].upper() + class_name[1:]}Mapper")
+            instance_data_source = mapper_class(data, self.db_instance, self.scheduler_core, self.base_graph_conf, self.metadata_service)
+            instance_data_source.execute()
+            self.logger.info(f"{mapper_class.__name__} configuration step finished!!")
+        except Exception as e:
+            self.logger.error(f"Error running data source {class_name}: {e}")
+
     def run_data_source_mapper(self):
-        for source in self.data_sources:
-            data = source
-            class_name = (data.class_name or "").strip()
-            if class_name.endswith("Mapper"):
-                class_name = class_name[:-6]
-
-            try:
-                module_path = f"{self._prefix_path}.{class_name}Mapper"
-                module = importlib.import_module(module_path)
-                mapper_class = getattr(module, f"{class_name[0].upper() + class_name[1:]}Mapper")
-                instance_data_source = mapper_class(data, self.db_instance, self.scheduler_core, self.base_graph_conf, self.metadata_service)
-                instance_data_source.execute()
-
-                self.logger.info(f"{mapper_class.__name__} configuration step finished!!")
-            except Exception as e:
-                self.logger.error(f"Error running data source {class_name} :{e}")
+        n = len(self.data_sources)
+        self.logger.info(f"Starting {n} datasources in parallel")
+        with ThreadPoolExecutor(max_workers=n, thread_name_prefix="DSMapper") as pool:
+            futures = {pool.submit(self._run_one_datasource, src): src for src in self.data_sources}
+            for fut in as_completed(futures):
+                try:
+                    fut.result()
+                except Exception as e:
+                    src = futures[fut]
+                    self.logger.error(f"Datasource {getattr(src, 'name', src)} failed: {e}")
 
     def start_execution(self):
         self.run_data_source_mapper()

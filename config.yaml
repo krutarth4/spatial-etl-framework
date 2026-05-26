@@ -208,7 +208,7 @@ graph:
 datasources:
   - name: "weather_station_bright_sky"
     description: "gets weather station data with their location"
-    enable: false # to use the data source or not
+    enable: true # to use the data source or not
 #    check_before_update: false
     class_name: weatherStation
     debug:
@@ -327,7 +327,10 @@ datasources:
       trigger:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
-          name: run_once # interval , cron, date, calendar_interval
+          name: interval # interval , cron, date
+          start_date: 2025-12-21T11:15:00 # Example of start config for the dateTime , if given calculates execution dateTime for next run
+          config: # should be same key value pair to for job
+            hours: 10
 
       replace_existing: true
       coalesce: true
@@ -356,7 +359,7 @@ datasources:
 
   - name: "air_quality_data_download"
     description: "Air quality data from the dcaiti Tu Berlin server"
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
 #    check_before_update: false
     class_name: airQualityData
     debug:
@@ -459,7 +462,9 @@ datasources:
       trigger:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
-          name: run_once # interval , cron, date
+          name: interval # interval , cron, date
+          config:
+            hours: 168   # re-run every 7 days
       replace_existing: true
       coalesce: true
       max_instances: 1
@@ -627,7 +632,10 @@ datasources:
       trigger:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
-          name: run_once # interval , cron, date
+          name: interval # interval , cron, date
+          start_date: 2025-12-21T11:15:00 # Example of start config for the dateTime , if given calculates execution dateTime for next run
+          config: # should be same key value pair to for job
+            hours: 10
       replace_existing: true
       coalesce: true
       max_instances: 1
@@ -654,7 +662,7 @@ datasources:
 
   - name: tree
     description: " Get Trees on the side of the road within 50 m distance "
-    enable: false # to use the data source or not
+    enable: true # to use the data source or not
 #    check_before_update: false # only valid for api call
     class_name: tree
     debug:
@@ -694,7 +702,10 @@ datasources:
       trigger:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
-          name: run_once # interval , cron, date
+          name: interval # interval , cron, date
+          start_date: 2025-12-21T11:15:00 # Example of start config for the dateTime , if given calculates execution dateTime for next run
+          config: # should be same key value pair to for job
+            hours: 10
       replace_existing: true
       coalesce: true
       max_instances: 1
@@ -737,7 +748,7 @@ datasources:
 
   - name: pleasant_bicycling
     description: " Get the density of vehicles on the road "
-    enable: false # to use the data source or not
+    enable: true # to use the data source or not
 #    check_before_update: false # only valid for api call
     class_name: pleasantBicycling
     debug:
@@ -764,7 +775,10 @@ datasources:
       trigger:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:
-          name: run_once # interval , cron, date
+          name: interval # interval , cron, date
+          start_date: 2025-12-21T11:15:00 # Example of start config for the dateTime , if given calculates execution dateTime for next run
+          config: # should be same key value pair to for job
+            hours: 10 # interval , cron, date
       replace_existing: true
       coalesce: true
       max_instances: 1

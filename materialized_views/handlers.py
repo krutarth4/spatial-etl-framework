@@ -165,10 +165,10 @@ class BaseMaterializedViewHandler:
     def _ensure_indexes(self):
         for idx in (self.conf.raw.get("indexes") or []):
             if isinstance(idx, str):
-                self._exec(idx)
+                self._exec(idx.format(schema=self.conf.schema))
                 continue
             if idx.get("sql"):
-                self._exec(idx["sql"])
+                self._exec(idx["sql"].format(schema=self.conf.schema))
                 continue
 
             index_name = idx.get("name")

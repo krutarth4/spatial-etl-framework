@@ -17,11 +17,9 @@ from main_core.data_source_mapper import DataSourceMapper
 from metadata.data_source_metadata_service import DataSourceMetadataService
 
 
-def _file_signature(path: Path) -> tuple[int, str] | None:
+def _file_signature(path: Path) -> str | None:
     try:
-        stat = path.stat()
-        content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
-        return stat.st_mtime_ns, content_hash
+        return hashlib.sha256(path.read_bytes()).hexdigest()
     except FileNotFoundError:
         return None
 
