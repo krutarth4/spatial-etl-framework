@@ -84,8 +84,51 @@ class DataSourceABCImpl(DataSourceABC):
             self.create_job()
             return
 
+        # Honour run_once semantics even without a scheduler: skip if this
+        # datasource already succeeded in a prior run (recorded in metadata).
+        if self._is_run_once_and_completed():
+            self.logger.info(
+                f"[run_once] '{self.data_source_name}' already completed successfully "
+                f"in a previous run — skipping."
+            )
+            return
+
         self.logger.debug("No scheduler found, executing datasource directly")
         self.run()
+
+    def _is_run_once_and_completed(self) -> bool:
+        """Return True when the datasource uses a run_once trigger, has already
+        finished successfully at least once, AND downstream tables are still
+        healthy.  Used by execute() to prevent unnecessary re-runs on restart,
+        while still re-running when data is missing (e.g. after a DB wipe)."""
+        try:
+            trigger_conf = (
+                self.job_configuration.trigger.type
+                if self.job_configuration and self.job_configuration.trigger
+                else None
+            )
+            if trigger_conf is None or getattr(trigger_conf, "name", None) != "run_once":
+                return False
+            if self.metadata_service is None:
+                return False
+            if not self.metadata_service.has_completed_successfully(self.data_source_name):
+                return False
+            # Even if a prior run succeeded, re-run if the downstream tables are
+            # missing or empty (e.g. after a DB wipe or schema reset).
+            populated, reason = self._downstream_tables_are_populated()
+            if not populated:
+                self.logger.info(
+                    f"[run_once] '{self.data_source_name}' ran before but data is missing "
+                    f"({reason}) — re-running."
+                )
+                return False
+            return True
+        except Exception as e:
+            self.logger.warning(
+                f"[run_once] Could not determine prior completion for "
+                f"'{self.data_source_name}': {e} — will run."
+            )
+            return False
 
     def create_data_tables(self):
         if self.data_source_config.storage.persistent and self.db is not None:
@@ -741,9 +784,11 @@ class DataSourceABCImpl(DataSourceABC):
 
         storage = self.data_source_config.storage
         reasons: list[str] = []
+        checks_performed = 0
 
         # ── staging ──────────────────────────────────────────────────────────
         if storage and storage.staging:
+            checks_performed += 1
             s = storage.staging
             count = self._safe_table_count(s.table_name, s.table_schema)
             if count == 0:
@@ -751,6 +796,7 @@ class DataSourceABCImpl(DataSourceABC):
 
         # ── enrichment ───────────────────────────────────────────────────────
         if storage and storage.enrichment:
+            checks_performed += 1
             e = storage.enrichment
             count = self._safe_table_count(e.table_name, e.table_schema)
             if count == 0:
@@ -759,6 +805,7 @@ class DataSourceABCImpl(DataSourceABC):
         # ── mapping: must have >= ways_base row count ─────────────────────────
         mapping_conf = getattr(self.data_source_config, "mapping", None)
         if mapping_conf and getattr(mapping_conf, "enable", False):
+            checks_performed += 1
             mapped_count = self._safe_table_count(mapping_conf.table_name, mapping_conf.table_schema)
             ways_count = self.base_graph.get_base_graph_row_counts()
             if mapped_count < ways_count:
@@ -771,6 +818,11 @@ class DataSourceABCImpl(DataSourceABC):
                     f"[{self.data_source_name}] Mapping table healthy: "
                     f"{mapped_count} mapping rows >= {ways_count} ways_base rows"
                 )
+
+        # If no DB tables are configured (e.g. persistent: false, mapping disabled),
+        # there is nothing to verify — do not treat this as "healthy, safe to skip".
+        if checks_performed == 0:
+            return False, "no DB tables configured to verify health — re-running pipeline"
 
         if reasons:
             return False, "; ".join(reasons)

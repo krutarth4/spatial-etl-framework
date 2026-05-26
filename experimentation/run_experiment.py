@@ -88,6 +88,10 @@ print(f"[experiment] Wrote patched config → {_CONFIG_DEST}")
 import main_core.core_config as _cc
 _cc.CoreConfig.filepath = str(_CONFIG_DEST)
 print(f"[experiment] CoreConfig.filepath → {_CONFIG_DEST.name}")
+
+from log_manager.logger_manager import setup_file_logging
+setup_file_logging(_cc.CoreConfig().get_config().get("logging") or {})
+
 print("[experiment] Starting Application …\n")
 
 from core.application import Application

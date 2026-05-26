@@ -53,19 +53,23 @@ class InitScheduler:
         self.logger = LoggerManager(type(self).__name__)
         self.logger.info("Setting up scheduler ....")
         self.executors = {
-        "default": ThreadPoolExecutor(10),      # IO tasks
-        "process": ProcessPoolExecutor(4),  # CPU tasks
-    }
+            "default": ThreadPoolExecutor(10),   # IO tasks
+            "process": ProcessPoolExecutor(4),   # CPU tasks
+        }
         self.job_defaults = {
             "coalesce": False,
-            "max_instances": 3
+            "max_instances": 3,
         }
 
         # self.jobstores = {
         #     'default': SQLAlchemyJobStore(url, tableschema="test")
         # }
         if not hasattr(self, "scheduler"):
-            self.scheduler = BackgroundScheduler(timezone="Europe/Berlin", executors=self.executors)
+            self.scheduler = BackgroundScheduler(
+                timezone="Europe/Berlin",
+                executors=self.executors,
+                job_defaults=self.job_defaults,
+            )
 
         self.start_scheduler()
         atexit.register(self.stop_scheduler)
