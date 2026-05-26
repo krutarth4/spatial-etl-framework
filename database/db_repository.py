@@ -454,53 +454,6 @@ class DBRepository(DbConfiguration):
         if not insert_columns:
             raise ValueError("No insertable columns found")
 
-        # Build CSV buffer
-        buffer = StringIO()
-
-        writer = csv.writer(
-            buffer,
-            delimiter=",",
-            quotechar='"',
-            quoting=csv.QUOTE_MINIMAL,
-            lineterminator="\n",
-        )
-
-        for row in data_list:
-            formatted_row = []
-
-            for col in insert_columns:
-                val = row.get(col)
-                column_obj = table.columns.get(col)
-
-                # Handle ARRAY columns
-                if isinstance(column_obj.type, ARRAY):
-                    val = self.pg_array_literal(val)
-
-                # Handle JSONB columns
-                elif isinstance(column_obj.type, JSONB):
-                    if val is not None:
-                        val = json.dumps(val)
-
-                formatted_row.append(val)
-
-            writer.writerow(formatted_row)
-            # writer.writerow(
-            #     [
-            #         row.get(col)
-            #         for col in insert_columns
-            #     ]
-            # )
-
-
-        buffer.seek(0)
-
-        # COPY into table
-        # copy_sql = f"""
-        #     COPY {table.schema}.{table.name}
-        #     ({", ".join(insert_columns)})
-        #     FROM STDIN WITH CSV
-        # """
-
         copy_sql = f"""
             COPY {table.schema}.{table.name}
             ({", ".join(insert_columns)})
@@ -513,22 +466,59 @@ class DBRepository(DbConfiguration):
             )
         """
 
+        # Pre-resolve column objects once to avoid repeated dict lookups per row
+        col_meta = [(col, table.columns.get(col)) for col in insert_columns]
+
+        def _format_row(row: dict) -> list:
+            formatted = []
+            for col, column_obj in col_meta:
+                val = row.get(col)
+                if isinstance(column_obj.type, ARRAY):
+                    val = self.pg_array_literal(val)
+                elif isinstance(column_obj.type, JSONB):
+                    if val is not None:
+                        val = json.dumps(val)
+                formatted.append(val)
+            return formatted
+
         thread = threading.current_thread()
-        tid = threading.get_ident()
 
         t0 = time.monotonic()
         self.logger.info(
             f"[DB WAIT] thread={thread.name} rows={len(data_list)}"
         )
+
+        # Stream rows in chunks so we never hold more than COPY_CHUNK_SIZE rows
+        # as a CSV string in memory at once (avoids OOM on large datasets).
+        COPY_CHUNK_SIZE = 50_000
+
         try:
             with self.raw_pg_connection() as conn:
-
                 self.logger.info(
                     f"[DB ACQUIRED] thread={thread.name}"
                 )
                 with conn.cursor() as cur:
                     with cur.copy(copy_sql) as copy:
-                        copy.write(buffer.getvalue())
+                        chunk_buf = StringIO()
+                        writer = csv.writer(
+                            chunk_buf,
+                            delimiter=",",
+                            quotechar='"',
+                            quoting=csv.QUOTE_MINIMAL,
+                            lineterminator="\n",
+                        )
+                        for i, row in enumerate(data_list):
+                            writer.writerow(_format_row(row))
+                            if (i + 1) % COPY_CHUNK_SIZE == 0:
+                                chunk_buf.seek(0)
+                                copy.write(chunk_buf.read())
+                                chunk_buf.seek(0)
+                                chunk_buf.truncate(0)
+                        # flush remainder
+                        chunk_buf.seek(0)
+                        remainder = chunk_buf.read()
+                        if remainder:
+                            copy.write(remainder)
 
             self.logger.info(
                 f"Inserted {len(data_list)} rows into '{table_name}'"
@@ -1126,7 +1116,7 @@ class DBRepository(DbConfiguration):
                     total_rows += len(rows)
                     batch_rows = len(rows)
                 else:
-                    batch_rows = result.rowcount or 0
+                    batch_rows = result.rowcount if result.rowcount >= 0 else 0
                     total_rows += batch_rows
 
             elapsed = time.perf_counter() - t0
