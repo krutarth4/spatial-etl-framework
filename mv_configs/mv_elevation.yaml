@@ -7,7 +7,7 @@
 # ---- Identity --------------------------------------------------------------
 id: mv_ways_with_elevation
 name: mv_ways_with_elevation
-schema: trial
+schema: exp_null
 description: "Per-way elevation stats (ascent, descent, max slope) from the Python elevation pipeline"
 enable: true
 
@@ -27,8 +27,8 @@ depends_on:
   datasources:
     - elevation_python
   tables:
-    - { schema: trial, name: ways_base }
-    - { schema: trial, name: elevation_python_staging }
+    - { schema: exp_null, name: ways_base }
+    - { schema: exp_null, name: elevation_python_staging }
 
 # ---- Definition ------------------------------------------------------------
 definition:
