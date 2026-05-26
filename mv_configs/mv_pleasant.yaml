@@ -1,6 +1,14 @@
 # =============================================================================
 # Materialized View: mv_pleasant
-# Per-way pleasant/stress bicycling snapshot across all time intervals.
+# One row per way segment. SPI values are stored as a 24-element float array,
+# one entry per hour of the day (index 0 = 00:00–01:00, index 23 = 23:00–24:00).
+# Missing hours (no bicycle data for that hour) are stored as -1.
+#
+# Source data resolution: 15-minute slots in pleasant_staging.
+# Enrichment step averages 4 slots per hour → pleasant_enrichment (~1 M rows).
+# This MV then joins ways_base × generate_series(0,23) × enrichment — only
+# 24 M intermediate rows vs the previous 96 M — and collapses to 1 row per way.
+#
 # Schema reference: docs/materialized-views-reference.md
 # =============================================================================
 
@@ -8,7 +16,9 @@
 id: mv_pleasant
 name: mv_pleasant
 schema: exp_null
-description: "Per-way SPI (speed performance index) across all pleasant bicycling intervals"
+description: >
+  Per-way hourly SPI (speed performance index) as a 24-element float array.
+  spi_hourly[h] is the average speed performance index for hour h (0–23); -1 means no data.
 enable: true
 
 # ---- Handler selection -----------------------------------------------------
@@ -34,25 +44,25 @@ depends_on:
 # ---- Definition ------------------------------------------------------------
 definition:
   select_sql: |
-    WITH intervals AS (
-        SELECT DISTINCT interval_start, interval_end
-        FROM {schema}.pleasant_enrichment
+    WITH hours AS (
+        SELECT generate_series(0, 23) AS hour
     )
     SELECT
         w.id,
-        w.way_id                                              AS way_id,
+        w.way_id,
         w.way_link_index,
-        i.interval_start,
-        i.interval_end,
-        COALESCE(pe.avg_speed_performance_index, -1)          AS spi
+        array_agg(
+            COALESCE(pe.avg_speed_performance_index, -1)
+            ORDER BY h.hour
+        )                                               AS spi_hourly
     FROM {schema}.ways_base w
-    CROSS JOIN intervals i
+    CROSS JOIN hours h
     LEFT JOIN {schema}.pleasant_mapping pm
         ON pm.way_id = w.id
     LEFT JOIN {schema}.pleasant_enrichment pe
         ON pe.connection_id = pm.connection_id
-       AND pe.interval_start = i.interval_start
-       AND pe.interval_end   = i.interval_end
+       AND pe.hour          = h.hour
+    GROUP BY w.id, w.way_id, w.way_link_index
 
 # ---- Build options ---------------------------------------------------------
 build:
@@ -61,22 +71,17 @@ build:
   storage_parameters: {}
 
 # ---- Indexes ---------------------------------------------------------------
-# Note: the covering index uses INCLUDE which requires a raw sql entry.
 indexes:
   - name: idx_mv_pleasant_way_id
-    columns: [way_id, interval_start]
+    columns: [way_id, way_link_index]
     unique: false
     method: btree
     where: null
-  - name: idx_mv_pleasant_way_idx
+  - name: idx_mv_pleasant_way_id_only
     columns: [way_id]
     unique: false
     method: btree
     where: null
-  - sql: |
-      CREATE INDEX IF NOT EXISTS idx_mv_pleasant_way_id_covering
-      ON {schema}.mv_pleasant (way_id)
-      INCLUDE (way_link_index, interval_start, interval_end, spi);
 
 # ---- Refresh behavior ------------------------------------------------------
 refresh:

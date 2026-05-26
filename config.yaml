@@ -788,17 +788,10 @@ datasources:
       table_name: pleasant_mapping
       joins_on: connection_id
       strategy:
-        type: knn
-        link_on:
-          mapping_column: connection_id
-          basis: nearest_within_distance
-      config:
-        base_geometry_column: geometry_25833
-        enrichment_geometry_column: geometry_25833
-        enrichment_filter_sql: "ST_DWithin(b.geometry_25833, e.geometry_25833, 20)"
-        order_by_sql: "connection_id, {base_geometry} <-> {enrichment_geometry}"
-        distance_sql: "ST_Distance({base_geometry}, {enrichment_geometry})"
-        distance_alias: distance_m
+        # Custom LEFT JOIN LATERAL — every way_base gets a row; unmatched ways
+        # receive connection_id = NULL (handled gracefully by mv_pleasant and Java scorer).
+        # SQL is built in PleasantBicyclingMapper.mapping_db_query().
+        type: custom
       base_table:
         <<: *base_table_conf
         column_name: "pleasant_score"
