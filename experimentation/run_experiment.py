@@ -33,9 +33,12 @@ sys.path.insert(0, str(_ROOT))
 from dotenv import load_dotenv
 load_dotenv(_ROOT / ".env")
 
+from banner import print_banner, log_banner
+print_banner()
+
 # ── paths ─────────────────────────────────────────────────────────────────────
 _CONFIG_SRC  = _ROOT / "config.yaml"
-_CONFIG_DEST = Path(__file__).resolve().parent / ".experiment_config.yaml"
+_CONFIG_DEST = _ROOT / ".experiment_config.yaml"
 
 # ── Step 1: read and resolve the real config ──────────────────────────────────
 from readers.yaml_reader import YamlReader
@@ -91,6 +94,7 @@ print(f"[experiment] CoreConfig.filepath → {_CONFIG_DEST.name}")
 
 from log_manager.logger_manager import setup_file_logging
 setup_file_logging(_cc.CoreConfig().get_config().get("logging") or {})
+log_banner()  # plain-text banner → pipeline.log (file handler now attached)
 
 print("[experiment] Starting Application …\n")
 
