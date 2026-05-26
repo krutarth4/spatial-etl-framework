@@ -1,3 +1,4 @@
+# import gc
 import os
 import zipfile
 
@@ -82,6 +83,15 @@ class ElevationPythonMapper(DataSourceABCImpl):
         self.db.sync_source_to_target_table(staging_schema, raw_name, staging_schema, staging_name)
 
         self.db.drop_table(raw_name, staging_schema)
+
+        # Free accumulated metrics from RAM now that they are persisted to DB.
+        # These are class-level dicts/sets, so they would otherwise hold ~500 MB
+        # for the rest of the process lifetime.
+        ElevationPythonMapper._metrics.clear()
+        ElevationPythonMapper._missing_inside.clear()
+        ElevationPythonMapper._zero_length.clear()
+        ElevationPythonMapper._single_sample.clear()
+        self.logger.info("Cleared in-memory metrics/diagnostic sets after DB write.")
 
     def load(self, data):
         return
@@ -211,7 +221,14 @@ class ElevationPythonMapper(DataSourceABCImpl):
         self.logger.info(f"Zero-length ways: {len(self._zero_length)}")
         self.logger.info(f"Missing inside samples: {len(self._missing_inside)}")
         self.logger.info(f"Single-sample ways: {len(self._single_sample)}")
-        print("Total processed ways:", len(self._metrics))
+        self.logger.info(f"Total processed ways: {len(self._metrics)}")
+
+        # Explicitly release the large tile arrays and KDTree now that all ways
+        # in this tile have been queried.  Without this, they linger in the
+        # caller's stack frame (transform → process_file) until that returns,
+        # overlapping with the NEXT tile's peak allocation in a parallel worker.
+        del tree, xy, zz, x, y, z, ways
+        # gc.collect()  # prompt CPython to reclaim immediately (important in threads)
 
     def read_file_content(self, path: str) -> dict:
         base_dir = os.path.dirname(path)
