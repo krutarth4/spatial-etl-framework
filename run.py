@@ -11,34 +11,8 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 
-def _print_banner():
-    # ANSI colour codes
-    CYAN   = "\033[96m"
-    YELLOW = "\033[93m"
-    BOLD   = "\033[1m"
-    RESET  = "\033[0m"
-    DIM    = "\033[2m"
+from banner import print_banner, log_banner
 
-    banner = f"""
-{CYAN}{BOLD}
-  ███████╗██████╗  █████╗ ████████╗██╗ █████╗ ██╗      ███████╗████████╗██╗
-  ██╔════╝██╔══██╗██╔══██╗╚══██╔══╝██║██╔══██╗██║      ██╔════╝╚══██╔══╝██║
-  ███████╗██████╔╝███████║   ██║   ██║███████║██║      █████╗     ██║   ██║
-  ╚════██║██╔═══╝ ██╔══██║   ██║   ██║██╔══██║██║      ██╔══╝     ██║   ╚═╝
-  ███████║██║     ██║  ██║   ██║   ██║██║  ██║███████╗ ███████╗   ██║   ██╗
-  ╚══════╝╚═╝     ╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═╝╚══════╝ ╚══════╝   ╚═╝   ╚═╝
-{RESET}
-{YELLOW}{BOLD}   ███████╗████████╗██╗         ███████╗██████╗  █████╗ ███╗   ███╗███████╗██╗    ██╗ ██████╗ ██████╗ ██╗  ██╗
-   ██╔════╝╚══██╔══╝██║         ██╔════╝██╔══██╗██╔══██╗████╗ ████║██╔════╝██║    ██║██╔═══██╗██╔══██╗██║ ██╔╝
-   █████╗     ██║   ██║         █████╗  ██████╔╝███████║██╔████╔██║█████╗  ██║ █╗ ██║██║   ██║██████╔╝█████╔╝
-   ██╔══╝     ██║   ██║         ██╔══╝  ██╔══██╗██╔══██║██║╚██╔╝██║██╔══╝  ██║███╗██║██║   ██║██╔══██╗██╔═██╗
-   ███████╗   ██║   ███████╗    ██║     ██║  ██║██║  ██║██║ ╚═╝ ██║███████╗╚███╔███╔╝╚██████╔╝██║  ██║██║  ██╗
-   ╚══════╝   ╚═╝   ╚══════╝    ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝ ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝{RESET}
-
-{DIM}  Geospatial bicycle routing · Berlin · PostGIS + Python ETL + Java Router{RESET}
-{DIM}  ─────────────────────────────────────────────────────────────────────────{RESET}
-"""
-    print(banner)
 
 import uvicorn
 from core.application import Application
@@ -108,13 +82,15 @@ def _start_config_watcher(runtime_conf: dict | None):
 
 
 if __name__ == "__main__":
-    _print_banner()
+    print_banner()
     args = _parse_args()
     only = _csv_to_list(args.only) or _csv_to_list(os.getenv("ETL_ONLY"))
     disable = _csv_to_list(args.disable) or _csv_to_list(os.getenv("ETL_DISABLE"))
     CoreConfig.set_datasource_override(only=only, disable=disable)
     core_conf = CoreConfig()
     setup_file_logging(core_conf.get_config().get("logging") or {})
+    log_banner()  # plain-text banner → pipeline.log (file handler now attached)
+
     conf = core_conf.get_value("server")
     if conf.get("enable") and conf.get("reload"):
         logger.info("Skipping custom config watcher because Uvicorn reload is enabled")
