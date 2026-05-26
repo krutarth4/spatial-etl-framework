@@ -1,0 +1,127 @@
+# =============================================================================
+# Materialized View: mv_air_pollution
+# Per-way, per-forecast-hour air quality snapshot.
+#
+# Data flow:
+#   air_pollution_grid_enrichment   (1 row per grid cell × base forecast_time;
+#                                    no2/pm10/pm25 are 106-element ARRAY[float]
+#                                    of hourly forecasts starting at forecast_time)
+#   → unnested to hourly rows
+#   → joined via air_pollution_grid_mapping (intersection_length_m weight)
+#   → aggregated to ways_base
+#
+# Output has one row per (way_id, way_link_index, forecast_time_hour).
+# The Java AirQualityRouteScorer reads this and picks the closest forecast
+# hour to each route step's predicted traversal time.
+#
+# Schema reference: docs/materialized-views-reference.md
+# =============================================================================
+
+# ---- Identity --------------------------------------------------------------
+id: mv_air_pollution
+name: mv_air_pollution
+schema: exp_null
+description: >
+  Per-way, per-hour air pollution forecast (NO2, PM10, PM2.5) derived from
+  DCAITI FairQ grid data. One row per (way_id, way_link_index, forecast_time).
+  Pollutants are weighted averages across intersecting 50 m grid cells.
+enable: true
+
+# ---- Handler selection -----------------------------------------------------
+handler:
+  class: GenericMaterializedViewHandler
+  module: materialized_views.handlers
+
+# ---- Triggers --------------------------------------------------------------
+triggers:
+  on_datasource_success:
+    - air_quality_data_download
+  only_on_data_change: true
+
+# ---- Dependencies ----------------------------------------------------------
+depends_on:
+  datasources:
+    - air_quality_data_download
+  tables:
+    - { schema: exp_null, name: ways_base }
+    - { schema: exp_null, name: air_pollution_grid_enrichment }
+    - { schema: exp_null, name: air_pollution_grid_mapping }
+
+# ---- Definition ------------------------------------------------------------
+definition:
+  select_sql: |
+    WITH latest_per_grid AS (
+        -- For each 50 m grid cell, take only the most recently ingested
+        -- forecast batch (highest forecast_time, then highest uid as tie-break).
+        SELECT DISTINCT ON (grid_id)
+            grid_id,
+            forecast_time,
+            no2,
+            pm10,
+            pm25
+        FROM {schema}.air_pollution_grid_enrichment
+        WHERE no2          IS NOT NULL
+          AND pm10         IS NOT NULL
+          AND pm25         IS NOT NULL
+          AND forecast_time IS NOT NULL
+        ORDER BY grid_id, forecast_time DESC NULLS LAST, uid DESC
+    ),
+    hourly_grid AS (
+        -- Unnest the pollutant arrays into individual hourly rows.
+        -- The source API returns repeating intervals of PT1H starting at
+        -- forecast_time, so element [i] (1-based ord) corresponds to
+        --   forecast_time + (ord - 1) hours.
+        SELECT
+            lpg.grid_id,
+            timezone('UTC',
+                lpg.forecast_time + ((u.ord - 1) * INTERVAL '1 hour')
+            )                                   AS hour_time,
+            u.no2_val ::double precision         AS no2_val,
+            u.pm10_val::double precision         AS pm10_val,
+            u.pm25_val::double precision         AS pm25_val
+        FROM latest_per_grid lpg
+        CROSS JOIN LATERAL
+            unnest(lpg.no2, lpg.pm10, lpg.pm25)
+            WITH ORDINALITY AS u(no2_val, pm10_val, pm25_val, ord)
+        WHERE u.no2_val  IS NOT NULL
+          AND u.pm10_val IS NOT NULL
+          AND u.pm25_val IS NOT NULL
+    )
+    SELECT
+        w.way_id,
+        w.way_link_index,
+        hg.hour_time                                                      AS forecast_time,
+        -- Intersection-length-weighted average of pollutant concentrations
+        -- across all grid cells that overlap this way segment.
+        SUM(hg.no2_val  * m.intersection_length_m)
+            / NULLIF(SUM(m.intersection_length_m), 0)                     AS no2,
+        SUM(hg.pm10_val * m.intersection_length_m)
+            / NULLIF(SUM(m.intersection_length_m), 0)                     AS pm10,
+        SUM(hg.pm25_val * m.intersection_length_m)
+            / NULLIF(SUM(m.intersection_length_m), 0)                     AS pm25
+    FROM {schema}.ways_base            w
+    JOIN {schema}.air_pollution_grid_mapping m ON m.way_id  = w.id
+    JOIN hourly_grid                   hg      ON hg.grid_id = m.grid_id
+    GROUP BY w.way_id, w.way_link_index, hg.hour_time
+
+# ---- Build options ---------------------------------------------------------
+build:
+  with_data: true
+  tablespace: null
+  storage_parameters: {}
+
+# ---- Indexes ---------------------------------------------------------------
+# Index name matches the jOOQ-generated constant
+# Indexes.MV_AIR_POLLUTION_WAY_ID_IDX so the scorer can locate it by name.
+indexes:
+  - name: mv_air_pollution_way_id_idx
+    columns: [way_id]
+    unique: false
+    method: btree
+    where: null
+
+# ---- Refresh behavior ------------------------------------------------------
+refresh:
+  enabled: true
+  mode: normal        # cannot use 'concurrently' without a UNIQUE index
+  with_data: true

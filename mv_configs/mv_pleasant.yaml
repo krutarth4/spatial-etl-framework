@@ -7,7 +7,7 @@
 # ---- Identity --------------------------------------------------------------
 id: mv_pleasant
 name: mv_pleasant
-schema: trial
+schema: exp_null
 description: "Per-way SPI (speed performance index) across all pleasant bicycling intervals"
 enable: true
 
@@ -27,9 +27,9 @@ depends_on:
   datasources:
     - pleasant_bicycling
   tables:
-    - { schema: trial, name: ways_base }
-    - { schema: trial, name: pleasant_mapping }
-    - { schema: trial, name: pleasant_enrichment }
+    - { schema: exp_null, name: ways_base }
+    - { schema: exp_null, name: pleasant_mapping }
+    - { schema: exp_null, name: pleasant_enrichment }
 
 # ---- Definition ------------------------------------------------------------
 definition:

@@ -7,7 +7,7 @@
 # ---- Identity --------------------------------------------------------------
 id: mv_tree
 name: mv_tree
-schema: trial
+schema: exp_null
 description: "Per-way tree aggregation (JSONB) within 50 m of each base way"
 enable: true
 
@@ -27,8 +27,8 @@ depends_on:
   datasources:
     - tree
   tables:
-    - { schema: trial, name: ways_base }
-    - { schema: trial, name: tree_mapping }
+    - { schema: exp_null, name: ways_base }
+    - { schema: exp_null, name: tree_mapping }
 
 # ---- Definition ------------------------------------------------------------
 definition:
