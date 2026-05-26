@@ -208,7 +208,7 @@ graph:
 datasources:
   - name: "weather_station_bright_sky"
     description: "gets weather station data with their location"
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
 #    check_before_update: false
     class_name: weatherStation
     debug:
@@ -292,7 +292,7 @@ datasources:
 
   - name: "weather_forecast_bright_sky"
     description: "get weather forecast for the dwd_stations in params with hourly forecast "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
     class_name: weather
     debug:
       endpoint: weather-forecast
@@ -424,7 +424,7 @@ datasources:
 
   - name: elevation_grids_links
     description: " 1m elevation Grid links "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
     #    check_before_job_run: true
     check_before_update: true
     class_name: elevationGrid
@@ -542,7 +542,7 @@ datasources:
 
   - name: elevation_python
     description: " 1m elevation "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
 #    check_before_update: false # only valid for api call
     class_name: elevationPython
     debug:
@@ -662,7 +662,7 @@ datasources:
 
   - name: tree
     description: " Get Trees on the side of the road within 50 m distance "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
 #    check_before_update: false # only valid for api call
     class_name: tree
     debug:
@@ -805,7 +805,9 @@ datasources:
         column_type: Float
     storage: # DB storage
       persistent: true # true | false -> to store the values or not
-      expires_after: 6h # how long to keep the data before again running the new process for persistency
+      # expires_after removed: dataset takes ~50 min to ETL (4M rows).
+      # Aggressive expiry + container restarts cause an infinite reset loop.
+      # Freshness is managed by the 10h job interval + _downstream_tables_are_populated().
       #10h 10m 55s 324ms -> this dataset took around 2-3 hours
       staging:
         table_name: pleasant_staging
