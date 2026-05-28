@@ -591,7 +591,7 @@ datasources:
         column_type: Integer
     storage: # DB storage
       persistent: true # true | false -> to store the values or not
-      expires_after: 6h # how long to keep the data before again running the new process for persistency
+      expires_after: 168h  # match the elevation grid update interval (7 days); tiles rarely change
       #10h 10m 55s 324ms -> this dataset took around 2-3 hours
       staging:
         table_name: elevation_python_staging
@@ -774,6 +774,7 @@ datasources:
     job:
       name: pleasantJob
       id: pleasantJob
+      executor: process
       trigger:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
         type:

@@ -23,7 +23,7 @@ class WeatherStagingTable(StagingTable):
     visibility = Column(Float)
     conditions = Column(String)
     wind_speed = Column(Float)
-    wind_direction = Column(Float, nullable=False)
+    wind_direction = Column(Float)
     precipitation = Column(Float, nullable=False)
     sunshine = Column(Float, nullable=False)
     __table_args__ = (
@@ -41,7 +41,7 @@ class WeatherEnrichmentTable(EnrichmentTable):
     visibility = Column(Float)
     conditions = Column(String)
     wind_speed = Column(Float)
-    wind_direction = Column(Float, nullable=False)
+    wind_direction = Column(Float)
     __table_args__ = (
         UniqueConstraint('dwd_station_id', "timestamp"),
     )
