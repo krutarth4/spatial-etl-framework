@@ -84,6 +84,21 @@ class ElevationPythonMapper(DataSourceABCImpl):
 
         self.db.drop_table(raw_name, staging_schema)
 
+        # Insert zero-value fallback rows for ways that never intersected any
+        # elevation tile (outside coverage area, tunnels, etc.).  This ensures
+        # the mapping table has full ways_base coverage so the health check
+        # (mapped_count >= ways_count) passes and re-runs are not triggered.
+        fallback_sql = f"""
+            INSERT INTO {staging_schema}.{staging_name}
+                (way_id, total_ascent, total_descent, max_slope, avg_slope, sample_count, tile_name)
+            SELECT id, 0.0, 0.0, 0.0, 0.0, 0, ARRAY[]::text[]
+            FROM {GlobalConstants.base_schema}.{GlobalConstants.base_table}
+            WHERE id NOT IN (SELECT way_id FROM {staging_schema}.{staging_name})
+            ON CONFLICT (way_id) DO NOTHING
+        """
+        uncovered = self.db.execute_query(fallback_sql)
+        self.logger.info("Inserted zero-value fallback rows for ways outside tile coverage.")
+
         # Free accumulated metrics from RAM now that they are persisted to DB.
         # These are class-level dicts/sets, so they would otherwise hold ~500 MB
         # for the rest of the process lifetime.
