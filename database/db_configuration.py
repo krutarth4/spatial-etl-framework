@@ -1,3 +1,4 @@
+import multiprocessing
 import traceback
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -139,13 +140,23 @@ class DbConfiguration:
 
     def create_engine(self):
         pool = self.core_config.pool
+        in_subprocess = multiprocessing.parent_process() is not None
+        # Subprocess workers (ProcessPoolExecutor) each run one job with ~3 ETLWorker
+        # threads, so they need far fewer connections than the default 10+10.
+        # We also boost work_mem to prevent disk spills on heavy spatial joins —
+        # safe here because each subprocess is isolated to a single ETL job.
+        pool_size = 3 if in_subprocess else pool.pool_size
+        max_overflow = 2 if in_subprocess else pool.max_overflow
+        connect_args = {"application_name": pool.application_name}
+        if in_subprocess:
+            connect_args["options"] = "-c work_mem=256MB"
         kwargs = dict(
             echo=pool.echo,
-            pool_size=pool.pool_size,
-            max_overflow=pool.max_overflow,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
             pool_pre_ping=pool.pool_pre_ping,
             plugins=["geoalchemy2"],
-            connect_args={"application_name": pool.application_name},
+            connect_args=connect_args,
         )
         if pool.pool_recycle is not None:
             kwargs["pool_recycle"] = pool.pool_recycle

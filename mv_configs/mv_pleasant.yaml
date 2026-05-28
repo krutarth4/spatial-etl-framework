@@ -72,6 +72,11 @@ build:
 
 # ---- Indexes ---------------------------------------------------------------
 indexes:
+  - name: idx_mv_pleasant_id
+    columns: [id]
+    unique: true
+    method: btree
+    where: null
   - name: idx_mv_pleasant_way_id
     columns: [way_id, way_link_index]
     unique: false
@@ -86,5 +91,5 @@ indexes:
 # ---- Refresh behavior ------------------------------------------------------
 refresh:
   enabled: true
-  mode: normal
+  mode: concurrently
   with_data: true
