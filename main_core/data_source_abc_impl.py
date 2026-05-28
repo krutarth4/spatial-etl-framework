@@ -730,6 +730,7 @@ class DataSourceABCImpl(DataSourceABC):
                     f"[{self.data_source_name}] No new data and tables are healthy — "
                     f"skipping transform / load / mapping stages."
                 )
+                self.after_datasource_success(sync_result={"inserted": 0, "updated": 0})
                 return self.run_job_response("Skipped — no new data, tables already populated")
             else:
                 self.logger.warning(
