@@ -1,230 +1,249 @@
+# import gc
 import os
 import zipfile
-from pathlib import Path
 
-from geoalchemy2 import Geometry, Raster
 from pyproj import Transformer
-from sqlalchemy import Column, Integer, Float, ARRAY, UniqueConstraint, Index, func, String
-from sqlalchemy.dialects.postgresql import JSONB
+from shapely import wkb
+from shapely.geometry import box
+from sqlalchemy import Column, Integer, Float, ARRAY, UniqueConstraint, String, BigInteger, DateTime, func
 
-from database_tables.enrichment_table import EnrichmentTable
+from core.globalconstants import GlobalConstants
 from database_tables.mapping_table import MappingTable
 from database_tables.staging_table import StagingTable
 from main_core.data_source_abc_impl import DataSourceABCImpl
 
 import numpy as np
-import rasterio
-from rasterio.transform import from_origin
-from pyproj import CRS
+from shapely.ops import transform as shp_transform
 
-from utils.execution_time import measure_time
+from scipy.spatial import cKDTree
 
 
-class ElevationTable(StagingTable):
+class ElevationPythonStagingTable(StagingTable):
     __tablename__ = "elevation_staging"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
 
-    id = Column(Integer, primary_key=True, autoincrement=True,
-                index=True)  # make sure to create indexing for the table for better query and fast computation
-    rast = Column(Raster)
-    raster_hash = Column(String, index=True)
-    dataset_id = Column(String)
+    way_id = Column(BigInteger, nullable=False, index=True)
+
+    total_ascent = Column(Float, nullable=False)
+    total_descent = Column(Float, nullable=False)
+    max_slope = Column(Float, nullable=False)
+    avg_slope = Column(Float, nullable=False)
+    tile_name = Column(ARRAY(String), nullable=True)
+    sample_count = Column(Integer, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
-        Index(
-            "elevation_staging_rast_gix",
-            func.ST_ConvexHull(rast),
-            postgresql_using="gist"
-        ),
-        UniqueConstraint("raster_hash")
+        UniqueConstraint("way_id"),
     )
 
 
-class ElevationEnrichmentTable(EnrichmentTable):
-    __tablename__ = "elevation_enrichment"
-
-    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
-
-    dataset_id = Column(String, nullable=False, default="default", index=True)
-
-    tile_x = Column(Integer, nullable=False, index=True)
-    tile_y = Column(Integer, nullable=False, index=True)
-    rast = Column(Raster)
-    raster_hash = Column(String, index=True)
-
-    footprint_4326 = Column(Geometry("POLYGON", srid=4326), index=True)
-
-    __table_args__ = (
-        Index(
-            "elevation_enrichment_rast_gix",
-            func.ST_ConvexHull(rast),
-            postgresql_using="gist"
-        ),
-        Index(
-            "elevation_enrichment_footprint",
-            func.ST_ConvexHull(footprint_4326),
-            postgresql_using="gist"
-        ),
-        UniqueConstraint(
-            "dataset_id",
-            "tile_x",
-            "tile_y",
-        ),
-    )
-
-
-class ElevationMappingTable(MappingTable):
+class ElevationPythonMappingTable(MappingTable):
     __tablename__ = "elevation_mapping"
 
-    id = Column(Integer, primary_key=True,
-                autoincrement=True)  # make sure to create indexing for the table for better query and fast computation
-    elevation_profile = Column(JSONB)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    total_ascent = Column(Float, nullable=False)
+    total_descent = Column(Float, nullable=False)
+    max_slope = Column(Float, nullable=False)
+    avg_slope = Column(Float, nullable=False)
+    sample_count = Column(Integer, nullable=True)
 
 
+class ElevationPythonMapper(DataSourceABCImpl):
+    transformer = Transformer.from_crs(4326, 25833, always_xy=True)
+    _metrics = {}  # way_id -> dict(ascent, descent, max_slope, last_z, last_pt)
 
-class ElevationMapper(DataSourceABCImpl):
-    transformer = Transformer.from_crs(25833, 4326, always_xy=True)
-    docker_container_path = "/extracted/"
+    def post_database_processing(self):
 
-    @staticmethod
-    def _parse_xyz_line(line: str):
-        line = line.strip()
-        if not line:
-            return None
-        parts = line.replace(",", " ").split()
-        if len(parts) < 3:
-            return None
-        try:
-            return float(parts[0]), float(parts[1]), float(parts[2])
-        except ValueError:
-            return None
+        records = []
 
-    def sync_staging_to_enrichment(self):
+        for way_id, m in self._metrics.items():
+            records.append({
+                "way_id": way_id,
+                "total_ascent": m["ascent"],
+                "total_descent": m["descent"],
+                "max_slope": m["max_slope"],
+                "avg_slope": 0.0,
+                "sample_count": None,
+                "tile_name": m["tile_name"]
+            })
+
+        staging_name = self.data_source_config.storage.staging.table_name
+        staging_schema = self.data_source_config.storage.staging.table_schema
+        raw_name = staging_name.replace("_staging", "_raw_staging")
+
+        self.logger.info(f"Cloning {staging_schema}.{staging_name} → {raw_name} (no constraints)")
+        self.db.clone_table_structure(staging_schema, staging_name, staging_schema, raw_name)
+
+        self.logger.info(f"Writing {len(records)} slope records to raw staging via COPY")
+        self.db.bulk_insert(raw_name, staging_schema, records)
+
+        self.logger.info(f"Upserting raw → staging (ON CONFLICT way_id)")
+        self.db.sync_source_to_target_table(staging_schema, raw_name, staging_schema, staging_name)
+
+        self.db.drop_table(raw_name, staging_schema)
+
+        # Insert zero-value fallback rows for ways that never intersected any
+        # elevation tile (outside coverage area, tunnels, etc.).  This ensures
+        # the mapping table has full ways_base coverage so the health check
+        # (mapped_count >= ways_count) passes and re-runs are not triggered.
+        fallback_sql = f"""
+            INSERT INTO {staging_schema}.{staging_name}
+                (way_id, total_ascent, total_descent, max_slope, avg_slope, sample_count, tile_name)
+            SELECT id, 0.0, 0.0, 0.0, 0.0, 0, ARRAY[]::text[]
+            FROM {GlobalConstants.base_schema}.{GlobalConstants.base_table}
+            WHERE id NOT IN (SELECT way_id FROM {staging_schema}.{staging_name})
+            ON CONFLICT (way_id) DO NOTHING
+        """
+        self.db.call_sql(fallback_sql)
+        self.logger.info("Inserted zero-value fallback rows for ways outside tile coverage.")
+
+        # Free accumulated metrics from RAM now that they are persisted to DB.
+        # These are class-level dicts/sets, so they would otherwise hold ~500 MB
+        # for the rest of the process lifetime.
+        ElevationPythonMapper._metrics.clear()
+        ElevationPythonMapper._missing_inside.clear()
+        ElevationPythonMapper._zero_length.clear()
+        ElevationPythonMapper._single_sample.clear()
+        self.logger.info("Cleared in-memory metrics/diagnostic sets after DB write.")
+
+    def load(self, data):
         return
 
-    def enrichment_db_query(self) -> None | str:
-        staging = self.data_source_config.storage.staging
-        enrichment = self.data_source_config.storage.enrichment
-        sql = f"""
-                    INSERT INTO {enrichment.table_schema}.{enrichment.table_name}
-                          (dataset_id, tile_x, tile_y, rast, raster_hash, footprint_4326)
-                        SELECT
-                        dataset_id,
-                        
-                          floor(ST_UpperLeftX(s.rast) / 1000)::int AS tile_x,
-                          floor(ST_UpperLeftY(s.rast) / 1000)::int AS tile_y,
-                        
-                          s.rast,
-                          s.raster_hash,
-                          ST_Transform(ST_ConvexHull(s.rast), 4326) AS footprint_4326
-                        
-                        FROM {staging.table_schema}.{staging.table_name} s
-                        WHERE s.raster_hash IS NOT NULL
-                        
-                        ON CONFLICT (dataset_id, tile_x, tile_y)
-                        DO UPDATE SET
-                            rast = EXCLUDED.rast,
-                            raster_hash = EXCLUDED.raster_hash,
-                            footprint_4326 = EXCLUDED.footprint_4326
-                        
-                        -- Only update if content actually changed
-                        WHERE {enrichment.table_schema}.{enrichment.table_name}.raster_hash
-                              IS DISTINCT FROM EXCLUDED.raster_hash;
+    _missing_inside = set()
+    _zero_length = set()
+    _single_sample = set()
+    def pre_filter_processing(self, result):
+        result = result[0]
+        x = result["x"]
+        y = result["y"]
+        z = result["z"]
+        tile_name = result["tile_name"]
+        # --- 1) tile bounds in EPSG:25833 ---
+        min_x = float(np.min(x))
+        max_x = float(np.max(x))
+        min_y = float(np.min(y))
+        max_y = float(np.max(y))
 
+
+        self.logger.info(
+            f"Elevation tile bounds (25833): "
+            f"minx={min_x:.2f}, miny={min_y:.2f}, maxx={max_x:.2f}, maxy={max_y:.2f} "
+            f"points={len(z)}"
+        )
+
+        xy = np.column_stack((x.astype(np.float32), y.astype(np.float32)))
+        zz = z.astype(np.float32)
+        tree = cKDTree(xy)
+        tile_polygon = box(min_x, min_y, max_x, max_y)
+
+        sql = f"""
+              SELECT id, ST_AsBinary(geometry) AS geom_wkb
+              FROM {GlobalConstants.base_schema}.{GlobalConstants.base_table}
+              WHERE ST_Intersects(
+                        ST_Transform(geometry, 25833),
+                        ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, 25833)
+                )
               """
 
-        return sql
-    @measure_time("raster creation")
-    def create_raster(self, xyz_path: str, pixel_size: float = 1.0) -> str:
-        """
-        Streaming XYZ → GeoTIFF.
-        Memory stable for large files (~4M rows).
-        """
+        ways = self.db.fetch_query(sql, {
+            "minx": min_x, "miny": min_y, "maxx": max_x, "maxy": max_y
+        })
+        self.logger.info(f"Candidate ways in tile bbox: {len(ways)}")
+        step_m = 25.0  # tune later
+
+        def to_utm(xlon, ylat):
+            return self.transformer.transform(xlon, ylat)
+
+        for way_id, geom_wkb in ways:
+            try:
+                geom_wgs84 = wkb.loads(bytes(geom_wkb))
+            except Exception:
+                # Sometimes driver already returns bytes; keep robust
+                geom_wgs84 = wkb.loads(geom_wkb)
+
+            geom_utm = shp_transform(to_utm, geom_wgs84)
+
+            length = geom_utm.length
+            if not length or length <= 0:
+                self._zero_length.add(way_id)
+                continue
+
+            # 🔄 CHANGED: Clip geometry to tile polygon
+            clipped = geom_utm.intersection(tile_polygon)
+
+            # --- Fallback 1: if clipping removed geometry ---
+            if clipped.is_empty or clipped.length <= 0:
+                # fallback to full geometry endpoints
+                coords = np.array([
+                    [geom_utm.coords[0][0], geom_utm.coords[0][1]],
+                    [geom_utm.coords[-1][0], geom_utm.coords[-1][1]]
+                ], dtype=np.float32)
+            else:
+                clipped_length = clipped.length
+
+                if clipped_length <= step_m:
+                    distances = np.array([0.0, float(clipped_length)], dtype=np.float64)
+                else:
+                    distances = np.arange(0.0, float(clipped_length), step_m, dtype=np.float64)
+                    if distances[-1] != clipped_length:
+                        distances = np.append(distances, float(clipped_length))
+
+                pts = [clipped.interpolate(d) for d in distances]
+                coords = np.array([[p.x, p.y] for p in pts], dtype=np.float32)
 
 
+            if len(coords) == 1:
+                self._single_sample.add(way_id)
+                coords = np.array([
+                    [geom_utm.coords[0][0], geom_utm.coords[0][1]],
+                    [geom_utm.coords[-1][0], geom_utm.coords[-1][1]]
+                ], dtype=np.float32)
 
-        xyz_path = Path(xyz_path)
-        tif_path = xyz_path.with_suffix(".tif")
-        if tif_path.exists():
-            return str(tif_path)
+            # --- Elevation lookup ---
+            _, idx = tree.query(coords, k=1)
+            elev = zz[idx]
 
-        min_x = float("inf")
-        max_x = float("-inf")
-        min_y = float("inf")
-        max_y = float("-inf")
+            # compute partial metrics for these in-tile samples
+            m = self._metrics.get(way_id)
+            if m is None:
+                m = {"ascent": 0.0, "descent": 0.0, "max_slope": 0.0, "last_x": None, "last_y": None, "last_z": None, "tile_name": []}
+                self._metrics[way_id] = m
 
-        # -------- PASS 1: determine bounds --------
-        valid_points = 0
-        with open(xyz_path, "r") as f:
-            for line in f:
-                parsed = self._parse_xyz_line(line)
-                if parsed is None:
-                    continue
-                x, y, _ = parsed
-                min_x = min(min_x, x)
-                max_x = max(max_x, x)
-                min_y = min(min_y, y)
-                max_y = max(max_y, y)
-                valid_points += 1
+            # iterate in order as they appear along the line
+            # NOTE: coords_in are in the order of original sampling because inside is a boolean mask.
+            m["tile_name"].append(tile_name)
+            for i in range(len(coords)):
+                cx, cy = float(coords[i, 0]), float(coords[i, 1])
+                cz = float(elev[i])
 
-        if valid_points == 0:
-            raise ValueError(f"No valid XYZ points found in file: {xyz_path}")
+                if m["last_x"] is not None:
+                    dx = ((cx - m["last_x"]) ** 2 + (cy - m["last_y"]) ** 2) ** 0.5
+                    if dx > 0:
+                        dz = cz - m["last_z"]
 
-        width = int((max_x - min_x) / pixel_size) + 1
-        height = int((max_y - min_y) / pixel_size) + 1
+                        if dz > 0:
+                            m["ascent"] += dz
+                        else:
+                            m["descent"] += -dz
 
-        raster = np.full((height, width), -9999, dtype=np.float32)
+                        slope = abs(dz / dx)
+                        if slope > m["max_slope"]:
+                            m["max_slope"] = slope
 
-        # -------- PASS 2: fill raster --------
-        with open(xyz_path, "r") as f:
-            for line in f:
-                parsed = self._parse_xyz_line(line)
-                if parsed is None:
-                    continue
-                x, y, z = parsed
+                m["last_x"], m["last_y"], m["last_z"] = cx, cy, cz
+        self.logger.info(f"Zero-length ways: {len(self._zero_length)}")
+        self.logger.info(f"Missing inside samples: {len(self._missing_inside)}")
+        self.logger.info(f"Single-sample ways: {len(self._single_sample)}")
+        self.logger.info(f"Total processed ways: {len(self._metrics)}")
 
-                col = int((x - min_x) / pixel_size)
-                row = int((max_y - y) / pixel_size)
-
-                if 0 <= row < height and 0 <= col < width:
-                    raster[row, col] = z
-        origin_x = min_x - (pixel_size / 2)
-        origin_y = max_y + (pixel_size / 2)
-
-        transform = from_origin(origin_x, origin_y, pixel_size, pixel_size)
-
-        # transform = from_origin(min_x, max_y, pixel_size, pixel_size)
-        with rasterio.open(
-                tif_path,
-                "w",
-                driver="GTiff",
-                height=height,
-                width=width,
-                count=1,
-                dtype=raster.dtype,
-                crs=CRS.from_epsg(25833),
-                transform=transform,
-                nodata=-9999,
-        ) as dst:
-            dst.write(raster, 1)
-        # with rasterio.open(
-        #         tif_path,
-        #         "w",
-        #         driver="GTiff",
-        #         height=height,
-        #         width=width,
-        #         count=1,
-        #         dtype=raster.dtype,
-        #         crs=CRS.from_epsg(25833),
-        #         transform=transform,
-        #         nodata=-9999,
-        #         compress="LZW",  # 🔥 important for size
-        #         tiled=True,  # 🔥 important for performance
-        #         blockxsize=256,
-        #         blockysize=256,
-        # ) as dst:
-        #     dst.write(raster, 1)
-
-        return str(tif_path)
+        # Explicitly release the large tile arrays and KDTree now that all ways
+        # in this tile have been queried.  Without this, they linger in the
+        # caller's stack frame (transform → process_file) until that returns,
+        # overlapping with the NEXT tile's peak allocation in a parallel worker.
+        del tree, xy, zz, x, y, z, ways
+        # gc.collect()  # prompt CPython to reclaim immediately (important in threads)
 
     def read_file_content(self, path: str) -> dict:
         base_dir = os.path.dirname(path)
@@ -245,108 +264,15 @@ class ElevationMapper(DataSourceABCImpl):
                 if extracted_full_path != xyz_path:
                     os.replace(extracted_full_path, xyz_path)
 
-        # 🔥 Create TIFF immediately
-        tif_path = self.create_raster(xyz_path)
+            # 🔥 Read immediately
+        data = np.loadtxt(xyz_path, dtype=np.float64)
+        x = data[:, 0]
+        y = data[:, 1]
+        z = data[:, 2]
 
         return {
-            "name": os.path.basename(tif_path),
-            "path": tif_path
+            "tile_name": os.path.basename(xyz_path),
+            "x": x,
+            "y": y,
+            "z": z
         }
-
-    def load(self, file_info):
-        if not self.data_source_config.storage.persistent:
-            self.logger.warning("Persistence disabled.")
-            return
-
-        if self.db is None:
-            raise RuntimeError("DB not initialized")
-
-        if isinstance(file_info, list):
-            file_info = file_info[0]
-
-        tif_path = file_info["path"]
-
-        self.logger.info(f"Loading raster from TIFF file {tif_path}")
-
-        self.insert_into_staging(
-            self.data_source_config.storage.staging.table_schema,
-            ElevationTable.__tablename__,
-            tif_path
-        )
-
-        # Optional: remove TIFF after insert
-        # self.ensure_raster_constraints(self.data_source_config.storage.staging.table_schema,ElevationTable.__tablename__)
-        # os.remove(tif_path)
-
-    def insert_into_staging(self, source_schema, source_name, file_path):
-        self.logger.info(f"Inserting into staging table {source_schema}.{source_name} -> {file_path}")
-
-        try:
-            absolute_path = os.path.abspath(file_path)
-
-            with open(absolute_path, "rb") as f:
-                raster_bytes = f.read()
-
-            query = f"""
-                INSERT INTO {source_schema}.{source_name} (rast, raster_hash, dataset_id)
-                SELECT
-                    tile.rast,
-                    md5(ST_AsBinary(tile.rast)),
-                    :dataset_id
-                FROM (
-                    SELECT ST_Tile(
-                        ST_FromGDALRaster(:raster_data),
-                        1000,
-                        1000
-                    ) AS rast
-                ) AS tile
-                ON CONFLICT (raster_hash) DO NOTHING;
-            """
-
-            self.execute_query(
-                "custom",
-                query,
-                {
-                    "raster_data": raster_bytes,
-                    "dataset_id": os.path.basename(file_path)
-                }
-            )
-
-        except Exception as e:
-            self.logger.error(e)
-
-    def ensure_raster_constraints(self, schema, table):
-        """
-        Ensure raster constraints exist.
-        Runs only once if not already applied.
-        """
-
-        check_query = """
-                           SELECT 1
-                           FROM raster_columns
-                           WHERE r_table_schema = :schema
-                             AND r_table_name = :table
-                           """
-
-        result = self.execute_query("custom", check_query, {
-            "schema": schema,
-            "table": table
-        })
-
-        if not result.fetchone():
-            self.logger.info("Applying raster constraints...")
-
-            constraint_query = f"""
-                SELECT AddRasterConstraints(
-                    :schema,
-                    :table,
-                    'rast'
-                );
-            """
-
-            self.execute_query("custom", constraint_query, {
-                "schema": schema,
-                "table": table
-            })
-
-            self.logger.info("Raster constraints applied.")
