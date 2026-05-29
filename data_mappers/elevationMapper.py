@@ -18,7 +18,7 @@ from shapely.ops import transform as shp_transform
 from scipy.spatial import cKDTree
 
 
-class ElevationPythonStagingTable(StagingTable):
+class ElevationStagingTable(StagingTable):
     __tablename__ = "elevation_staging"
     id = Column(BigInteger, primary_key=True, autoincrement=True)
 
@@ -38,7 +38,7 @@ class ElevationPythonStagingTable(StagingTable):
     )
 
 
-class ElevationPythonMappingTable(MappingTable):
+class ElevationMappingTable(MappingTable):
     __tablename__ = "elevation_mapping"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
@@ -50,7 +50,7 @@ class ElevationPythonMappingTable(MappingTable):
     sample_count = Column(Integer, nullable=True)
 
 
-class ElevationPythonMapper(DataSourceABCImpl):
+class ElevationMapper(DataSourceABCImpl):
     transformer = Transformer.from_crs(4326, 25833, always_xy=True)
     _metrics = {}  # way_id -> dict(ascent, descent, max_slope, last_z, last_pt)
 
@@ -102,10 +102,10 @@ class ElevationPythonMapper(DataSourceABCImpl):
         # Free accumulated metrics from RAM now that they are persisted to DB.
         # These are class-level dicts/sets, so they would otherwise hold ~500 MB
         # for the rest of the process lifetime.
-        ElevationPythonMapper._metrics.clear()
-        ElevationPythonMapper._missing_inside.clear()
-        ElevationPythonMapper._zero_length.clear()
-        ElevationPythonMapper._single_sample.clear()
+        ElevationMapper._metrics.clear()
+        ElevationMapper._missing_inside.clear()
+        ElevationMapper._zero_length.clear()
+        ElevationMapper._single_sample.clear()
         self.logger.info("Cleared in-memory metrics/diagnostic sets after DB write.")
 
     def load(self, data):

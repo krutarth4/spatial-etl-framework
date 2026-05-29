@@ -487,7 +487,7 @@ datasources:
 #    check_before_update: false # only valid for api call
     class_name: elevation
     debug:
-      endpoint: elevation-python
+      endpoint: elevation
     data_type: static # static / Dynamic
     source:
       input: none
@@ -507,8 +507,8 @@ datasources:
         urls:
           input: *gridlinks
     job:
-      name: elevationPythonJob
-      id: elevationPythonJob
+      name: elevationJob
+      id: elevationJob
       executor: process
       trigger:
         # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
@@ -521,11 +521,11 @@ datasources:
     mapping:
       enable: true
       joins_on: way_id
-      table_name: elevation_python_mapping
+      table_name: elevation_mapping
       strategy:
         type: sql_template
       config:
-        sql_file: mapping_sql/elevation_python.sql
+        sql_file: mapping_sql/elevation.sql
       base_table:
         <<: *base_table_conf
         column_name: "elevation_factor"
@@ -535,9 +535,9 @@ datasources:
       expires_after: 168h  # match the elevation grid update interval (7 days); tiles rarely change
       #10h 10m 55s 324ms -> this dataset took around 2-3 hours
       staging:
-        table_name: elevation_python_staging
+        table_name: elevation_staging
         table_schema: *db_schema
-        table_class: ElevationPythonStagingTable
+        table_class: ElevationStagingTable
 
   - name: tree
     description: " Get Trees on the side of the road within 50 m distance "
@@ -736,7 +736,7 @@ datasources:
 #      strategy:
 #        type: sql_template
 #      config:
-#        sql_file: mapping_sql/elevation.sql
+#        sql_file: mapping_sql/elevationDeprecated.sql
 #      base_table:
 #        <<: *base_table_conf
 #        column_name: "elevation_factor"

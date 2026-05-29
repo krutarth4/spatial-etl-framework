@@ -1,6 +1,6 @@
 # =============================================================================
 # Materialized View: mv_ways_with_elevation
-# Per-way elevation snapshot joining base ways with elevation_python_staging.
+# Per-way elevation snapshot joining base ways with elevation_staging.
 # Schema reference: docs/materialized-views-reference.md
 # =============================================================================
 
@@ -8,7 +8,7 @@
 id: mv_ways_with_elevation
 name: mv_ways_with_elevation
 schema: exp_null
-description: "Per-way elevation stats (ascent, descent, max slope) from the Python elevation pipeline"
+description: "Per-way elevation stats (ascent, descent, max slope) from the  elevation pipeline"
 enable: true
 
 # ---- Handler selection -----------------------------------------------------
@@ -19,16 +19,16 @@ handler:
 # ---- Triggers --------------------------------------------------------------
 triggers:
   on_datasource_success:
-    - elevation_python
+    - elevation
   only_on_data_change: true
 
 # ---- Dependencies ----------------------------------------------------------
 depends_on:
   datasources:
-    - elevation_python
+    - elevation
   tables:
     - { schema: exp_null, name: ways_base }
-    - { schema: exp_null, name: elevation_python_staging }
+    - { schema: exp_null, name: elevation_staging }
 
 # ---- Definition ------------------------------------------------------------
 definition:
@@ -40,7 +40,7 @@ definition:
         COALESCE(e.total_descent, 0.0) AS total_descent,
         COALESCE(e.max_slope, 0.0)     AS max_slope
     FROM {schema}.ways_base w
-    LEFT JOIN {schema}.elevation_python_staging e
+    LEFT JOIN {schema}.elevation_staging e
         ON w.id = e.way_id
 
 # ---- Build options ---------------------------------------------------------

@@ -162,13 +162,24 @@ class BaseMaterializedViewHandler:
             sql = f"{sql} WITH NO DATA"
         return sql
 
+    def _exec_index(self, sql: str, lock_name: str):
+        """
+        Execute a CREATE INDEX statement under a per-index advisory lock so two
+        concurrent triggers for the same MV can't race on pg_class. See
+        DbRepository.call_sql_with_advisory_lock for the why.
+        """
+        if self.logger is not None:
+            self.logger.info(f"MV SQL ({self.conf.identifier}): {sql}")
+        lock_key = f"mvidx:{self.conf.schema}.{lock_name}"
+        self.db.call_sql_with_advisory_lock(sql, lock_key, raise_on_error=True)
+
     def _ensure_indexes(self):
         for idx in (self.conf.raw.get("indexes") or []):
             if isinstance(idx, str):
-                self._exec(idx.format(schema=self.conf.schema))
+                self._exec_index(idx.format(schema=self.conf.schema), self.conf.name)
                 continue
             if idx.get("sql"):
-                self._exec(idx["sql"].format(schema=self.conf.schema))
+                self._exec_index(idx["sql"].format(schema=self.conf.schema), self.conf.name)
                 continue
 
             index_name = idx.get("name")
@@ -189,7 +200,7 @@ class BaseMaterializedViewHandler:
                 f'CREATE {unique}INDEX IF NOT EXISTS "{index_name}" '
                 f'ON "{self.conf.schema}"."{self.conf.name}"{using} ({cols_sql}){where_sql}'
             )
-            self._exec(sql)
+            self._exec_index(sql, index_name)
 
 
 class GenericMaterializedViewHandler(BaseMaterializedViewHandler):

@@ -24,8 +24,10 @@ handler:
 # When the manager should call `ensure()` (create if missing) and `refresh()`.
 triggers:
   on_datasource_success:           # fire after these ETL datasources finish a successful run
+    # Only the forecast datasource fires this MV. Listing both weather datasources
+    # caused two parallel ensure()/refresh() calls to race on CREATE INDEX. The MV
+    # still reads station data via depends_on.tables below.
     - weather_forecast_bright_sky
-    - weather_station_bright_sky
   only_on_data_change: true        # skip REFRESH when the triggering run inserted/updated 0 rows
 
 # ---- Dependencies (declarative; for documentation & dependency graphs) -----

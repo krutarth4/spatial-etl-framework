@@ -1025,9 +1025,17 @@ class DBRepository(DbConfiguration):
             return_xmax: bool = False,
     ):
         """
-        Walk source_table in PK-range slices and run an INSERT … SELECT … ON CONFLICT
-        upsert per slice. Each batch commits independently — failures mid-stream leave
-        prior batches durable, same semantics as call_sql_batched.
+        Walk source_table in PK-range slices and copy rows into target_table per slice.
+        Each batch commits independently — failures mid-stream leave prior batches durable.
+
+        Fast path: if target_table is empty, skip the ON CONFLICT machinery entirely
+        and emit a plain INSERT … SELECT per batch. This is the common case for
+        experimentation runs (tables get dropped + reloaded), and avoids the per-row
+        `IS DISTINCT FROM` comparison across every update column.
+
+        Slow path: ON CONFLICT DO UPDATE with `IS DISTINCT FROM` filter, but without
+        RETURNING xmax — we rely on `result.rowcount` for affected-row counts instead
+        of materializing every PK back into Python.
         """
         source_pk_cols = [c.name for c in source_table.primary_key.columns]
         if len(source_pk_cols) != 1:
@@ -1042,6 +1050,10 @@ class DBRepository(DbConfiguration):
             bounds = session.execute(
                 select(func.min(pk_col), func.max(pk_col))
             ).one()
+            # Cheap empty-target probe — LIMIT 1 instead of COUNT(*)
+            target_empty = session.execute(
+                select(text("1")).select_from(target_table).limit(1)
+            ).first() is None
         pk_min, pk_max = bounds[0], bounds[1]
 
         if pk_min is None:
@@ -1052,14 +1064,13 @@ class DBRepository(DbConfiguration):
                 return {"inserted": 0, "updated": 0, "total": 0, "success": True}
             return 0
 
-        total_inserted = 0
-        total_updated = 0
         total_rows = 0
         lo = pk_min
         batch_num = 0
         approx_batches = max(1, (pk_max - pk_min) // batch_size + 1)
+        mode = "plain INSERT (target empty)" if target_empty else "ON CONFLICT upsert"
         self.logger.info(
-            f"Batched upsert {source_table.fullname} -> {target_table.fullname}: "
+            f"Batched copy {source_table.fullname} -> {target_table.fullname} [{mode}]: "
             f"pk range {pk_min}..{pk_max}, batch_size={batch_size}, "
             f"~{approx_batches} batches"
         )
@@ -1075,7 +1086,9 @@ class DBRepository(DbConfiguration):
                     .where(pk_col < hi)
             )
 
-            if update_cols:
+            if target_empty:
+                stmt = base_insert
+            elif update_cols:
                 update_map = {
                     col: getattr(base_insert.excluded, col)
                     for col in update_cols
@@ -1098,26 +1111,11 @@ class DBRepository(DbConfiguration):
                     index_elements=conflict_cols
                 )
 
-            if return_xmax:
-                target_pk_cols = [c.name for c in target_table.primary_key.columns]
-                stmt = stmt.returning(
-                    *(target_table.c[c] for c in target_pk_cols),
-                    text("xmax"),
-                )
-
             t0 = time.perf_counter()
             with self.session_scope() as session:
                 result = session.execute(stmt)
-                if return_xmax:
-                    rows = result.fetchall()
-                    inserted = sum(1 for r in rows if r.xmax == 0)
-                    total_inserted += inserted
-                    total_updated += len(rows) - inserted
-                    total_rows += len(rows)
-                    batch_rows = len(rows)
-                else:
-                    batch_rows = result.rowcount if result.rowcount >= 0 else 0
-                    total_rows += batch_rows
+                batch_rows = result.rowcount if result.rowcount >= 0 else 0
+                total_rows += batch_rows
 
             elapsed = time.perf_counter() - t0
             self.logger.info(
@@ -1129,9 +1127,12 @@ class DBRepository(DbConfiguration):
             lo = hi
 
         if return_xmax:
+            # `rowcount` counts all affected rows (inserts + updates). We report it
+            # under `inserted` so MaterializedViewManager._has_new_data still triggers
+            # refreshes when data changed. We no longer distinguish inserted vs updated.
             return {
-                "inserted": total_inserted,
-                "updated": total_updated,
+                "inserted": total_rows,
+                "updated": 0,
                 "total": total_rows,
                 "success": True,
             }
@@ -1339,54 +1340,56 @@ class DBRepository(DbConfiguration):
                 )
                 return {"success": False}
 
+        # Same empty-target fast path as the batched code path: skip ON CONFLICT
+        # entirely when staging is empty (typical for experimentation runs that
+        # drop + reload every dataset).
+        with self.session_scope() as session:
+            target_empty = session.execute(
+                select(text("1")).select_from(staging_table).limit(1)
+            ).first() is None
+
         base_insert = Insert(staging_table).from_select(
             insert_cols,
             select(*(raw_table.c[c] for c in insert_cols))
         )
 
-        pk_cols = self.resolve_primary_key_columns(staging_table)
-        returning_cols = [staging_table.c[c] for c in pk_cols]
-        update_map = {
-            col: getattr(base_insert.excluded, col)
-            for col in update_cols
-        }
-
-        where_clause = or_(
-            *(
-                staging_table.c[col].is_distinct_from(
-                    getattr(base_insert.excluded, col)
-                )
+        if target_empty:
+            stmt = base_insert
+        else:
+            update_map = {
+                col: getattr(base_insert.excluded, col)
                 for col in update_cols
+            }
+            where_clause = or_(
+                *(
+                    staging_table.c[col].is_distinct_from(
+                        getattr(base_insert.excluded, col)
+                    )
+                    for col in update_cols
+                )
             )
-        )
-
-        upsert_stmt = (base_insert.on_conflict_do_update(
-            index_elements=conflict_cols,
-            set_=update_map,
-            where=where_clause,
-        ).returning(
-            *returning_cols,
-            text("xmax")
-        )
-        )
+            stmt = base_insert.on_conflict_do_update(
+                index_elements=conflict_cols,
+                set_=update_map,
+                where=where_clause,
+            )
 
         try:
             with self.session_scope() as session:
-                result = session.execute(upsert_stmt)
-                rows = result.fetchall()
-
-            inserted = sum(1 for r in rows if r.xmax == 0)
-            updated = len(rows) - inserted
+                result = session.execute(stmt)
+                affected = result.rowcount if result.rowcount and result.rowcount >= 0 else 0
 
             self.logger.info(
                 f"Synced raw → staging: {raw_schema}.{raw_table_name} → "
-                f"{staging_schema}.{staging_table_name}"
+                f"{staging_schema}.{staging_table_name} "
+                f"({'plain insert' if target_empty else 'upsert'}, {affected} rows)"
             )
 
+            # `inserted` carries the affected-rows total so MV refresh still triggers.
             return {
-                "inserted": inserted,
-                "updated": updated,
-                "total": len(rows),
+                "inserted": affected,
+                "updated": 0,
+                "total": affected,
                 "success": True
             }
 
@@ -1417,6 +1420,34 @@ class DBRepository(DbConfiguration):
                         session.execute(text(sql))
             self.logger.info("SQL execution completed.")
             # return result
+        except Exception as e:
+            self.logger.error(f"SQL execution failed: {e}")
+            if raise_on_error:
+                raise
+
+    def call_sql_with_advisory_lock(self, sql: str, lock_key: str, raise_on_error: bool = False):
+        """
+        Run ``sql`` while holding a transaction-level advisory lock derived from
+        ``lock_key``, both inside a single transaction.
+
+        Used to serialize concurrent ``CREATE INDEX IF NOT EXISTS`` calls. That
+        statement is NOT atomic: two sessions can both pass the catalog check and
+        then collide on pg_class's unique index (pg_class_relname_nsp_index). This
+        happens when one MV is triggered from multiple datasources at the same
+        time (e.g. mv_weather fired by two weather datasources in parallel). The
+        advisory lock makes the second session wait for the first to commit, after
+        which IF NOT EXISTS correctly short-circuits.
+        """
+        try:
+            self.logger.info("Starting SQL execution (advisory-locked)...")
+            with self._sql_execution_heartbeat(sql):
+                with self.session_scope() as session:
+                    session.execute(
+                        text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                        {"lock_key": lock_key},
+                    )
+                    session.execute(text(sql))
+            self.logger.info("SQL execution completed.")
         except Exception as e:
             self.logger.error(f"SQL execution failed: {e}")
             if raise_on_error:
