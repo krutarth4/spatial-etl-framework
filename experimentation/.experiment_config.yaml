@@ -502,7 +502,7 @@ datasources:
     strategy:
       type: sql_template
     config:
-      sql_file: mapping_sql/elevation.sql
+      sql_file: mapping_sql/elevationDeprecated.sql
     base_table:
       table_name: ways_base
       table_schema: exp_null
@@ -561,7 +561,7 @@ datasources:
     strategy:
       type: sql_template
     config:
-      sql_file: mapping_sql/elevation_python.sql
+      sql_file: mapping_sql/elevation.sql
     base_table:
       table_name: ways_base
       table_schema: exp_null

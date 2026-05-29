@@ -21,7 +21,7 @@ from utils.execution_time import measure_time
 
 
 class ElevationTable(StagingTable):
-    __tablename__ = "elevation_staging"
+    __tablename__ = "elevation_staging_deprecated"
 
     id = Column(Integer, primary_key=True, autoincrement=True,
                 index=True)  # make sure to create indexing for the table for better query and fast computation
@@ -40,7 +40,7 @@ class ElevationTable(StagingTable):
 
 
 class ElevationEnrichmentTable(EnrichmentTable):
-    __tablename__ = "elevation_enrichment"
+    __tablename__ = "elevation_enrichment_deprecated"
 
     id = Column(Integer, primary_key=True, autoincrement=True, index=True)
 
@@ -73,7 +73,7 @@ class ElevationEnrichmentTable(EnrichmentTable):
 
 
 class ElevationMappingTable(MappingTable):
-    __tablename__ = "elevation_mapping"
+    __tablename__ = "elevation_mapping_deprecated"
 
     id = Column(Integer, primary_key=True,
                 autoincrement=True)  # make sure to create indexing for the table for better query and fast computation
