@@ -468,6 +468,108 @@ class DataSourceABCImpl(DataSourceABC):
         return paths
 
     def read_file_content(self, path):
+        return self._auto_read(path)
+
+    def _resolve_extension(self, path: str) -> str:
+        response_type = None
+        try:
+            response_type = self.data_source_config.source.response_type
+        except AttributeError:
+            self.logger.warning("[_resolve_extension] data_source_config.source.response_type not accessible; falling back to file suffix")
+        if response_type:
+            ext = response_type.strip().lower().split(".")[-1]  # "json.gz" → "gz"
+            self.logger.debug(f"[_resolve_extension] response_type='{response_type}' → resolved ext='{ext}' for path={path}")
+            return ext
+        ext = Path(path).suffix.lstrip(".").lower()
+        self.logger.debug(f"[_resolve_extension] No response_type config; using file suffix ext='{ext}' for path={path}")
+        return ext
+
+    def _auto_read(self, path: str):
+        ext = self._resolve_extension(path)
+        reader_cfg = getattr(getattr(self.data_source_config, "source", None), "reader", None)
+        self.logger.info(f"[_auto_read] Reading path={path} | ext='{ext}' | reader_cfg={reader_cfg}")
+
+        if ext in ("gpkg", "shp", "geojson"):
+            import geopandas as gpd
+            engine = reader_cfg.engine if (reader_cfg and reader_cfg.engine) else "pyogrio"
+            self.logger.debug(f"[_auto_read] Spatial read: engine='{engine}' path={path}")
+            try:
+                gdf = gpd.read_file(path, engine=engine)
+            except Exception as e:
+                self.logger.error(f"[_auto_read] geopandas.read_file failed for {path}: {e}", exc_info=True)
+                return NotImplemented
+            if gdf.empty:
+                self.logger.warning(f"[_auto_read] geopandas returned empty GeoDataFrame for {path}")
+                return []
+            self.logger.debug(f"[_auto_read] Loaded {len(gdf)} features from {path} | CRS={gdf.crs}")
+            if gdf.crs is None:
+                self.logger.warning(f"[_auto_read] No CRS defined in {path}; skipping reprojection")
+            elif reader_cfg and reader_cfg.target_crs:
+                src_epsg = gdf.crs.to_epsg()
+                if src_epsg != reader_cfg.target_crs:
+                    self.logger.info(f"[_auto_read] Reprojecting EPSG:{src_epsg} → EPSG:{reader_cfg.target_crs}")
+                    gdf = gdf.to_crs(reader_cfg.target_crs)
+                else:
+                    self.logger.debug(f"[_auto_read] CRS already EPSG:{src_epsg}, no reprojection needed")
+            gdf = gdf.drop(columns=["geometry"], errors="ignore")
+            records = gdf.to_dict(orient="records")
+            self.logger.info(f"[_auto_read] Returning {len(records)} records from {path}")
+            return records
+
+        if ext == "parquet":
+            import pandas as pd
+            self.logger.debug(f"[_auto_read] Parquet read: {path}")
+            try:
+                df = pd.read_parquet(path)
+                self.logger.info(f"[_auto_read] Loaded parquet {path}: {len(df)} rows, columns={list(df.columns)}")
+                return df.to_dict(orient="records")
+            except Exception as e:
+                self.logger.error(f"[_auto_read] pd.read_parquet failed for {path}: {e}", exc_info=True)
+                return NotImplemented
+
+        if ext in ("csv", "tsv"):
+            import pandas as pd
+            self.logger.debug(f"[_auto_read] CSV/TSV read: {path}")
+            try:
+                df = pd.read_csv(path)
+                self.logger.info(f"[_auto_read] Loaded csv {path}: {len(df)} rows, columns={list(df.columns)}")
+                return df.to_dict(orient="records")
+            except Exception as e:
+                self.logger.error(f"[_auto_read] pd.read_csv failed for {path}: {e}", exc_info=True)
+                return NotImplemented
+
+        if ext in ("xlsx", "xls"):
+            import pandas as pd
+            self.logger.debug(f"[_auto_read] Excel read: {path}")
+            try:
+                df = pd.read_excel(path)
+                self.logger.info(f"[_auto_read] Loaded excel {path}: {len(df)} rows, columns={list(df.columns)}")
+                return df.to_dict(orient="records")
+            except Exception as e:
+                self.logger.error(f"[_auto_read] pd.read_excel failed for {path}: {e}", exc_info=True)
+                return NotImplemented
+
+        if ext == "json":
+            self.logger.debug(f"[_auto_read] JSON read: {path}")
+            try:
+                try:
+                    import orjson
+                    with open(path, "rb") as f:
+                        result = orjson.loads(f.read())
+                except ImportError:
+                    self.logger.debug("[_auto_read] orjson not available, falling back to stdlib json")
+                    import json
+                    with open(path, "r", encoding="utf-8") as f:
+                        result = json.load(f)
+                record_count = len(result) if isinstance(result, list) else 1
+                self.logger.info(f"[_auto_read] Loaded json {path}: type={type(result).__name__}, top-level count={record_count}")
+                return result
+            except Exception as e:
+                self.logger.error(f"[_auto_read] JSON parse failed for {path}: {e}", exc_info=True)
+                return NotImplemented
+
+        # gz, zip, xml, pbf — defer to FileHandler._read() fallback
+        self.logger.debug(f"[_auto_read] No handler for ext='{ext}', deferring to FileHandler for {path}")
         return NotImplemented
 
     def read_files(self, path: Path | str) -> list[dict]:

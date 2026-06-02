@@ -560,6 +560,9 @@ datasources:
       save_local: True
       destination: "tmp/tree_wfs/tree_ablage/gpkg_packet.gpkg" # path where to save the response
       response_type: gpkg # the response type
+      reader:
+        engine: pyogrio
+        target_crs: 25833
       multi_fetch:
         enable : true
         strategy: expand_params # could be expand_params for different params, url_template, EXPLICIT_URL_LIST contains a lot of urls
