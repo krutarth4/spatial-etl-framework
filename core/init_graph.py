@@ -315,6 +315,20 @@ class InitGraph:
         if self.comm_service is None:
             return
         try:
+            # Top-level graph disabled: mark download as completed so the router
+            # doesn't wait for a task that will never run.
+            if not self.graph_configuration.enable:
+                self.comm_service.update_status(
+                    "osm_file_download",
+                    owner="mdp",
+                    current_status="disabled",
+                    last_run_status="skipped",
+                    last_run_message="Graph disabled; using existing OSM data",
+                    is_completed=True,
+                    success=True,
+                )
+                return
+
             graph_sources = getattr(self.graph_configuration, "datasource", None) or []
             if not graph_sources:
                 return
@@ -380,6 +394,17 @@ class InitGraph:
     def reflect_ingested_graph_tables(self):
         if self.db is not None:
             self.db.reflect_base_tables(self.graph_configuration.schema, self.graph_configuration.table_name)
+
+    def sync_base_graph(self):
+        """Upsert ways_base from the source graph table so it matches the current
+        source. Additive and id-preserving, no full drop. Used when the graph
+        stage is disabled and execute_external_ingest()'s resync never runs."""
+        if self.db is None or not self.check_if_raw_graph_present():
+            self.logger.warning("Cannot sync base graph: source graph table missing")
+            return
+        self.logger.info("Syncing base graph from source (count mismatch detected)")
+        self.base_graph.populate_base_graph_table(self.graph_configuration.table_name,
+                                                  self.graph_configuration.schema)
 
     def is_base_graph_ready(self):
         base_data_count = self.base_graph.get_base_graph_row_counts()

@@ -69,17 +69,12 @@ class AirPollutionGridEnrichmentTable(EnrichmentTable):
 class AirPollutionGridMappingTable(MappingTable):
     __tablename__ = "air_pollution_grid_mapping"
 
-    # Override parent's way_id to remove column-level unique=True (this table has N rows per way)
-    way_id = Column(Integer, ForeignKey(f"{GlobalConstants.base_schema}.{GlobalConstants.base_table}.id"), nullable=False)
-
-    uid = Column(Integer, primary_key=True, autoincrement=True)
-    grid_uid = Column(Integer, nullable=False, index=True)
-    grid_id = Column(Integer, nullable=False, index=True)
-    intersection_length_m = Column(Float, nullable=False)
-
-    __table_args__ = (
-        UniqueConstraint("way_id", "grid_id"),
-    )
+    way_id = Column(Integer, ForeignKey(f"{GlobalConstants.base_schema}.{GlobalConstants.base_table}.id"),
+                    primary_key=True, nullable=False)
+    no2 = Column(ARRAY(Float), nullable=True)
+    pm10 = Column(ARRAY(Float), nullable=True)
+    pm25 = Column(ARRAY(Float), nullable=True)
+    total_intersection_length_m = Column(Float, nullable=True)
 
 
 class AirQualityDataMapper(DataSourceABCImpl):

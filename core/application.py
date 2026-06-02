@@ -140,6 +140,11 @@ class Application:
         if self.graph is not None:
             self.graph.update_graph_source()
             self.graph.ingest_graph_data()
+            # ways_base must match the source graph before mapping. ingest_graph_data()
+            # is a no-op when the graph stage is disabled, so trigger the resync here
+            # rather than blocking forever on a count that nothing will change.
+            if not self.graph.is_base_graph_ready():
+                self.graph.sync_base_graph()
             # Wait till the new ways_base_graph has been created
             while not self.graph.is_base_graph_ready():
                 self.logger.warning("Base graph is not ready")

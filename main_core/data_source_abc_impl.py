@@ -87,10 +87,14 @@ class DataSourceABCImpl(DataSourceABC):
         # Honour run_once semantics even without a scheduler: skip if this
         # datasource already succeeded in a prior run (recorded in metadata).
         if self._is_run_once_and_completed():
+            self.start_timer = time.perf_counter()
+            self._run_started_at = datetime.utcnow()
+            self._stage_timings = {}
             self.logger.info(
                 f"[run_once] '{self.data_source_name}' already completed successfully "
                 f"in a previous run — skipping."
             )
+            self.run_job_response("Skipped — already completed (run_once)", level="info")
             return
 
         self.logger.debug("No scheduler found, executing datasource directly")
@@ -1001,6 +1005,8 @@ class DataSourceABCImpl(DataSourceABC):
 
 
     def clean_raw_staging_table(self, backup: bool):
+        if self.raw_staging_table is None:
+            return
         self.db.drop_table(self.raw_staging_table, self.raw_staging_schema, backup, True, True)
 
     def recreate_table_indexes(self):

@@ -6,9 +6,9 @@
 #   air_pollution_grid_enrichment   (1 row per grid cell × forecast_time;
 #                                    no2/pm10/pm25 are 106-element ARRAY[float]
 #                                    of hourly forecasts starting at forecast_time)
-#   → latest batch selected per grid cell
-#   → dominant grid cell (largest intersection_length_m) selected per way
-#   → arrays used as-is (no re-aggregation needed)
+#   air_pollution_grid_mapping      (1 row per way; no2/pm10/pm25 are weighted
+#                                    averages across all intersecting grid cells,
+#                                    weighted by intersection_length_m)
 #   → LEFT JOINed to ways_base → exactly one row per way segment
 #
 # Output columns:
@@ -31,8 +31,8 @@ schema: exp_null
 description: >
   Per-way air pollution forecast (NO2, PM10, PM2.5) packed as float arrays.
   One row per way segment (same length as ways_base). Array element i maps to
-  forecast_start + (i-1) hours. Values are taken from the dominant (largest
-  intersection) 50 m grid cell per way.
+  forecast_start + (i-1) hours. Values are intersection-length-weighted averages
+  across all grid cells overlapping the way.
 enable: true
 
 # ---- Handler selection -----------------------------------------------------
@@ -58,43 +58,15 @@ depends_on:
 # ---- Definition ------------------------------------------------------------
 definition:
   select_sql: |
-    WITH latest_per_grid AS (
-        -- Most recently ingested forecast batch per 50 m grid cell.
-        SELECT DISTINCT ON (grid_id)
-            grid_id,
-            forecast_time,
-            no2,
-            pm10,
-            pm25
-        FROM {schema}.air_pollution_grid_enrichment
-        WHERE no2          IS NOT NULL
-          AND pm10         IS NOT NULL
-          AND pm25         IS NOT NULL
-          AND forecast_time IS NOT NULL
-        ORDER BY grid_id, forecast_time DESC NULLS LAST, uid DESC
-    ),
-    forecast_meta AS (
-        -- Global forecast window derived from the selected grid cells.
+    WITH forecast_meta AS (
         SELECT
-            timezone('UTC', MIN(forecast_time))                                          AS forecast_start,
+            timezone('UTC', MIN(forecast_time))                                              AS forecast_start,
             timezone('UTC',
                 MIN(forecast_time) + (MAX(array_length(no2, 1)) - 1) * INTERVAL '1 hour'
-            )                                                                            AS forecast_end
-        FROM latest_per_grid
-    ),
-    dominant_grid AS (
-        -- For each way, pick the single grid cell with the greatest intersection
-        -- length. Adjacent 50 m cells are highly correlated (same interpolated
-        -- model output), so blending adds no meaningful accuracy over the
-        -- dominant cell.
-        SELECT DISTINCT ON (m.way_id)
-            m.way_id,
-            lpg.no2,
-            lpg.pm10,
-            lpg.pm25
-        FROM {schema}.air_pollution_grid_mapping m
-        JOIN latest_per_grid lpg ON lpg.grid_id = m.grid_id
-        ORDER BY m.way_id, m.intersection_length_m DESC
+            )                                                                                AS forecast_end
+        FROM {schema}.air_pollution_grid_enrichment
+        WHERE no2 IS NOT NULL
+          AND forecast_time IS NOT NULL
     )
     SELECT
         w.id,
@@ -102,12 +74,12 @@ definition:
         w.way_link_index,
         fm.forecast_start,
         fm.forecast_end,
-        dg.no2,
-        dg.pm10,
-        dg.pm25
+        m.no2,
+        m.pm10,
+        m.pm25
     FROM {schema}.ways_base w
     CROSS JOIN forecast_meta fm
-    LEFT JOIN dominant_grid dg ON dg.way_id = w.id
+    LEFT JOIN {schema}.air_pollution_grid_mapping m ON m.way_id = w.id
 
 # ---- Build options ---------------------------------------------------------
 build:

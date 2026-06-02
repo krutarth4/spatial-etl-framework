@@ -269,7 +269,7 @@ class PleasantBicyclingMapper(DataSourceABCImpl):
     def mapping_db_query(self) -> str:
         """
         Insert one row per way_base into pleasant_mapping regardless of whether
-        a matching connection exists within 20 m.  Ways that have no nearby
+        a matching connection exists within 5 m.  Ways that have no nearby
         pleasant-bicycling connection get connection_id = NULL and distance_m = NULL;
         the MV and the Java scorer both treat NULL as "no data".
 
@@ -302,7 +302,7 @@ class PleasantBicyclingMapper(DataSourceABCImpl):
             LEFT JOIN LATERAL (
                 SELECT e2.connection_id, e2.geometry_25833
                 FROM "{enrich_schema}"."{enrich_table}" e2
-                WHERE ST_DWithin(b.geometry_25833, e2.geometry_25833, 20)
+                WHERE ST_DWithin(b.geometry_25833, e2.geometry_25833, 5)
                 ORDER BY b.geometry_25833 <-> e2.geometry_25833
                 LIMIT 1
             ) e ON TRUE
