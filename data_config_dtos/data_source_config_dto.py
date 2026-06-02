@@ -178,6 +178,12 @@ class SourceMultiFetchDTO:
 
 
 @dataclass
+class ReaderConfigDTO:
+    engine: Optional[str] = None       # geopandas engine: "pyogrio" or "fiona"
+    target_crs: Optional[int] = None   # EPSG code to reproject spatial data to, e.g. 25833
+
+
+@dataclass
 class SourceDTO:
     check_metadata: CheckMetadataDTO
     url: Optional[str]
@@ -191,6 +197,7 @@ class SourceDTO:
     params: Optional[Mapping[str, Any]]
     mode: str | SourceFetchModeEnum
     multi_fetch: Optional[SourceMultiFetchDTO]
+    reader: Optional[ReaderConfigDTO] = None
 
 
 @dataclass
