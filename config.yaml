@@ -247,7 +247,7 @@ datasources:
       next_run_time: none
     mapping:
       enable: true
-      incremental: true
+      incremental: false
       joins_on: dwd_station_id
       table_name: dwd_station_locations_mapping
       strategy:

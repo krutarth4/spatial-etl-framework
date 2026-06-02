@@ -111,6 +111,7 @@ class DBRepository(DbConfiguration):
             self,
             table_name: str,
             table_schema: str,
+            estimate: bool = False,
     ) -> int:
         """
         Return total row count of a table.
@@ -118,10 +119,37 @@ class DBRepository(DbConfiguration):
         Args:
             table_name: table name
             table_schema: schema name
+            estimate: if True, return the fast planner estimate from
+                pg_class.reltuples instead of an exact COUNT(*). The estimate
+                needs no table scan and is accurate enough for dashboards and
+                health probes. Exact COUNT(*) on multi-million-row tables is
+                slow, and under heavy ETL write load it can take longer than a
+                health probe allows, which is what previously flipped the
+                pipeline to unhealthy.
 
         Returns:
-            int: number of rows in the table
+            int: number of rows in the table (exact, or estimated if estimate=True)
         """
+
+        if estimate:
+            try:
+                with self.session_scope() as session:
+                    result = session.execute(
+                        text(
+                            "SELECT GREATEST(c.reltuples, 0)::bigint "
+                            "FROM pg_class c "
+                            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                            "WHERE n.nspname = :schema AND c.relname = :table"
+                        ),
+                        {"schema": table_schema, "table": table_name},
+                    ).scalar()
+                return int(result) if result is not None else 0
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to estimate row count for "
+                    f"'{table_schema}.{table_name}': {e}"
+                )
+                return 0
 
         table: Table | None = self.get_table(table_name, table_schema)
 

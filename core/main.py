@@ -68,14 +68,19 @@ def _get_comm_service() -> CommService:
     return _pipeline_app.comm_service
 
 
+# The endpoints below do synchronous, blocking DB work. They are declared as
+# plain `def` (not `async def`) on purpose: FastAPI runs sync path operations in
+# a worker threadpool, so a slow query never blocks the asyncio event loop. An
+# `async def` that calls blocking DB code would freeze the whole server (and
+# every health probe) for the duration of the query.
 @app.get("/comm/tasks")
-async def comm_list_tasks():
+def comm_list_tasks():
     service = _get_comm_service()
     return {"tasks": service.list_tasks()}
 
 
 @app.get("/comm/tasks/{task_key}")
-async def comm_get_task(task_key: str):
+def comm_get_task(task_key: str):
     service = _get_comm_service()
     task = service.get_task_status(task_key)
     if task is None:
@@ -84,7 +89,7 @@ async def comm_get_task(task_key: str):
 
 
 @app.post("/comm/tasks/{task_key}")
-async def comm_upsert_task(task_key: str, payload: dict = Body(default={})):
+def comm_upsert_task(task_key: str, payload: dict = Body(default={})):
     service = _get_comm_service()
     body = payload or {}
     if not service.get_task_status(task_key):
@@ -109,7 +114,7 @@ async def comm_upsert_task(task_key: str, payload: dict = Body(default={})):
 
 
 @app.post("/comm/tasks/{task_key}/complete")
-async def comm_complete_task(task_key: str, payload: dict = Body(default={})):
+def comm_complete_task(task_key: str, payload: dict = Body(default={})):
     service = _get_comm_service()
     body = payload or {}
     updated = service.update_status(
@@ -136,7 +141,7 @@ def _get_debug_service() -> DebugMapperService:
 
 
 @app.get("/debug/datasources")
-async def debug_datasources():
+def debug_datasources():
     service = _get_debug_service()
     return {
         "datasources": service.list_datasources(),
@@ -145,7 +150,7 @@ async def debug_datasources():
 
 @app.get("/debug/datasources/{mapper_endpoint}")
 @measure_time("debug_datasource_dashboard")
-async def debug_datasource_dashboard(mapper_endpoint: str):
+def debug_datasource_dashboard(mapper_endpoint: str):
     try:
         service = _get_debug_service()
         return service.fetch_datasource_dashboard(mapper_endpoint=mapper_endpoint)
@@ -154,7 +159,7 @@ async def debug_datasource_dashboard(mapper_endpoint: str):
 
 
 @app.get("/debug/mappers")
-async def debug_mappers():
+def debug_mappers():
     service = _get_debug_service()
     return {
         "mappers": service.list_endpoints(),
@@ -163,7 +168,7 @@ async def debug_mappers():
 
 
 @app.get("/debug/mappers/{mapper_endpoint}/mapping-visualization")
-async def debug_mapping_visualization(mapper_endpoint: str, limit: int = 100, way_id: int | None = None):
+def debug_mapping_visualization(mapper_endpoint: str, limit: int = 100, way_id: int | None = None):
     try:
         service = _get_debug_service()
         return service.fetch_mapping_visualization(mapper_endpoint=mapper_endpoint, limit=limit, way_id=way_id)
@@ -172,7 +177,7 @@ async def debug_mapping_visualization(mapper_endpoint: str, limit: int = 100, wa
 
 
 @app.get("/debug/mappers/{mapper_endpoint}/nearest-way")
-async def debug_nearest_way(mapper_endpoint: str, lat: float, lng: float):
+def debug_nearest_way(mapper_endpoint: str, lat: float, lng: float):
     try:
         service = _get_debug_service()
         return service.fetch_nearest_way(mapper_endpoint=mapper_endpoint, lat=lat, lng=lng)
@@ -181,7 +186,7 @@ async def debug_nearest_way(mapper_endpoint: str, lat: float, lng: float):
 
 
 @app.get("/debug/mappers/{mapper_endpoint}/way-inspector")
-async def debug_way_inspector(mapper_endpoint: str, way_id: int | None = None):
+def debug_way_inspector(mapper_endpoint: str, way_id: int | None = None):
     try:
         service = _get_debug_service()
         return service.fetch_way_inspector(mapper_endpoint=mapper_endpoint, way_id=way_id)
@@ -190,7 +195,7 @@ async def debug_way_inspector(mapper_endpoint: str, way_id: int | None = None):
 
 
 @app.get("/debug/mappers/{mapper_endpoint}/{target}")
-async def debug_mapper_data(mapper_endpoint: str, target: str, limit: int = 100):
+def debug_mapper_data(mapper_endpoint: str, target: str, limit: int = 100):
     try:
         service = _get_debug_service()
         return service.fetch(mapper_endpoint=mapper_endpoint, target=target, limit=limit)

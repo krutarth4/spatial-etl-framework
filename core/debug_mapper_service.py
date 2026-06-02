@@ -823,7 +823,11 @@ class DebugMapperService:
             exists = self.db.table_exists(table_name, table_schema)
             if exists:
                 try:
-                    row_count = self.db.get_table_count(table_name, table_schema)
+                    # Use the fast pg_class estimate, not exact COUNT(*). This
+                    # overview is read on every dashboard/datasource listing; an
+                    # exact scan of multi-million-row tables is too slow here and
+                    # competes with the ETL for the database.
+                    row_count = self.db.get_table_count(table_name, table_schema, estimate=True)
                 except Exception:
                     row_count = None
 
