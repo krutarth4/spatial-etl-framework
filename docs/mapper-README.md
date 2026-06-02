@@ -46,11 +46,110 @@ Examples:
 
 Most mapper classes only implement the parts specific to their dataset.
 
+## Built-in format reader
+
+`DataSourceABCImpl` ships a format-aware `_auto_read()` method that handles common file types automatically. You do **not** need to override `read_file_content()` for these formats — just set `response_type` in the source config and the base class reads the file for you.
+
+### Supported formats
+
+| `response_type` | Library used | Returns | Notes |
+|---|---|---|---|
+| `gpkg` | geopandas | `list[dict]` | Geometry column dropped; use override if you need WKB/WKT |
+| `shp` | geopandas | `list[dict]` | Same as above |
+| `geojson` | geopandas | `list[dict]` | Same as above |
+| `parquet` | pandas | `list[dict]` | Columnar; columns become dict keys |
+| `csv` | pandas | `list[dict]` | Comma-separated |
+| `tsv` | pandas | `list[dict]` | Tab-separated |
+| `xlsx` / `xls` | pandas | `list[dict]` | First sheet |
+| `json` | orjson (fallback: stdlib json) | `dict` or `list` | Raw parse; `source_filter()` can reshape |
+| `gz`, `zip`, `xml`, `pbf` | — | falls through to FileHandler | Use a mapper override for these |
+
+Extension detection priority: `source.response_type` config value → actual file suffix.
+For compound types like `json.gz`, the **last** segment wins (`gz`) — the outer container is handled by FileHandler or a mapper override.
+
+### Optional `reader:` config block
+
+For spatial formats you can pass engine and CRS hints without touching Python:
+
+```yaml
+source:
+  response_type: gpkg
+  reader:
+    engine: pyogrio      # "pyogrio" (default) or "fiona"
+    target_crs: 25833    # EPSG code; auto-reprojects if source CRS differs
+```
+
+If `reader:` is omitted, `engine` defaults to `"pyogrio"` and no reprojection is applied.
+
+### No-code datasource example
+
+A CSV datasource with no mapper override:
+
+```yaml
+datasources:
+  - name: my_stops
+    enable: true
+    class_name: myStops          # data_mappers/myStopsMapper.py with no read_file_content override
+    source:
+      fetch: http
+      url: "https://example.com/stops.csv"
+      response_type: csv
+      destination: "tmp/stops/stops.csv"
+    storage:
+      staging:    {table_name: stops_staging,    table_schema: test_osm_base_graph}
+      enrichment: {table_name: stops_enrichment, table_schema: test_osm_base_graph}
+    mapping:
+      enable: true
+      strategy: {type: knn}
+      table_name: stops_mapping
+      table_schema: test_osm_base_graph
+```
+
+The mapper file only needs to exist and inherit from `DataSourceABCImpl`:
+
+```python
+from main_core.data_source_abc_impl import DataSourceABCImpl
+
+class MyStopsMapper(DataSourceABCImpl):
+    pass   # _auto_read handles csv; no read_file_content needed
+```
+
+### GeoPackage with CRS reprojection (no override)
+
+```yaml
+source:
+  response_type: gpkg
+  reader:
+    engine: pyogrio
+    target_crs: 25833
+  destination: "tmp/my_layer/data.gpkg"
+```
+
+```python
+class MyLayerMapper(DataSourceABCImpl):
+    pass   # gpd.read_file() + reproject to EPSG:25833 happens automatically
+```
+
+### When you still need to override `read_file_content()`
+
+Override when:
+- the format falls through (`gz`, `zip`, `xml`, `pbf`)
+- you need geometry in WKB/WKT encoding in the output records
+- you need to read multiple files and merge them (e.g. a metrics file + a geometry file)
+- the source schema needs column validation before staging
+
+```python
+class MyComplexMapper(DataSourceABCImpl):
+    def read_file_content(self, path: str) -> list[dict]:
+        # custom logic here
+        ...
+```
+
+---
+
 ## Minimum mapper implementation
 
-The only method a real mapper almost always needs is `read_file_content()`. That is the dataset-specific parser used by `read_files()`.
-
-Minimal example:
+For formats not handled by the built-in reader, the only method you need is `read_file_content()`.
 
 ```python
 from main_core.data_source_abc_impl import DataSourceABCImpl
@@ -59,9 +158,9 @@ from main_core.data_source_abc_impl import DataSourceABCImpl
 class ExampleMapper(DataSourceABCImpl):
     def read_file_content(self, path: str):
         # Read one file and return either:
+        # - list[dict]  ← preferred
         # - dict
-        # - list[dict]
-        # - string
+        # - str
         return [{"id": 1, "value": "example"}]
 ```
 

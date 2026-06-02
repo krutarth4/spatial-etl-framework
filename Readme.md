@@ -176,8 +176,8 @@ Each datasource follows the same pipeline, implemented in `main_core/data_source
  Source (HTTP / WFS / file)
         │
         ▼
-  read_file_content()          ← override in your mapper (or use built-in)
-        │
+  read_file_content()          ← built-in handles gpkg/shp/geojson/parquet/csv/xlsx/json
+        │                         override only for gz, zip, xml, pbf, or custom schemas
         ▼
    raw_staging  (DB table)
         │  bulk insert in batches
