@@ -205,7 +205,34 @@ Full sequence diagram: [ETL sequence diagram](#etl-sequence-diagram) at the bott
 
 In most cases, **no Python required** — just YAML.
 
-**1. (Optional) Mapper class** — only needed for non-standard source formats:
+### Formats the built-in reader handles automatically
+
+Set `response_type` and the base class reads the file — no `read_file_content()` override needed:
+
+| `response_type` | Library | What you get |
+|---|---|---|
+| `gpkg`, `shp`, `geojson` | geopandas | `list[dict]` (geometry dropped; add `reader.target_crs` to reproject) |
+| `parquet` | pandas | `list[dict]` |
+| `csv`, `tsv` | pandas | `list[dict]` |
+| `xlsx`, `xls` | pandas | `list[dict]` |
+| `json` | orjson / stdlib | raw `dict` or `list` (use `source_filter()` to reshape) |
+
+For `gz`, `zip`, `xml`, `pbf` — or when you need WKB encoding, multi-file merges, or column validation — write a `read_file_content()` override.
+
+Optional spatial hints via `source.reader:`:
+```yaml
+source:
+  response_type: gpkg
+  reader:
+    engine: pyogrio      # "pyogrio" (default) or "fiona"
+    target_crs: 25833    # auto-reprojects if source CRS differs
+```
+
+→ Full format reference + examples: **[Mapper README](docs/mapper-README.md)**.
+
+---
+
+**1. (Optional) Mapper class** — only needed when the built-in reader isn't enough:
 
 ```python
 # data_mappers/myDataMapper.py
@@ -225,7 +252,7 @@ class MyDataMapper(DataSourceABCImpl):
 datasources:
   - name: my_data
     enable: true
-    class_name: MyDataMapper        # omit to use the generic reader
+    class_name: MyDataMapper        # omit if using the built-in reader directly
     debug: {endpoint: my-data}
     source: {fetch: http, url: "https://api.example.com/data.json", response_type: json}
     job:
