@@ -207,6 +207,59 @@ class HookConfigDTO:
 
 
 @dataclass
+class EnrichmentOperatorColumnDTO:
+    name: str
+    type: str
+    index: Optional[str] = None
+
+
+@dataclass
+class AggregationFunctionDTO:
+    column: str
+    function: str  # avg, sum, count, max, min
+    alias: Optional[str] = None
+
+
+@dataclass
+class GroupByExpressionDTO:
+    column: Optional[str] = None
+    expression: Optional[str] = None
+    alias: Optional[str] = None
+
+
+@dataclass
+class EnrichmentOperatorDTO:
+    type: str
+    # make_point
+    x_col: Optional[str] = None
+    y_col: Optional[str] = None
+    srid: Optional[int] = None
+    join_col: Optional[str] = None
+    # reproject
+    target_srid: Optional[int] = None
+    # shared in-place (make_point, reproject, snap_to_grid)
+    source_col: Optional[str] = None
+    target_col: Optional[str] = None
+    condition: Optional[str] = None
+    # snap_to_grid / spatial_aggregate
+    cell_size: Optional[float] = None
+    geometry_col: Optional[str] = None
+    snapped_col: Optional[str] = None
+    # aggregate / spatial_aggregate
+    source_table: Optional[str] = None  # "staging" or "enrichment"
+    group_by: Optional[List[Any]] = None
+    aggregations: Optional[List[AggregationFunctionDTO]] = None
+    conflict_columns: Optional[List[str]] = None
+    filter: Optional[str] = None
+
+
+@dataclass
+class EnrichmentOperatorsConfigDTO:
+    operators: List[EnrichmentOperatorDTO]
+    output_columns: Optional[List[EnrichmentOperatorColumnDTO]] = None
+
+
+@dataclass
 class DataSourceDTO:
     name: str
     description: str
@@ -222,6 +275,7 @@ class DataSourceDTO:
     mapping: MappingDTO
     storage: StorageDTO
     job: JobConfigurationDTO
+    enrichment_operators: Optional[EnrichmentOperatorsConfigDTO] = None
 
 
 @dataclass

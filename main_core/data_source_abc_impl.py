@@ -157,8 +157,42 @@ class DataSourceABCImpl(DataSourceABC):
                                                                                         raw_staging_table_name)
 
     def create_enrichment_tables(self, table_name: str, schema: str, force_create: bool):
+        operators_config = getattr(self.data_source_config, "enrichment_operators", None)
+        if operators_config is not None and operators_config.output_columns:
+            self._create_enrichment_table_from_operators(
+                table_name, schema, force_create, operators_config.output_columns
+            )
+            return
         self.db.create_table_if_not_exist(table_name, table_schema=schema or None,
                                           force_create=force_create, create_without_indexes=True)
+
+    def _create_enrichment_table_from_operators(self, table_name, schema, force_create, output_columns):
+        """Dynamically create the enrichment table from operator-declared output_columns."""
+        from sqlalchemy import Column, BigInteger, MetaData, Table
+
+        if force_create:
+            self.db.drop_table(table_name, schema, backup=True, check_exist=True, cascade=True)
+        if self.db.table_exists(table_name, schema):
+            self.logger.info(f"Enrichment table '{schema}.{table_name}' exists, skipping creation.")
+            return
+
+        meta = MetaData(schema=schema)
+        columns = [Column("uid", BigInteger, primary_key=True, autoincrement=True)]
+        for col_spec in output_columns:
+            sa_type = self.db.resolve_sqlalchemy_type(col_spec.type)
+            columns.append(Column(col_spec.name, sa_type))
+
+        table = Table(table_name, meta, *columns, schema=schema)
+        meta.create_all(bind=self.db.engine, tables=[table], checkfirst=True)
+        self.logger.info(f"Enrichment table '{schema}.{table_name}' created from operator output_columns.")
+
+        for col_spec in output_columns:
+            if col_spec.index == "gist":
+                self.db.create_ways_base_geometry_index(
+                    schema, table_name,
+                    geometry_column=col_spec.name,
+                    index_name=f"idx_{table_name}_{col_spec.name}_gist",
+                )
 
     def create_mapping_tables(self, table_name: str, schema: str, force_create: bool):
         self.db.create_table_if_not_exist(table_name, table_schema=schema or None,
@@ -1089,6 +1123,19 @@ class DataSourceABCImpl(DataSourceABC):
             self._note_stage_warning("trigger_materialized_views", e)
 
     def sync_staging_to_enrichment(self):
+        operators_config = getattr(self.data_source_config, "enrichment_operators", None)
+        if operators_config is not None:
+            from main_core.enrichment_operator_builder import (
+                EnrichmentOperatorBuilder,
+                enrichment_operator_registry,
+            )
+            if EnrichmentOperatorBuilder(enrichment_operator_registry).has_reshape_operators(operators_config):
+                self.logger.info(
+                    "[enrichment_operators] Skipping default staging→enrichment sync: "
+                    "reshape operator will INSERT directly."
+                )
+                return
+
         if self.data_source_config.storage.enrichment:
             batch_size = self._get_batch_size() if self._should_use_batching() else None
             self.db.sync_staging_to_enrichment(self.data_source_config.storage.staging.table_schema,
@@ -1578,8 +1625,30 @@ class DataSourceABCImpl(DataSourceABC):
         return sql_query
 
     def execute_on_enrichment(self):
+        operators_config = getattr(self.data_source_config, "enrichment_operators", None)
+        if operators_config is not None:
+            self._execute_enrichment_operators(operators_config)
+            return
+        # Legacy path: Python enrichment_db_query() override
         query = self.enrichment_db_query()
         self.execute_query("Enrichment", query)
+
+    def _execute_enrichment_operators(self, operators_config):
+        from main_core.enrichment_operator_builder import (
+            EnrichmentOperatorBuilder,
+            EnrichmentOperatorContext,
+            enrichment_operator_registry,
+        )
+        ctx = EnrichmentOperatorContext(
+            staging_schema=self.data_source_config.storage.staging.table_schema,
+            staging_table=self.data_source_config.storage.staging.table_name,
+            enrichment_schema=self.data_source_config.storage.enrichment.table_schema,
+            enrichment_table=self.data_source_config.storage.enrichment.table_name,
+        )
+        builder = EnrichmentOperatorBuilder(enrichment_operator_registry)
+        for op_type, sql in builder.build_sql_sequence(operators_config, ctx):
+            self.logger.info(f"[enrichment_operator:{op_type}] Executing")
+            self.db.call_sql(sql)
 
     def enrichment_db_query(self) -> None | str:
         sql_query = None

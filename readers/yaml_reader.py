@@ -142,7 +142,7 @@ class YamlReader:
     def _strip_newlines_recursive(self, obj, parent_key=None):
         # Keys that should preserve their exact formatting including newlines
         # Used for SQL templates, queries, and other multiline formatted strings
-        PRESERVE_NEWLINES_KEYS = {"sql", "query", "sql_template", "command", "script", "select_sql", "create_sql", "refresh_sql"}
+        PRESERVE_NEWLINES_KEYS = {"sql", "query", "sql_template", "command", "script", "select_sql", "create_sql", "refresh_sql", "filter", "condition", "expression"}
 
         if isinstance(obj, str):
             # Don't strip newlines for SQL/query fields - preserve exact formatting
