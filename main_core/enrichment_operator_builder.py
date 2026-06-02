@@ -1,0 +1,325 @@
+"""
+Declarative enrichment operators — generate PostGIS SQL from YAML config.
+
+Operator types
+--------------
+In-place (UPDATE, no row count change):
+  make_point        — ST_SetSRID(ST_MakePoint(x, y), srid)
+  reproject         — ST_Transform(source_col, target_srid)
+  snap_to_grid      — ST_SnapToGrid(source_col, cell_size)
+
+Reshape (bypass default staging→enrichment sync, TRUNCATE + INSERT SELECT):
+  aggregate         — temporal/attribute GROUP BY with aggregation functions
+  spatial_aggregate — snap geometry to grid + GROUP BY in one pass
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from data_config_dtos.data_source_config_dto import (
+        EnrichmentOperatorDTO,
+        EnrichmentOperatorsConfigDTO,
+    )
+
+_RESHAPE_TYPES = {"aggregate", "spatial_aggregate"}
+_VALID_AGG_FUNCTIONS = {"avg", "sum", "count", "max", "min"}
+
+
+@dataclass
+class EnrichmentOperatorContext:
+    staging_schema: str
+    staging_table: str
+    enrichment_schema: str
+    enrichment_table: str
+
+
+@runtime_checkable
+class EnrichmentOperatorStrategy(Protocol):
+    name: str
+    is_reshape: bool
+
+    def build_sql(
+        self,
+        operator: "EnrichmentOperatorDTO",
+        context: EnrichmentOperatorContext,
+    ) -> str:
+        ...
+
+
+# ---------------------------------------------------------------------------
+# In-place operators
+# ---------------------------------------------------------------------------
+
+class MakePointOperatorStrategy:
+    name = "make_point"
+    is_reshape = False
+
+    def build_sql(self, operator: "EnrichmentOperatorDTO", ctx: EnrichmentOperatorContext) -> str:
+        if not all([operator.x_col, operator.y_col, operator.target_col, operator.join_col]):
+            raise ValueError(
+                "make_point requires x_col, y_col, target_col, join_col"
+            )
+        srid = operator.srid or 4326
+        condition_clause = f"\n  AND {operator.condition}" if operator.condition else ""
+        return (
+            f"UPDATE {ctx.enrichment_schema}.{ctx.enrichment_table} e\n"
+            f"SET {operator.target_col} = ST_SetSRID(\n"
+            f"    ST_MakePoint(s.{operator.x_col}, s.{operator.y_col}),\n"
+            f"    {srid}\n"
+            f")\n"
+            f"FROM {ctx.staging_schema}.{ctx.staging_table} s\n"
+            f"WHERE e.{operator.join_col} = s.{operator.join_col}"
+            f"{condition_clause};"
+        )
+
+
+class ReprojectOperatorStrategy:
+    name = "reproject"
+    is_reshape = False
+
+    def build_sql(self, operator: "EnrichmentOperatorDTO", ctx: EnrichmentOperatorContext) -> str:
+        if not all([operator.source_col, operator.target_col, operator.target_srid]):
+            raise ValueError(
+                "reproject requires source_col, target_col, target_srid"
+            )
+        null_guard = f"{operator.source_col} IS NOT NULL"
+        condition_clause = (
+            f"\n  AND {operator.condition}"
+            if operator.condition
+            else ""
+        )
+        return (
+            f"UPDATE {ctx.enrichment_schema}.{ctx.enrichment_table}\n"
+            f"SET {operator.target_col} = ST_Transform({operator.source_col}, {operator.target_srid})\n"
+            f"WHERE {null_guard}"
+            f"{condition_clause};"
+        )
+
+
+class SnapToGridOperatorStrategy:
+    name = "snap_to_grid"
+    is_reshape = False
+
+    def build_sql(self, operator: "EnrichmentOperatorDTO", ctx: EnrichmentOperatorContext) -> str:
+        if not all([operator.source_col, operator.target_col, operator.cell_size]):
+            raise ValueError(
+                "snap_to_grid requires source_col, target_col, cell_size"
+            )
+        condition_clause = (
+            f"\n  AND {operator.condition}"
+            if operator.condition
+            else ""
+        )
+        return (
+            f"UPDATE {ctx.enrichment_schema}.{ctx.enrichment_table}\n"
+            f"SET {operator.target_col} = ST_SnapToGrid({operator.source_col}, {operator.cell_size})\n"
+            f"WHERE {operator.source_col} IS NOT NULL"
+            f"{condition_clause};"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Reshape operators
+# ---------------------------------------------------------------------------
+
+def _resolve_agg_function(function: str, column: str, alias: str) -> str:
+    fn = function.lower()
+    if fn not in _VALID_AGG_FUNCTIONS:
+        raise ValueError(
+            f"Unsupported aggregation function '{function}'. "
+            f"Supported: {sorted(_VALID_AGG_FUNCTIONS)}"
+        )
+    return f"{fn.upper()}({column}) AS {alias}"
+
+
+def _build_conflict_clause(conflict_columns: list[str], all_select_aliases: list[str]) -> str:
+    update_cols = [c for c in all_select_aliases if c not in conflict_columns]
+    if not update_cols:
+        return f"ON CONFLICT ({', '.join(conflict_columns)}) DO NOTHING"
+    updates = ",\n    ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+    return (
+        f"ON CONFLICT ({', '.join(conflict_columns)})\n"
+        f"DO UPDATE SET\n"
+        f"    {updates}"
+    )
+
+
+class AggregateOperatorStrategy:
+    name = "aggregate"
+    is_reshape = True
+
+    def build_sql(self, operator: "EnrichmentOperatorDTO", ctx: EnrichmentOperatorContext) -> str:
+        if not operator.aggregations:
+            raise ValueError("aggregate operator requires at least one aggregation")
+
+        # Resolve source table
+        source_table = operator.source_table or "staging"
+        if source_table == "staging":
+            src = f"{ctx.staging_schema}.{ctx.staging_table}"
+        else:
+            src = f"{ctx.enrichment_schema}.{ctx.enrichment_table}"
+
+        # Build GROUP BY expressions and their aliases
+        group_by_exprs = []
+        group_by_aliases = []
+        for item in (operator.group_by or []):
+            if isinstance(item, dict):
+                col = item.get("column")
+                expr = item.get("expression")
+                alias = item.get("alias")
+                if expr:
+                    a = alias or f"_grp_{len(group_by_aliases)}"
+                    group_by_exprs.append((expr, a))
+                    group_by_aliases.append(a)
+                elif col:
+                    a = alias or col
+                    group_by_exprs.append((col, a))
+                    group_by_aliases.append(a)
+            else:
+                # GroupByExpressionDTO dataclass
+                if getattr(item, "expression", None):
+                    a = item.alias or f"_grp_{len(group_by_aliases)}"
+                    group_by_exprs.append((item.expression, a))
+                    group_by_aliases.append(a)
+                elif getattr(item, "column", None):
+                    a = item.alias or item.column
+                    group_by_exprs.append((item.column, a))
+                    group_by_aliases.append(a)
+
+        # Build SELECT columns (group-by first, then aggregations)
+        select_parts = [f"{expr} AS {alias}" for expr, alias in group_by_exprs]
+        all_aliases = list(group_by_aliases)
+
+        for agg in operator.aggregations:
+            alias = agg.alias or agg.column
+            select_parts.append(_resolve_agg_function(agg.function, agg.column, alias))
+            all_aliases.append(alias)
+
+        select_sql = ",\n    ".join(select_parts)
+        group_by_sql = ", ".join(expr for expr, _ in group_by_exprs)
+        insert_cols = ", ".join(all_aliases)
+        filter_clause = f"\nWHERE {operator.filter}" if operator.filter else ""
+        conflict_clause = (
+            _build_conflict_clause(operator.conflict_columns, all_aliases)
+            if operator.conflict_columns
+            else ""
+        )
+
+        return (
+            f"TRUNCATE TABLE {ctx.enrichment_schema}.{ctx.enrichment_table};\n\n"
+            f"INSERT INTO {ctx.enrichment_schema}.{ctx.enrichment_table} ({insert_cols})\n"
+            f"SELECT\n"
+            f"    {select_sql}\n"
+            f"FROM {src}"
+            f"{filter_clause}\n"
+            f"GROUP BY {group_by_sql}\n"
+            f"{conflict_clause};"
+        )
+
+
+class SpatialAggregateOperatorStrategy:
+    name = "spatial_aggregate"
+    is_reshape = True
+
+    def build_sql(self, operator: "EnrichmentOperatorDTO", ctx: EnrichmentOperatorContext) -> str:
+        if not all([operator.geometry_col, operator.snapped_col, operator.cell_size]):
+            raise ValueError(
+                "spatial_aggregate requires geometry_col, snapped_col, cell_size"
+            )
+        if not operator.aggregations:
+            raise ValueError("spatial_aggregate requires at least one aggregation")
+
+        source_table = operator.source_table or "staging"
+        if source_table == "staging":
+            src = f"{ctx.staging_schema}.{ctx.staging_table}"
+        else:
+            src = f"{ctx.enrichment_schema}.{ctx.enrichment_table}"
+
+        snap_expr = f"ST_SnapToGrid({operator.geometry_col}, {operator.cell_size})"
+        snapped_alias = operator.snapped_col
+        all_aliases = [snapped_alias]
+
+        agg_parts = []
+        for agg in operator.aggregations:
+            alias = agg.alias or agg.column
+            agg_parts.append(_resolve_agg_function(agg.function, agg.column, alias))
+            all_aliases.append(alias)
+
+        select_sql = f"{snap_expr} AS {snapped_alias}"
+        if agg_parts:
+            select_sql += ",\n    " + ",\n    ".join(agg_parts)
+
+        insert_cols = ", ".join(all_aliases)
+        filter_clause = f"\nWHERE {operator.filter}" if operator.filter else ""
+        conflict_clause = (
+            _build_conflict_clause(operator.conflict_columns, all_aliases)
+            if operator.conflict_columns
+            else ""
+        )
+
+        return (
+            f"TRUNCATE TABLE {ctx.enrichment_schema}.{ctx.enrichment_table};\n\n"
+            f"INSERT INTO {ctx.enrichment_schema}.{ctx.enrichment_table} ({insert_cols})\n"
+            f"SELECT\n"
+            f"    {select_sql}\n"
+            f"FROM {src}"
+            f"{filter_clause}\n"
+            f"GROUP BY {snap_expr}\n"
+            f"{conflict_clause};"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Registry and Builder
+# ---------------------------------------------------------------------------
+
+class EnrichmentOperatorRegistry:
+    def __init__(self) -> None:
+        self._strategies: dict[str, EnrichmentOperatorStrategy] = {}
+
+    def register(self, strategy: EnrichmentOperatorStrategy) -> None:
+        self._strategies[strategy.name] = strategy
+
+    def get(self, type_name: str) -> EnrichmentOperatorStrategy:
+        strategy = self._strategies.get(type_name)
+        if strategy is None:
+            raise ValueError(
+                f"Unknown enrichment operator type '{type_name}'. "
+                f"Known: {sorted(self._strategies)}"
+            )
+        return strategy
+
+
+class EnrichmentOperatorBuilder:
+    def __init__(self, registry: EnrichmentOperatorRegistry) -> None:
+        self._registry = registry
+
+    def has_reshape_operators(self, config: "EnrichmentOperatorsConfigDTO") -> bool:
+        return any(op.type in _RESHAPE_TYPES for op in config.operators)
+
+    def build_sql_sequence(
+        self,
+        config: "EnrichmentOperatorsConfigDTO",
+        context: EnrichmentOperatorContext,
+    ) -> list[tuple[str, str]]:
+        """Return [(operator_type, sql), ...] in declaration order."""
+        results = []
+        for op in config.operators:
+            strategy = self._registry.get(op.type)
+            sql = strategy.build_sql(op, context)
+            results.append((op.type, sql))
+        return results
+
+
+# ---------------------------------------------------------------------------
+# Module-level singleton registry — import and use directly
+# ---------------------------------------------------------------------------
+
+enrichment_operator_registry = EnrichmentOperatorRegistry()
+enrichment_operator_registry.register(MakePointOperatorStrategy())
+enrichment_operator_registry.register(ReprojectOperatorStrategy())
+enrichment_operator_registry.register(SnapToGridOperatorStrategy())
+enrichment_operator_registry.register(AggregateOperatorStrategy())
+enrichment_operator_registry.register(SpatialAggregateOperatorStrategy())
