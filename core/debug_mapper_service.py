@@ -192,6 +192,7 @@ class DebugMapperService:
             "metadata": metadata,
             "tables": self._build_table_overview(ds),
             "mapping_overview": self._mapping_overview(ds),
+            "coverage": self._mapping_coverage(ds),
         }
 
     def fetch(
@@ -693,6 +694,43 @@ class DebugMapperService:
         if target == TableTarget.MAPPING:
             return mapping if mapping.get("enable", False) else {}
         return {}
+
+    def _mapping_coverage(self, ds: dict[str, Any]) -> dict[str, Any] | None:
+        """Count covered (non-null mapped_value) vs total rows in the full mapping table."""
+        mapping = ds.get("mapping") or {}
+        if not mapping.get("enable", False):
+            return None
+        table_name = mapping.get("table_name")
+        table_schema = mapping.get("table_schema")
+        if not table_name or not table_schema or self.db is None:
+            return None
+        mapping_table = self.db.get_table(table_name, table_schema)
+        if mapping_table is None:
+            return None
+        primary_col = self._pick_primary_value_col(mapping_table)
+        if not primary_col:
+            return None
+        try:
+            sql = text(
+                f'SELECT COUNT(*) AS total, COUNT("{primary_col}") AS covered '
+                f'FROM "{table_schema}"."{table_name}"'
+            )
+            with self.db.session_scope() as session:
+                row = session.execute(sql).first()
+            if row is None:
+                return None
+            total = int(row[0] or 0)
+            covered = int(row[1] or 0)
+            uncovered = total - covered
+            return {
+                "total": total,
+                "covered": covered,
+                "uncovered": uncovered,
+                "covered_pct": round(covered / total * 100, 1) if total > 0 else 0.0,
+                "value_column": primary_col,
+            }
+        except Exception:
+            return None
 
     def _mapping_overview(self, ds: dict[str, Any]) -> dict[str, Any]:
         mapping = ds.get("mapping") or {}
