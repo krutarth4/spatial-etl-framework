@@ -34,6 +34,11 @@ class LifecycleHooksMixin:
     def load(self, data):
         """Persist transformed records to the raw-staging table.
 
+        Accepts either a plain list[dict] (full-load path) or a generator of
+        list[dict] chunks (streaming path).  In streaming mode each chunk is
+        inserted and freed before the next is fetched, keeping peak RAM to one
+        chunk instead of the full dataset.
+
         Override in a mapper to skip loading (return immediately) or to use a
         completely different persistence strategy (e.g. accumulate in memory).
         """
@@ -49,9 +54,16 @@ class LifecycleHooksMixin:
                     self.logger.warning("found new data hence continuing with db upsert")
                     self.before_load(data)
                     self.pre_database_processing()
-                    self.db.bulk_insert(
-                        self.raw_staging_table, self.raw_staging_schema, data, True
-                    )
+                    if isinstance(data, list):
+                        self.db.bulk_insert(
+                            self.raw_staging_table, self.raw_staging_schema, data, True
+                        )
+                    else:
+                        # Streaming: insert one chunk at a time, each freed after insert
+                        for chunk in data:
+                            self.db.bulk_insert(
+                                self.raw_staging_table, self.raw_staging_schema, chunk, True
+                            )
                     self.after_load(data)
         except Exception as e:
             self.logger.error(f"Error occurred while loading the file into Database: {e}")

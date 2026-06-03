@@ -1,5 +1,6 @@
 # import gc
 import os
+import threading
 import zipfile
 
 from pyproj import Transformer
@@ -54,35 +55,57 @@ class ElevationMapper(DataSourceABCImpl):
     transformer = Transformer.from_crs(4326, 25833, always_xy=True)
     _metrics = {}  # way_id -> dict(ascent, descent, max_slope, last_z, last_pt)
 
-    def post_database_processing(self):
+    # Flush accumulated metrics to DB every N tiles to cap peak RAM.
+    # At 200 tiles the dict holds at most one flush-interval's worth of ways.
+    _FLUSH_EVERY = 200
+    _tiles_processed = 0
+    _flush_lock = threading.Lock()  # guards flush trigger across tile threads
 
-        records = []
+    def _flush_metrics_to_staging(self) -> int:
+        """Write current _metrics to staging via a temp raw table, then clear.
 
-        for way_id, m in self._metrics.items():
-            records.append({
+        Returns the number of records flushed (0 if _metrics was empty).
+        Uses ON CONFLICT way_id upsert so partial flushes compose correctly.
+        """
+        if not self._metrics:
+            return 0
+
+        records = [
+            {
                 "way_id": way_id,
                 "total_ascent": m["ascent"],
                 "total_descent": m["descent"],
                 "max_slope": m["max_slope"],
                 "avg_slope": 0.0,
                 "sample_count": None,
-                "tile_name": m["tile_name"]
-            })
+                "tile_name": m["tile_name"],
+            }
+            for way_id, m in self._metrics.items()
+        ]
 
         staging_name = self.data_source_config.storage.staging.table_name
         staging_schema = self.data_source_config.storage.staging.table_schema
         raw_name = staging_name.replace("_staging", "_raw_staging")
 
-        self.logger.info(f"Cloning {staging_schema}.{staging_name} → {raw_name} (no constraints)")
+        self.logger.info(f"[flush] Cloning {staging_schema}.{staging_name} → {raw_name}")
         self.db.clone_table_structure(staging_schema, staging_name, staging_schema, raw_name)
-
-        self.logger.info(f"Writing {len(records)} slope records to raw staging via COPY")
+        self.logger.info(f"[flush] Writing {len(records)} slope records via COPY")
         self.db.bulk_insert(raw_name, staging_schema, records)
-
-        self.logger.info(f"Upserting raw → staging (ON CONFLICT way_id)")
+        self.logger.info(f"[flush] Upserting raw → staging (ON CONFLICT way_id)")
         self.db.sync_source_to_target_table(staging_schema, raw_name, staging_schema, staging_name)
-
         self.db.drop_table(raw_name, staging_schema)
+
+        flushed = len(self._metrics)
+        ElevationMapper._metrics.clear()
+        return flushed
+
+    def post_database_processing(self):
+        # Flush any remaining metrics accumulated since the last periodic flush.
+        flushed = self._flush_metrics_to_staging()
+        self.logger.info(f"Final flush: {flushed} way records written to staging.")
+
+        staging_name = self.data_source_config.storage.staging.table_name
+        staging_schema = self.data_source_config.storage.staging.table_schema
 
         # Insert zero-value fallback rows for ways that never intersected any
         # elevation tile (outside coverage area, tunnels, etc.).  This ensures
@@ -102,11 +125,11 @@ class ElevationMapper(DataSourceABCImpl):
         # Free accumulated metrics from RAM now that they are persisted to DB.
         # These are class-level dicts/sets, so they would otherwise hold ~500 MB
         # for the rest of the process lifetime.
-        ElevationMapper._metrics.clear()
         ElevationMapper._missing_inside.clear()
         ElevationMapper._zero_length.clear()
         ElevationMapper._single_sample.clear()
-        self.logger.info("Cleared in-memory metrics/diagnostic sets after DB write.")
+        ElevationMapper._tiles_processed = 0
+        self.logger.info("Cleared in-memory diagnostic sets after DB write.")
 
     def load(self, data):
         return
@@ -244,6 +267,18 @@ class ElevationMapper(DataSourceABCImpl):
         # overlapping with the NEXT tile's peak allocation in a parallel worker.
         del tree, xy, zz, x, y, z, ways
         # gc.collect()  # prompt CPython to reclaim immediately (important in threads)
+
+        # Periodic flush: when _FLUSH_EVERY tiles have been processed, dump
+        # accumulated metrics to staging so the dict doesn't grow unbounded.
+        # The lock ensures only one thread performs the flush at a time.
+        with ElevationMapper._flush_lock:
+            ElevationMapper._tiles_processed += 1
+            if ElevationMapper._tiles_processed % ElevationMapper._FLUSH_EVERY == 0:
+                self.logger.info(
+                    f"[periodic flush] {ElevationMapper._tiles_processed} tiles processed — "
+                    f"flushing {len(ElevationMapper._metrics)} way metrics to DB"
+                )
+                self._flush_metrics_to_staging()
 
     def read_file_content(self, path: str) -> dict:
         base_dir = os.path.dirname(path)

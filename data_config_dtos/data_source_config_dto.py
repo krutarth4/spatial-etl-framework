@@ -181,6 +181,7 @@ class SourceMultiFetchDTO:
 class ReaderConfigDTO:
     engine: Optional[str] = None       # geopandas engine: "pyogrio" or "fiona"
     target_crs: Optional[int] = None   # EPSG code to reproject spatial data to, e.g. 25833
+    chunk_size: Optional[int] = None   # rows per chunk for CSV/parquet streaming; None = load all at once
 
 
 @dataclass
