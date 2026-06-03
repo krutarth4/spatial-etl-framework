@@ -32,15 +32,26 @@ class FileReadTransformMixin:
     def transform(self, path):
         """Read a file and run the full filter pipeline.
 
-        Pipeline:
-            read_files()              → raw records
+        Full-list path (default — when read_file_content returns a list):
+            read_files()              → raw records (list)
             before_filter_pipeline()  → hook
             pre_filter_processing()   → hook (e.g. build KDTree)
             source_filter()           → reshape / flatten (Overridable)
             post_filter_processing()  → hook (e.g. save to file)
             after_filter_pipeline()   → hook
+            returns list
+
+        Chunked path (when read_file_content returns a generator / iterator):
+            Returns a generator that yields source_filter(chunk) per batch.
+            Hooks that require the full dataset are skipped in this path;
+            each chunk is freed by GC after load() processes it.
         """
         result = self.read_files(path)
+        if not isinstance(result, list):
+            # Return a generator — transform() itself is NOT a generator function
+            # so the caller receives the generator object (not an empty generator).
+            return self._iter_transform_chunks(result)
+        # Full-list path: unchanged behaviour
         self.logger.info(f"result contains currently {len(result)}")
         self.before_filter_pipeline(result, path)
         self.pre_filter_processing(result)
@@ -49,13 +60,26 @@ class FileReadTransformMixin:
         self.after_filter_pipeline(result, path)
         return result
 
-    def read_files(self, path: Path | str) -> list[dict]:
-        """Wrap FileHandler.read_local_file() and normalise output to a list."""
-        result = []
+    def _iter_transform_chunks(self, chunks):
+        """Generator that applies source_filter to each chunk from a chunked reader."""
+        for chunk in chunks:
+            yield self.source_filter(chunk)
+
+    def read_files(self, path: Path | str):
+        """Wrap FileHandler.read_local_file() and normalise output.
+
+        Returns a flat list[dict] for standard reads, or passes through a
+        generator/iterator unchanged when read_file_content() returns one
+        (chunked streaming mode).
+        """
         try:
             path = Path(path)
             file_handler = FileHandler(path.parent)
             res = file_handler.read_local_file(path.name, self.read_file_content)
+            # Generators/iterators: pass through for chunked processing
+            if hasattr(res, "__next__"):
+                return res
+            result = []
             if isinstance(res, list):
                 result.extend(res)
             elif isinstance(res, dict):
@@ -67,9 +91,10 @@ class FileReadTransformMixin:
                     f"File {path} not readable or the format specified by "
                     f"read_file_content is not correct"
                 )
+            return result
         except Exception as e:
             self.logger.error(f"Error occurred while reading the files {e}")
-        return result
+            return []
 
     # ── Internal helpers ──────────────────────────────────────────────────
 
@@ -153,6 +178,10 @@ class FileReadTransformMixin:
             import pandas as pd
             self.logger.debug(f"[_auto_read] Parquet read: {path}")
             try:
+                chunk_size = reader_cfg.chunk_size if (reader_cfg and reader_cfg.chunk_size) else None
+                if chunk_size:
+                    self.logger.info(f"[_auto_read] Parquet streaming: chunk_size={chunk_size} path={path}")
+                    return self._iter_parquet_chunks(path, chunk_size)
                 df = pd.read_parquet(path)
                 self.logger.info(
                     f"[_auto_read] Loaded parquet {path}: {len(df)} rows, "
@@ -169,6 +198,10 @@ class FileReadTransformMixin:
             import pandas as pd
             self.logger.debug(f"[_auto_read] CSV/TSV read: {path}")
             try:
+                chunk_size = reader_cfg.chunk_size if (reader_cfg and reader_cfg.chunk_size) else None
+                if chunk_size:
+                    self.logger.info(f"[_auto_read] CSV streaming: chunk_size={chunk_size} path={path}")
+                    return self._iter_csv_chunks(path, chunk_size)
                 df = pd.read_csv(path)
                 self.logger.info(
                     f"[_auto_read] Loaded csv {path}: {len(df)} rows, "
@@ -226,3 +259,26 @@ class FileReadTransformMixin:
             f"[_auto_read] No handler for ext='{ext}', deferring to FileHandler for {path}"
         )
         return NotImplemented
+
+    @staticmethod
+    def _iter_csv_chunks(path: str, chunk_size: int):
+        """Yield list[dict] batches from a CSV file without loading it fully into RAM."""
+        import pandas as pd
+        reader = pd.read_csv(path, chunksize=chunk_size)
+        for chunk_df in reader:
+            yield chunk_df.to_dict(orient="records")
+
+    @staticmethod
+    def _iter_parquet_chunks(path: str, chunk_size: int):
+        """Yield list[dict] batches from a Parquet file without loading it fully into RAM."""
+        try:
+            import pyarrow.parquet as pq
+            pf = pq.ParquetFile(path)
+            for batch in pf.iter_batches(batch_size=chunk_size):
+                yield batch.to_pydict() if False else batch.to_pandas().to_dict(orient="records")
+        except ImportError:
+            # pyarrow not available: fall back to pandas full load
+            import pandas as pd
+            df = pd.read_parquet(path)
+            for i in range(0, len(df), chunk_size):
+                yield df.iloc[i:i + chunk_size].to_dict(orient="records")

@@ -144,6 +144,9 @@ class DebugMapperService:
         return items
 
     def list_datasources(self) -> list[dict[str, Any]]:
+        source_keys = [ds.get("name") for ds in self.datasources if ds.get("name")]
+        metadata_map = self._fetch_all_metadata(source_keys)
+
         items: list[dict[str, Any]] = []
         for ds in self.datasources:
             source_name = ds.get("name")
@@ -160,7 +163,7 @@ class DebugMapperService:
                         "fetch": (ds.get("source") or {}).get("fetch"),
                         "url": (ds.get("source") or {}).get("url"),
                     },
-                    "metadata": self._fetch_metadata_row(source_name),
+                    "metadata": metadata_map.get(source_name),
                     "tables": self._build_table_overview(ds),
                 }
             )
@@ -184,6 +187,7 @@ class DebugMapperService:
                 "source": ds.get("source") or {},
                 "storage": ds.get("storage") or {},
                 "mapping": ds.get("mapping") or {},
+                "job": ds.get("job") or {},
             },
             "metadata": metadata,
             "tables": self._build_table_overview(ds),
@@ -838,6 +842,21 @@ class DebugMapperService:
             "exists": exists,
             "row_count": row_count,
         }
+
+    def _fetch_all_metadata(self, source_keys: list[str]) -> dict[str, dict[str, Any]]:
+        if self.db is None or not source_keys:
+            return {}
+
+        table = self.db.get_table(DataSourceMetadataRepository.table_name, self.metadata_schema)
+        if table is None or "source_key" not in table.c:
+            return {}
+
+        with self.db.session_scope() as session:
+            rows = session.execute(
+                select(table).where(table.c.source_key.in_(source_keys))
+            ).mappings().all()
+
+        return {row["source_key"]: self._to_jsonable(dict(row)) for row in rows}
 
     def _fetch_metadata_row(self, source_key: str | None) -> dict[str, Any] | None:
         if self.db is None or not source_key:

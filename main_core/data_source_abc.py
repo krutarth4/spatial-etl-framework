@@ -236,11 +236,14 @@ class DataSourceABC(ABC):
         """
         pass
 
-    def after_process_file(self, path: Path | str, transformed_data):
+    def after_process_file(self, path: Path | str, record_count: int | None):
         """Called after load() for each individual file in the thread pool.
 
         Called by: process_file()
         Override:  for per-file post-processing (e.g. update a progress counter).
+        Args:
+            path:         the file that was processed
+            record_count: number of records loaded, or None in streaming mode
         """
         pass
 

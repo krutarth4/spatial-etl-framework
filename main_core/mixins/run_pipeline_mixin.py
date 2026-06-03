@@ -208,7 +208,11 @@ class RunPipelineMixin:
                 f"[THREAD LOAD DONE] name={thread.name} "
                 f"time={time.monotonic() - t1:.2f}s"
             )
-            self.after_process_file(path, transformed_data)
+            # Free the data reference before the hook so GC can reclaim RAM
+            # immediately rather than waiting for process_file() to return.
+            record_count = len(transformed_data) if isinstance(transformed_data, list) else None
+            del transformed_data
+            self.after_process_file(path, record_count)
 
         except Exception as e:
             self.on_process_file_error(path, e)
