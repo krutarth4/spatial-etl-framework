@@ -1,18 +1,65 @@
-# core/logger_manager.py
 import logging
 import sys
-from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+REPORT_LEVEL = 25
+logging.addLevelName(REPORT_LEVEL, "REPORT")
+
+
+class ColorFormatter(logging.Formatter):
+    """ANSI color codes per log level for console output."""
+    COLORS = {
+        logging.DEBUG:    "\033[94m",  # Blue
+        REPORT_LEVEL:     "\033[96m",  # Cyan  — stage-timing reports
+        logging.WARNING:  "\033[93m",  # Yellow
+        logging.ERROR:    "\033[91m",  # Red
+        logging.CRITICAL: "\033[95m",  # Magenta
+    }
+    RESET = "\033[0m"
+
+    def format(self, record):
+        # Fallback: raw-logger callers (no LoggerAdapter) still render cleanly
+        if not hasattr(record, "mapper"):
+            record.mapper = record.name
+        color = self.COLORS.get(record.levelno, self.RESET)
+        message = super().format(record)
+        return f"{color}{message}{self.RESET}"
+
+
+def _init_root_console_handler() -> None:
+    """Attach a single colored console handler to the root logger on first import."""
+    root = logging.getLogger()
+    if any(
+        isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) is sys.stdout
+        for h in root.handlers
+    ):
+        return
+    fmt = "%(asctime)s | %(mapper)s | %(levelname)s | %(message)s"
+    datefmt = "%Y-%m-%d %H:%M:%S"
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(ColorFormatter(fmt=fmt, datefmt=datefmt))
+    handler.setLevel(logging.DEBUG)
+    root.addHandler(handler)
+    # Only raise root level if it is still at Python's default (WARNING)
+    if root.level == logging.WARNING:
+        root.setLevel(logging.DEBUG)
+
+
+_init_root_console_handler()
+
 
 def setup_file_logging(conf: dict) -> None:
+    """Attach a rotating file handler to the root logger from config.
+
+    Called once at startup; subsequent calls are no-ops if a RotatingFileHandler
+    is already registered.
+    """
     if not conf.get("enable", False):
         return
     root = logging.getLogger()
-    for h in root.handlers:
-        if isinstance(h, RotatingFileHandler):
-            return
+    if any(isinstance(h, RotatingFileHandler) for h in root.handlers):
+        return
     log_dir = Path(conf.get("dir", "logs"))
     log_dir.mkdir(parents=True, exist_ok=True)
     rotation = conf.get("rotation", {})
@@ -23,7 +70,7 @@ def setup_file_logging(conf: dict) -> None:
         encoding=rotation.get("encoding", "utf-8"),
     )
     handler.setFormatter(logging.Formatter(
-        fmt="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+        fmt="%(asctime)s | %(mapper)s | %(levelname)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     ))
     level = getattr(logging, str(conf.get("level", "INFO")).upper(), logging.INFO)
@@ -31,86 +78,59 @@ def setup_file_logging(conf: dict) -> None:
     root.addHandler(handler)
 
 
-REPORT_LEVEL = 25
-logging.addLevelName(REPORT_LEVEL, "REPORT")
+class PipelineLogger(logging.LoggerAdapter):
+    """Zero-overhead structured logger for pipeline components.
 
+    Uses stdlib LoggerAdapter — no extra method-call hops, no per-instance
+    handler setup (a single root handler handles all output).  Injects the
+    owning class/component name as 'mapper' into every LogRecord so every
+    log line carries the datasource identity.
 
-class ColorFormatter(logging.Formatter):
-    """
-    Adds ANSI color codes to log messages based on log level.
-    """
-    COLORS = {
-        logging.DEBUG: "\033[94m",  # Blue
-        # logging.INFO: "\033[92m",      # Green
-        REPORT_LEVEL: "\033[96m",  # Cyan — per-run stage-timing reports
-        logging.WARNING: "\033[93m",  # Yellow
-        logging.ERROR: "\033[91m",  # Red
-        logging.CRITICAL: "\033[95m",  # Magenta
-    }
-    RESET = "\033[0m"
-
-    def format(self, record):
-        color = self.COLORS.get(record.levelno, self.RESET)
-        message = super().format(record)
-        return f"{color}{message}{self.RESET}"
-
-
-class LoggerManager:
-    """
-    Project-wide logger with pre-configured format, levels, and optional file output.
+    Usage:
+        self.logger = PipelineLogger(type(self).__name__)
+        self.logger.info("message")   # logged as  ElevationMapper | INFO | message
     """
 
-    def __init__(self, name: str = None, level=logging.INFO, log_to_file: bool = False):
-        self.logger = logging.getLogger(name or __name__)
-        self.logger.setLevel(level)
+    def __init__(self, name: str, level: int = logging.INFO):
+        base = logging.getLogger(name)
+        base.setLevel(level)
+        super().__init__(base, extra={"mapper": name})
 
-        # Avoid duplicate handlers if logger already configured
-        if not self.logger.handlers:
-            fmt = "%(asctime)s | %(name)s | %(levelname)s | %(message)s",
-            datefmt = "%Y-%m-%d %H:%M:%S"
-            formatter = logging.Formatter(
-                fmt="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
-                datefmt=datefmt
-            )
+    def process(self, msg, kwargs):
+        """Inject mapper name into every log record's extra dict."""
+        kwargs.setdefault("extra", {})
+        kwargs["extra"]["mapper"] = self.extra["mapper"]
+        return msg, kwargs
 
-            # Console handler
-            console_handler = logging.StreamHandler(sys.stdout)
-            color_formatter = ColorFormatter("%(asctime)s | %(name)s | %(levelname)s | %(message)s", datefmt=datefmt)
-            # console_handler.setFormatter(formatter)
-            console_handler.setFormatter(color_formatter)
-            self.logger.addHandler(console_handler)
+    # ── Convenience methods matching the legacy LoggerManager API ────────
 
-            # Optional file handler
-            if log_to_file:
-                log_dir = Path("logs")
-                log_dir.mkdir(exist_ok=True)
-                file_path = log_dir / f"app_{datetime.now().strftime('%Y%m%d')}.log"
-                file_handler = logging.FileHandler(file_path)
-                file_handler.setFormatter(formatter)
-                self.logger.addHandler(file_handler)
-
-    # Predefined helper methods
-    def info(self, msg: str):
-        self.logger.info(msg)
-
-    def debug(self, msg: str):
-        self.logger.debug(msg)
-
-    def warning(self, msg: str):
-        self.logger.warning(msg)
-
-    def error(self, msg: str, exc_info: bool = True):
-        self.logger.error(msg, exc_info=exc_info)
+    def report(self, msg: str, *args, **kwargs):
+        """Log at REPORT level (25) — used for stage-timing table output."""
+        self.log(REPORT_LEVEL, msg, *args, **kwargs)
 
     def _log(self, msg: str):
-        self.logger.log(5, msg=msg)
+        """Log at trace level 5."""
+        self.log(5, msg)
 
-    def critical(self, msg: str):
-        self.logger.critical(msg)
-
-    def report(self, msg: str):
-        self.logger.log(REPORT_LEVEL, msg)
-
-    def get_logger(self):
-        """Return underlying logger (for compatibility with libraries)."""
+    def get_logger(self) -> logging.Logger:
+        """Return the underlying stdlib Logger (for library compatibility)."""
         return self.logger
+
+    def set_name(self, new_name: str):
+        """Switch to a differently-named logger and update the mapper tag.
+
+        Used by DbInstance.set_owner() to stamp the responsible mapper name
+        onto DB-layer log records after the mapper is known.
+        """
+        self.logger = logging.getLogger(new_name)
+        self.extra["mapper"] = new_name
+
+
+# Backward-compatibility alias — every existing  LoggerManager(name)  call site
+# continues to work without any change.  The only behavioural difference is that
+# log records now carry the 'mapper' extra field used by ColorFormatter.
+class LoggerManager(PipelineLogger):
+    """Deprecated: prefer PipelineLogger directly.  Kept for backwards compatibility."""
+
+    def __init__(self, name: str = None, level: int = logging.INFO, log_to_file: bool = False):
+        super().__init__(name or __name__, level)

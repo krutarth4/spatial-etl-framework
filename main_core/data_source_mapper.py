@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from data_config_dtos.data_source_config_dto import DataSourceDTO
 from dacite import from_dict, Config
 
-from log_manager.logger_manager import LoggerManager
+from log_manager.logger_manager import LoggerManager, REPORT_LEVEL
 from main_core.safe_class import safe_class
 from metadata.data_source_metadata_service import DataSourceMetadataService
 
@@ -23,8 +23,9 @@ class DataSourceMapper:
         self.base_graph_conf = base_graph_conf
         self.logger.info(f"Found {len(self.data_sources)} data sources")
         self._register_all_datasource_metadata()
+        all_sources = list(self.data_sources)  # keep full list for status table
         self.data_sources = self.check_enable_data_sources()
-        self.logger.info(f"Enable Found {len(self.data_sources)} data sources")
+        self._print_datasource_table(all_sources, self.data_sources)
 
     @staticmethod
     def _to_datasource_dto(source) -> DataSourceDTO | None:
@@ -100,6 +101,71 @@ class DataSourceMapper:
             return result
         except Exception as e:
             self.logger.error(f"Error loading data sources: {e}")
+
+    def _print_datasource_table(self, all_sources: list, active_sources: list):
+        """Print a color-coded table of all datasources and their activation status."""
+        active_names = {getattr(s, "name", None) for s in active_sources}
+
+        GREEN = "\033[92m"
+        RED   = "\033[91m"
+        DIM   = "\033[2m"
+        BOLD  = "\033[1m"
+        CYAN  = "\033[96m"
+        RESET = "\033[0m"
+
+        rows = []
+        for source in all_sources:
+            dto = self._to_datasource_dto(source)
+            if dto is None:
+                continue
+            name  = dto.name or ""
+            cls   = (dto.class_name or "").strip()
+            schedule = ""
+            try:
+                trigger = dto.job.trigger.type if dto.job and dto.job.trigger else None
+                schedule = getattr(trigger, "name", "") if trigger else ""
+            except Exception:
+                pass
+
+            is_active = name in active_names
+            status = f"{GREEN}● active{RESET}" if is_active else f"{DIM}○ disabled{RESET}"
+            rows.append((name, cls, schedule, status, is_active))
+
+        if not rows:
+            return
+
+        # Column widths (plain text, no ANSI codes)
+        w_name  = max(len("Datasource"),   max(len(r[0]) for r in rows))
+        w_cls   = max(len("Class"),        max(len(r[1]) for r in rows))
+        w_sched = max(len("Schedule"),     max(len(r[2]) for r in rows))
+        w_stat  = max(len("Status"),       len("○ disabled"))
+
+        def row_line(name, cls, sched, status_plain, color):
+            n  = name.ljust(w_name)
+            c  = cls.ljust(w_cls)
+            s  = sched.ljust(w_sched)
+            st = f"{color}{status_plain.ljust(w_stat)}{RESET}"
+            return f"  │ {n}  │ {c}  │ {s}  │ {st} │"
+
+        h_sep  = f"  ├─{'─┼─'.join('─' * w for w in [w_name, w_cls, w_sched, w_stat])}─┤"
+        top    = f"  ┌─{'─┬─'.join('─' * w for w in [w_name, w_cls, w_sched, w_stat])}─┐"
+        bot    = f"  └─{'─┴─'.join('─' * w for w in [w_name, w_cls, w_sched, w_stat])}─┘"
+        header = (f"  │ {'Datasource'.ljust(w_name)}  │ {'Class'.ljust(w_cls)}"
+                  f"  │ {'Schedule'.ljust(w_sched)}  │ {'Status'.ljust(w_stat)} │")
+
+        active_count   = sum(1 for r in rows if r[4])
+        disabled_count = len(rows) - active_count
+        title = (
+            f"\n{BOLD}{CYAN}  Datasource Registry"
+            f"  {RESET}{DIM}({active_count} active, {disabled_count} disabled){RESET}"
+        )
+        lines = [title, top, header, h_sep]
+        for name, cls, sched, _, is_active in rows:
+            color  = GREEN if is_active else DIM
+            plain  = "● active" if is_active else "○ disabled"
+            lines.append(row_line(name, cls, sched, plain, color))
+        lines.append(bot)
+        print("\n".join(lines))
 
     def _run_one_datasource(self, source):
         data = source
