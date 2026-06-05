@@ -174,7 +174,6 @@ graph:
       mapping:
         enable: true
         incremental: false
-        joins_on: dwd_station_id # link id column to join the table to
         table_name: dwd_mapping_stations
         table_schema: *db_schema
         base_table:
@@ -248,7 +247,6 @@ datasources:
     mapping:
       enable: true
       incremental: false
-      joins_on: dwd_station_id
       table_name: dwd_station_locations_mapping
       strategy:
         type: knn
@@ -338,7 +336,6 @@ datasources:
       next_run_time: none
     mapping:
       enable: false
-      joins_on: way_id
       base_table:
         <<: *base_table_conf
         column_name: "station"
@@ -400,7 +397,6 @@ datasources:
       next_run_time: none
     mapping:
       enable: true
-      joins_on: way_id
       table_name: air_pollution_grid_mapping
       strategy:
         type: sql_template
@@ -471,7 +467,6 @@ datasources:
       next_run_time: none
     mapping:
       enable: false
-      joins_on: id
       base_table:
         <<: *base_table_conf
         column_name: "elevation_factor"
@@ -520,7 +515,6 @@ datasources:
       next_run_time: none
     mapping:
       enable: true
-      joins_on: way_id
       table_name: elevation_mapping
       strategy:
         type: sql_template
@@ -596,7 +590,6 @@ datasources:
     mapping:
       enable: true
       table_name: tree_mapping
-      joins_on: id
       strategy:
         type: aggregate_within_distance
       config:
@@ -670,7 +663,6 @@ datasources:
     mapping:
       enable: true
       table_name: pleasant_mapping
-      joins_on: connection_id
       strategy:
         # Custom LEFT JOIN LATERAL — every way_base gets a row; unmatched ways
         # receive connection_id = NULL (handled gracefully by mv_pleasant and Java scorer).

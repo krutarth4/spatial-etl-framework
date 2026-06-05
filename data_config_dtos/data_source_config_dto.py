@@ -130,7 +130,6 @@ class MappingStrategyConfigDTO:
 
 @dataclass
 class MappingDTO:
-    joins_on: Optional[str]
     strategy: Optional[Union[MappingStrategyDTO, str, MappingStrategyConfigDTO]]
     table_name: Optional[str]
     table_schema: Optional[str]
