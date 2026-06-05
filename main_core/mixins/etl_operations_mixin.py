@@ -328,7 +328,6 @@ class EtlOperationsMixin:
             "enrichment_schema": enrichment_schema,
             "base_table": base.table_name,
             "base_schema": base.table_schema,
-            "joins_on": mapping.joins_on,
             "strategy_type": strategy_type,
             "link_mapping_column": link_fields.get("mapping_column"),
             "link_base_column": link_fields.get("base_column"),
@@ -358,7 +357,6 @@ class EtlOperationsMixin:
 
     def get_mapping_strategy_link_fields(self) -> dict[str, str | None]:
         mapping_conf = getattr(self.data_source_config, "mapping", None)
-        joins_on = getattr(mapping_conf, "joins_on", None) if mapping_conf else None
         strategy = getattr(mapping_conf, "strategy", None) if mapping_conf else None
         link_on = None
         if isinstance(strategy, dict):
@@ -376,7 +374,7 @@ class EtlOperationsMixin:
             basis = getattr(link_on, "basis", None) if link_on is not None else None
 
         return {
-            "mapping_column": str(mapping_column) if mapping_column else str(joins_on) if joins_on else None,
+            "mapping_column": str(mapping_column) if mapping_column else None,
             "base_column": str(base_column) if base_column else None,
             "basis": str(basis) if basis else None,
         }
