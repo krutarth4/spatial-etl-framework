@@ -15,7 +15,6 @@ source:
   file_path: ""
   fetch: http
   url: "https://gdi.berlin.de/services/wfs/baumbestand"
-  stream: True
   save_local: True
   destination: tmp/tree_wfs/tree_ablage/gpkg_packet.gpkg
   response_type: gpkg

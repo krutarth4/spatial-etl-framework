@@ -17,7 +17,6 @@ source:
   url: https://gdi.berlin.de/data/dgm1/atom/0.atom
   file_path: ""
   fetch: http
-  stream: True
   save_local: True
   destination: tmp/elevation_grid/elevation.xml
   response_type: xml

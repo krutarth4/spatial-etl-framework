@@ -151,7 +151,6 @@ graph:
           enable: true
           keys: [ "last_modified" ]
         url: "https://download.geofabrik.de/europe/germany/berlin-latest.osm.pbf"
-        stream: True
         save_local: True
         destination: &dest tmp/osm_graph/berlin.osm.pbf # path where to save the response
         response_type: pbf # the response type

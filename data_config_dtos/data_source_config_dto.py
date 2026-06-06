@@ -189,7 +189,6 @@ class SourceDTO:
     url: Optional[str]
     file_path: Optional[Union[str, Path]]
     fetch: str
-    stream: Optional[bool]
     save_local: Optional[bool]
     destination: Optional[Union[str, Path]]
     response_type: Optional[str]
@@ -198,6 +197,7 @@ class SourceDTO:
     mode: str | SourceFetchModeEnum
     multi_fetch: Optional[SourceMultiFetchDTO]
     reader: Optional[ReaderConfigDTO] = None
+    stream: Optional[bool] = True   # defaults to True; no need to set it per-config
 
 
 @dataclass

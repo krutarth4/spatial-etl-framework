@@ -16,7 +16,6 @@ source:
     enable: true
     keys: ["last_modified"]
   url: https://api.brightsky.dev/sources
-  stream: True
   save_local: True
   destination: tmp/brightsky/stations/weatherStation.json
   response_type: json

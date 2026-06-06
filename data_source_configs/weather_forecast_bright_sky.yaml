@@ -22,7 +22,6 @@ source:
         ${{
         datetime.now(ZoneInfo("Europe/Berlin")).isoformat()
         }}
-  stream: True
   save_local: true
   destination: tmp/brightsky/weather-data/weather_forecast.json
   response_type: json

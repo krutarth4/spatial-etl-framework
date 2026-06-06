@@ -16,7 +16,6 @@ source:
     keys: ["last_modified"]
   file_path: ""
   fetch: http
-  stream: True
   save_local: True
   destination: tmp/elevation_zips/elevation.zip
   response_type: zip
