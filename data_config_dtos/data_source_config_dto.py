@@ -276,6 +276,9 @@ class DataSourceDTO:
     storage: StorageDTO
     job: JobConfigurationDTO
     enrichment_operators: Optional[EnrichmentOperatorsConfigDTO] = None
+    # Upstream datasource name(s) that must finish before this one runs.
+    # Accepts a single name ("foo") or a list (["foo", "bar"]).
+    depends_on: Optional[Union[str, List[str]]] = None
 
 
 @dataclass
