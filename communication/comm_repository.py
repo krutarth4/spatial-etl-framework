@@ -23,8 +23,7 @@ def _resolve_state_file() -> str:
         config = CoreConfig().get_config() or {}
     except Exception:
         config = {}
-    graph_conf = config.get("graph") or {}
-    comm_conf = graph_conf.get("communication") or {} if isinstance(graph_conf, dict) else {}
+    comm_conf = config.get("communication") or {}
     configured = comm_conf.get("state_file") if isinstance(comm_conf, dict) else None
     path = configured or _DEFAULT_STATE_FILE
     abs_path = str(Path(path).expanduser().resolve())

@@ -27,9 +27,13 @@ class InitGraph:
 
     def __init__(self, graph_conf, base_graph_conf, metadata_service, db: DbInstance | None,
                  comm_service: CommService | None,
-                 scheduler_core: InitScheduler | None):
+                 scheduler_core: InitScheduler | None,
+                 comm_conf: dict | None = None):
         self.graph_loader = None
         self.graph_configuration = from_dict(GraphConfDTO, graph_conf)
+        # Pipeline<->router coordination is a top-level concern (config.yaml
+        # `communication:`), not part of the graph datasource.
+        self.comm_conf = comm_conf if isinstance(comm_conf, dict) else {}
         self.logger = LoggerManager(type(self).__name__)
         self.is_raw_graph_ready = False
         self.metadata_service = metadata_service
@@ -48,8 +52,7 @@ class InitGraph:
             self.logger.warning("Base graph can not be checked with database as disabled")
 
     def _get_comm_config(self) -> dict:
-        conf = getattr(self.graph_configuration, "communication", None)
-        return conf if isinstance(conf, dict) else {}
+        return self.comm_conf if isinstance(self.comm_conf, dict) else {}
 
     def _is_comm_enabled(self) -> bool:
         conf = self._get_comm_config()
@@ -144,14 +147,14 @@ class InitGraph:
 
     def _wait_for_main_ways_table_before_base_checks(self):
         if not self._is_comm_enabled():
-            self.logger.info("Skipping main ways wait because graph.communication.enable is false")
+            self.logger.info("Skipping main ways wait because communication.enable is false")
             return
         if self.comm_service is None:
             return
 
         wait_conf = self._get_comm_wait_config("main_ways_before_base")
         if not wait_conf.get("enable", True):
-            self.logger.info("Skipping main ways wait because graph.communication.waits.main_ways_before_base.enable is false")
+            self.logger.info("Skipping main ways wait because communication.waits.main_ways_before_base.enable is false")
             return
 
         task_key = str(wait_conf.get("task_key") or "main_ways_table")
@@ -203,7 +206,7 @@ class InitGraph:
 
     def _wait_for_coupled_router_if_enabled(self):
         if not self._is_comm_enabled():
-            self.logger.info("Skipping router-coupled wait because graph.communication.enable is false")
+            self.logger.info("Skipping router-coupled wait because communication.enable is false")
             return
         coupled = getattr(self.graph_configuration, "coupled", None)
         wait_conf = self._get_comm_wait_config("router_coupled")
@@ -277,7 +280,7 @@ class InitGraph:
 
     def _ensure_default_comm_tasks(self):
         if not self._is_comm_enabled():
-            self.logger.info("Skipping comm task setup because graph.communication.enable is false")
+            self.logger.info("Skipping comm task setup because communication.enable is false")
             return
         if self.comm_service is None:
             return

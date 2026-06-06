@@ -21,8 +21,8 @@ class CommService:
             config = CoreConfig().get_config() or {}
         except Exception:
             return None, 5.0
-        comm_conf = ((config.get("graph") or {}).get("communication") or {})
-        router_conf = comm_conf.get("router") or {}
+        comm_conf = config.get("communication") or {}
+        router_conf = comm_conf.get("router") or {} if isinstance(comm_conf, dict) else {}
         if not isinstance(router_conf, dict):
             return None, 5.0
         base_url = router_conf.get("base_url")

@@ -298,7 +298,6 @@ class GraphConfDTO:
     coupled_task_key: Optional[str] = None
     coupled_poll_seconds: Optional[float] = 5.0
     coupled_timeout_seconds: Optional[float] = None
-    communication: Optional[Mapping[str, Any]] = None
 
 
 @dataclass

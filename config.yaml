@@ -84,49 +84,52 @@ mapping_defaults:
   incremental: false
 
 
+# Pipeline <-> router task coordination. Cross-cutting concern (not graph-specific):
+# the OSM graph stage is just the first consumer. state_file is the JSON snapshot
+# both sides read/write; router also gets HTTP notifications at {router.base_url}.
+communication:
+  enable: true # set false to run standalone without comm/router waits
+  state_file: tmp/comm_state.json # JSON snapshot; router reads/writes via HTTP endpoints below
+  router:
+    base_url: http://localhost:8082 # e.g. http://router:9000; when set, pipeline POSTs status changes to {base_url}/comm/tasks/{key}
+    timeout_seconds: 5
+  tasks:
+    - key: read_osm_file
+      owner: router
+      status: idle
+      is_completed: false
+    - key: main_ways_table
+      owner: router
+      status: idle
+      is_completed: false
+    - key: ways_base_table
+      owner: mdp
+      status: idle
+      is_completed: false
+    - key: osm_file_update
+      owner: mdp
+      status: idle
+      is_completed: false
+    - key: osm_file_download
+      owner: mdp
+      status: idle
+      is_completed: false
+  waits:
+    router_coupled:
+      enable: false
+      task_key: osm_graph
+      poll_seconds: 5
+      timeout_seconds: null
+    main_ways_before_base:
+      enable: true
+      task_key: main_ways_table
+      poll_seconds: 5
+      timeout_seconds: null
+      require_is_completed: true
+
 graph:
   enable: false # TODO prepare main graph tables for nodes and links
   tool: external_ingest # terminal or custom local tool either use osm2pgrouting with config.xml to create the initial tables or custom osmosis class with the help of handler
-  communication:
-    enable: true # set false to run standalone without comm/router waits
-    state_file: tmp/comm_state.json # JSON snapshot; router reads/writes via HTTP endpoints below
-    router:
-      base_url: http://localhost:8082 # e.g. http://router:9000; when set, pipeline POSTs status changes to {base_url}/comm/tasks/{key}
-      timeout_seconds: 5
-    tasks:
-      - key: read_osm_file
-        owner: router
-        status: idle
-        is_completed: false
-      - key: main_ways_table
-        owner: router
-        status: idle
-        is_completed: false
-      - key: ways_base_table
-        owner: mdp
-        status: idle
-        is_completed: false
-      - key: osm_file_update
-        owner: mdp
-        status: idle
-        is_completed: false
-      - key: osm_file_download
-        owner: mdp
-        status: idle
-        is_completed: false
-    waits:
-      router_coupled:
-        enable: false
-        task_key: osm_graph
-        poll_seconds: 5
-        timeout_seconds: null
-      main_ways_before_base:
-        enable: true
-        task_key: main_ways_table
-        poll_seconds: 5
-        timeout_seconds: null
-        require_is_completed: true
-
   schema: *db_schema  # table schema
   table_name: way_segment #links
   env:
