@@ -14,12 +14,14 @@ Collaborator responsibilities:
 """
 from core.debug.core_mixin import DebugCoreMixin
 from core.debug.mapping_inspector_mixin import MappingInspectorMixin
+from core.debug.enrichment_inspector_mixin import EnrichmentInspectorMixin
 from core.debug.way_inspector_mixin import WayInspectorMixin
 
 
 class DebugMapperService(
     DebugCoreMixin,
     MappingInspectorMixin,
+    EnrichmentInspectorMixin,
     WayInspectorMixin,
 ):
     """Composed debug mapper service (see core/debug/ for each collaborator)."""
