@@ -1,6 +1,6 @@
 # =============================================================================
 # Materialized View: mv_ways_with_elevation
-# Per-way elevation snapshot joining base ways with elevation_staging.
+# Per-way elevation snapshot joining base ways with elevation_mapping.
 # Schema reference: docs/materialized-views-reference.md
 # =============================================================================
 
@@ -28,7 +28,7 @@ depends_on:
     - elevation
   tables:
     - { schema: exp_null, name: ways_base }
-    - { schema: exp_null, name: elevation_staging }
+    - { schema: exp_null, name: elevation_mapping }
 
 # ---- Definition ------------------------------------------------------------
 definition:
@@ -36,12 +36,12 @@ definition:
     SELECT
         w.way_id AS way_id,
         w.way_link_index,
-        COALESCE(e.total_ascent, 0.0)  AS total_ascent,
-        COALESCE(e.total_descent, 0.0) AS total_descent,
-        COALESCE(e.max_slope, 0.0)     AS max_slope
+        COALESCE(m.total_ascent, 0.0)  AS total_ascent,
+        COALESCE(m.total_descent, 0.0) AS total_descent,
+        COALESCE(m.max_slope, 0.0)     AS max_slope
     FROM {schema}.ways_base w
-    LEFT JOIN {schema}.elevation_staging e
-        ON w.id = e.way_id
+    LEFT JOIN {schema}.elevation_mapping m
+        ON w.id = m.way_id
 
 # ---- Build options ---------------------------------------------------------
 build:

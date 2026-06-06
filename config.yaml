@@ -207,7 +207,7 @@ graph:
 datasources:
   - name: "weather_station_bright_sky"
     description: "gets weather station data with their location"
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
 #    check_before_update: false
     class_name: weatherStation
     debug:
@@ -290,7 +290,7 @@ datasources:
 
   - name: "weather_forecast_bright_sky"
     description: "get weather forecast for the dwd_stations in params with hourly forecast "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
     class_name: weather
     debug:
       endpoint: weather-forecast
@@ -356,7 +356,7 @@ datasources:
 
   - name: "air_quality_data_download"
     description: "Air quality data from the dcaiti Tu Berlin server"
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
 #    check_before_update: false
     class_name: airQualityData
     debug:
@@ -420,7 +420,7 @@ datasources:
 
   - name: elevation_grids_links
     description: " 1m elevation Grid links "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
     #    check_before_job_run: true
     check_before_update: true
     class_name: elevationGrid
@@ -497,7 +497,7 @@ datasources:
       fetch: http #http \ local
       stream: True
       save_local: True
-      destination: "tmp/elevation_zips/elevation.zip" # path where to save the response
+      destination: "../mdp/modular-data-pipeline/tmp/elevation_zips" #tmp/elevation_zips/elevation.zip# path where to save the response
       response_type: zip # the response type
       multi_fetch:
         enable : true
@@ -516,13 +516,23 @@ datasources:
       coalesce: true
       max_instances: 1
       next_run_time: none
+    # Enrichment: downsample the 1 m DEM raster to a coarser averaged grid.
+    # raster_aggregate runs ST_Resample(rast, cell, -cell, 'Average') per tile.
+    enrichment_operators:
+      operators:
+        - type: raster_aggregate
+          source_table: staging
+          raster_col: rast
+          target_col: rast
+          cell_size: 10          # 1 m DEM -> 10 m averaged cells (tunable)
+          algorithm: Average     # ST_Resample: Average | Bilinear | Min | Max | Mode
     mapping:
       enable: true
       table_name: elevation_mapping
       strategy:
         type: sql_template
       config:
-        sql_file: mapping_sql/elevation.sql
+        sql_file: mapping_sql/elevation_raster.sql
       base_table:
         <<: *base_table_conf
         column_name: "elevation_factor"
@@ -535,10 +545,14 @@ datasources:
         table_name: elevation_staging
         table_schema: *db_schema
         table_class: ElevationStagingTable
+      enrichment:
+        table_name: elevation_enrichment
+        table_schema: *db_schema
+        table_class: ElevationEnrichmentTable
 
   - name: tree
     description: " Get Trees on the side of the road within 50 m distance "
-    enable: true # to use the data source or not
+    enable: false # to use the data source or not
 #    check_before_update: false # only valid for api call
     class_name: tree
     debug:
