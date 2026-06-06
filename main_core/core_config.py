@@ -11,22 +11,34 @@ def _split_csv_env(name):
     return [s.strip() for s in raw.split(",") if s.strip()] or None
 
 
+def _default_config_path() -> str:
+    # Config root sentinel. Mirrors the TMP_DIR mechanism (see
+    # readers/yaml_reader.py::_tmp_base): the config file location is relocatable
+    # via the CONFIG_FILE env var (e.g. set in .env), falling back to the
+    # repo-root config.yaml when unset.
+    return os.getenv("CONFIG_FILE") or str(Path(__file__).resolve().parents[1] / "config.yaml")
+
+
 class CoreConfig(YamlReader):
 
-    filepath = str(Path(__file__).resolve().parents[1] / "config.yaml")
+    filepath = _default_config_path()
     _instance = None
     _override_only: list[str] | None = None
     _override_disable: list[str] | None = None
 
-    def __new__(cls, filepath=filepath):
+    def __new__(cls, filepath=None):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, filepath=filepath):
+    def __init__(self, filepath=None):
         if self._initialized:
             return
+        # Resolve the class attribute dynamically (not via a default arg bound at
+        # class-definition time) so a runtime override — e.g. experimentation's
+        # `CoreConfig.filepath = ...` — and the CONFIG_FILE env var both take effect.
+        filepath = filepath or type(self).filepath
         super().__init__(filepath)
         self.logger = LoggerManager(type(self).__name__)
         self.config = YamlReader.read(self)

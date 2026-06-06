@@ -71,7 +71,7 @@ def _start_config_watcher(runtime_conf: dict | None):
         logger.info("Config watcher disabled via config.yaml runtime.config_watch.enable=false")
         return
 
-    config_path = Path(__file__).resolve().parent / "config.yaml"
+    config_path = Path(CoreConfig.filepath)
     watcher = threading.Thread(
         target=_watch_config_and_restart,
         args=(config_path, poll_seconds),
