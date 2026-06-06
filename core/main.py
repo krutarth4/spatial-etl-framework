@@ -176,6 +176,25 @@ def debug_mapping_visualization(mapper_endpoint: str, limit: int = 100, way_id: 
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@app.get("/debug/mappers/{mapper_endpoint}/enrichment-visualization")
+def debug_enrichment_visualization(
+    mapper_endpoint: str,
+    bbox: str | None = None,
+    limit: int = 500,
+    raster_max_cells: int = 5000,
+):
+    try:
+        service = _get_debug_service()
+        return service.fetch_enrichment_visualization(
+            mapper_endpoint=mapper_endpoint,
+            bbox=bbox,
+            limit=limit,
+            raster_max_cells=raster_max_cells,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @app.get("/debug/mappers/{mapper_endpoint}/nearest-way")
 def debug_nearest_way(mapper_endpoint: str, lat: float, lng: float):
     try:

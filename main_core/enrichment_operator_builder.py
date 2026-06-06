@@ -306,7 +306,11 @@ class RasterAggregateOperatorStrategy:
         return (
             f"TRUNCATE TABLE {ctx.enrichment_schema}.{ctx.enrichment_table};\n\n"
             f"INSERT INTO {ctx.enrichment_schema}.{ctx.enrichment_table} ({target_col})\n"
-            f"SELECT ST_Resample({raster_col}, {cell}, -{cell}, 0, 0, 0, 0, '{algorithm}')\n"
+            # Cast scale to double precision so PostGIS picks the (scalex, scaley)
+            # overload. Bare integer literals resolve to ST_Resample(rast, width,
+            # height, ...) instead, where -cell wraps to a huge unsigned dimension
+            # and trips "Dimensions requested exceed the maximum (65535 x 65535)".
+            f"SELECT ST_Resample({raster_col}, {cell}::double precision, (-{cell})::double precision, 0, 0, 0, 0, '{algorithm}')\n"
             f"FROM {src}\n"
             f"WHERE {where_sql};"
         )
