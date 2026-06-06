@@ -44,6 +44,20 @@ class FileHandler:
 
         return (storage_root / dir_path).resolve()
 
+    @staticmethod
+    def compute_checksum(path: str | Path, chunk_size: int = 1 << 20) -> Optional[str]:
+        """sha256 of a file's bytes, streamed in chunks. Returns None if unreadable."""
+        import hashlib
+
+        try:
+            digest = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(chunk_size), b""):
+                    digest.update(chunk)
+            return digest.hexdigest()
+        except Exception:
+            return None
+
     def _timestamp(self) -> str:
         return datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
 
