@@ -8,7 +8,7 @@ from custom_graph_base_tables import (
     WaysBaseTable,
 )
 from data_config_dtos.data_source_config_dto import BaseGraphDTO
-from database.db_instancce import DbInstance
+from database.db_instance import DbInstance
 
 
 # Columns of trial.ways_base copied from the source `way_segment` table during

@@ -108,7 +108,14 @@ Controls APScheduler setup.
 
 | Key | Meaning | Current example | Other supported values |
 |---|---|---|---|
-| `data_folder` | Path containing datasource config fragments or source files | `./data_source_configs/` | Any path |
+| `data_folder` | Directory of per-datasource config files, one datasource per `*.yaml` | `./data_source_configs/` | Any path |
+
+At startup `CoreConfig._load_datasource_configs()` loads every `*.yaml` in this
+folder and appends it to `datasources` (after any inline entries). Files are read
+through `YamlReader`, so per-file `${{ ... }}` Python blocks and `tmp/...` path
+resolution work exactly like the main config. Duplicate `name`s are ignored with
+a warning. This is the canonical place to add datasources — `config.yaml` itself
+now keeps only the global sections and an empty `datasources: []`.
 
 ### `env_variables`
 
@@ -196,7 +203,17 @@ Wait object options:
 
 ## `datasources`
 
-Each item in `datasources` maps to the `DataSourceDTO` structure and is executed by [main_core/data_source_mapper.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_mapper.py).
+Each datasource lives in its own file under `data_folder` (`./data_source_configs/<name>.yaml`)
+and maps to the `DataSourceDTO` structure, executed by [main_core/data_source_mapper.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_mapper.py).
+
+**Defaults filled by `CoreConfig._apply_datasource_defaults()`** — a per-file config
+only needs to declare what is distinctive; these are filled when omitted:
+
+- `storage.staging.table_schema` / `storage.enrichment.table_schema` → `env_variables.base_schema`
+- `storage.{staging,enrichment}.table_name` → `<name>_<stage>` convention (only when omitted)
+- `mapping.base_table.table_name` / `.table_schema` → the global `base` block
+- `mapping.table_schema` / `incremental` → `mapping_defaults`
+- `job.name`/`id` → `<name>Job`; `job.replace_existing`/`coalesce`/`max_instances`/`next_run_time` → `true`/`true`/`1`/`none`
 
 Shared datasource fields:
 

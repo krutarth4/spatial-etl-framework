@@ -1,0 +1,54 @@
+# Pleasant-bicycling score per way (local parquet of aggregated metrics).
+name: pleasant_bicycling
+description: " Get the density of vehicles on the road "
+enable: true
+class_name: pleasantBicycling
+debug:
+  endpoint: pleasant-bicycling
+data_type: dynamic
+source:
+  input: none
+  mode: single
+  check_metadata:
+    enable: true
+    keys: ["content_type"]
+  file_path: data/pleasant_bicycle/aggregated_metrics.parquet
+  fetch: local
+  stream: True
+  save_local: True
+  destination: tmp/pleasant_bicycle/pleasant.csv
+  response_type: csv
+  multi_fetch:
+    enable: false
+    strategy: expand_params
+job:
+  name: pleasantJob
+  id: pleasantJob
+  executor: process
+  trigger:
+    type:
+      name: interval
+      start_date: 2025-12-21T11:15:00
+      config:
+        hours: 10
+  next_run_time: 00:00:00
+mapping:
+  enable: true
+  table_name: pleasant_mapping
+  strategy:
+    # Custom LEFT JOIN LATERAL — every way_base gets a row; unmatched ways
+    # receive connection_id = NULL. SQL built in PleasantBicyclingMapper.mapping_db_query().
+    type: custom
+  base_table:
+    column_name: "pleasant_score"
+    column_type: Float
+storage:
+  persistent: true
+  # expires_after removed: dataset takes ~50 min to ETL (4M rows); aggressive
+  # expiry + container restarts cause a reset loop. Freshness = 10h job interval.
+  staging:
+    table_name: pleasant_staging
+    table_class: PleasantStagingTable
+  enrichment:
+    table_name: pleasant_enrichment
+    table_class: PleasantEnrichmentTable

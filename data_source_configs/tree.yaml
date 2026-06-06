@@ -1,0 +1,78 @@
+# Street/garden trees within 50 m of each way (Berlin WFS, GeoPackage).
+name: tree
+description: " Get Trees on the side of the road within 50 m distance "
+enable: false
+class_name: tree
+debug:
+  endpoint: tree
+data_type: static
+source:
+  input: none
+  mode: multi
+  check_metadata:
+    enable: true
+    keys: ["content_type"]
+  file_path: ""
+  fetch: http
+  url: "https://gdi.berlin.de/services/wfs/baumbestand"
+  stream: True
+  save_local: True
+  destination: tmp/tree_wfs/tree_ablage/gpkg_packet.gpkg
+  response_type: gpkg
+  reader:
+    engine: pyogrio
+    target_crs: 25833
+  multi_fetch:
+    enable: true
+    strategy: expand_params
+    expand:
+      typenames: ["baumbestand:anlagenbaeume", "baumbestand:strassenbaeume"]
+    params:
+      service: wfs
+      version: "2.0.0"
+      request: "GetFeature"
+      outputFormat: geopackage
+      sortBy: gisid
+job:
+  name: treeJob
+  id: treeJob
+  executor: process
+  trigger:
+    type:
+      name: interval
+      start_date: 2025-12-21T11:15:00
+      config:
+        hours: 10
+  next_run_time: 00:00:00
+mapping:
+  enable: true
+  table_name: tree_mapping
+  strategy:
+    type: aggregate_within_distance
+  config:
+    max_distance: 50
+    base_geometry_column: geometry_25833
+    enrichment_geometry_column: geometry_25833
+    aggregation_type: jsonb_build_object
+    aggregation_expression: |
+      COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'tree_id', {enrichment_alias}.id,
+            'source_id', {enrichment_alias}.source_id,
+            'distance_m', ST_Distance({enrichment_alias}.geometry_25833, {base_geometry})
+          )
+          ORDER BY ST_Distance({enrichment_alias}.geometry_25833, {base_geometry})
+        ) FILTER (WHERE {enrichment_alias}.id IS NOT NULL),
+        '[]'::jsonb
+      )
+    aggregation_alias: trees
+  base_table:
+    column_name: "elevation_factor"
+    column_type: Integer
+storage:
+  persistent: true
+  expires_after: 6h
+  staging:
+    table_name: tree_staging
+    table_class: TreeStaging

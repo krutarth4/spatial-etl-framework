@@ -22,4 +22,6 @@ tests/bench/results/*.csv
 
 # OS / editor noise
 .DS_Store
+._*
+.ruff_cache/
 *.swp

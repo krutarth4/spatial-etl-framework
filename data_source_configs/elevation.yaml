@@ -1,0 +1,62 @@
+# 1m elevation raster. Fetches the DEM tiles listed by `elevation_grids_links`,
+# downsamples to a coarser averaged grid, then samples per-way ascent/descent.
+name: elevation
+description: " 1m elevation "
+enable: true
+class_name: elevation
+depends_on: elevation_grids_links
+debug:
+  endpoint: elevation
+data_type: static
+source:
+  input: none
+  mode: multi
+  check_metadata:
+    enable: true
+    keys: ["last_modified"]
+  file_path: ""
+  fetch: http
+  stream: True
+  save_local: True
+  destination: tmp/elevation_zips/elevation.zip
+  response_type: zip
+  multi_fetch:
+    enable: true
+    strategy: explicit_url_list
+    urls:
+      # Produced by the `elevation_grids_links` datasource (after_filter_hook).
+      input: data/grid/elevation_grid_links.json
+job:
+  name: elevationJob
+  id: elevationJob
+  executor: process
+  trigger:
+    type:
+      name: run_once
+enrichment_operators:
+  operators:
+    - type: raster_aggregate
+      source_table: staging
+      raster_col: rast
+      target_col: rast
+      cell_size: 10          # 1 m DEM -> 10 m averaged cells (tunable)
+      algorithm: Average     # ST_Resample: Average | Bilinear | Min | Max | Mode
+mapping:
+  enable: true
+  table_name: elevation_mapping
+  strategy:
+    type: sql_template
+  config:
+    sql_file: mapping_sql/elevation_raster.sql
+  base_table:
+    column_name: "elevation_factor"
+    column_type: Integer
+storage:
+  persistent: true
+  expires_after: 168h   # match the elevation grid update interval (7 days)
+  staging:
+    table_name: elevation_staging
+    table_class: ElevationStagingTable
+  enrichment:
+    table_name: elevation_enrichment
+    table_class: ElevationEnrichmentTable

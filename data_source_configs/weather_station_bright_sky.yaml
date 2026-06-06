@@ -1,0 +1,74 @@
+# Weather stations (DWD via Bright Sky) — station locations + ids.
+# Schema / base-table / common job flags are filled by CoreConfig defaults;
+# this file declares only what is distinctive to the datasource.
+name: "weather_station_bright_sky"
+description: "gets weather station data with their location"
+enable: false
+class_name: weatherStation
+debug:
+  endpoint: weather-station
+table_name: dwd_station_locations
+data_type: static
+source:
+  fetch: http
+  mode: single
+  check_metadata:
+    enable: true
+    keys: ["last_modified"]
+  url: https://api.brightsky.dev/sources
+  stream: True
+  save_local: True
+  destination: tmp/brightsky/stations/weatherStation.json
+  response_type: json
+  header:
+    Accept: "application/json"
+  params:
+    dwd_station_id: ["00399", "00403", "00400", "00410", "00420", "00427", "00430", "00433"]
+job:
+  name: weatherJob
+  id: weatherJob
+  trigger:
+    type:
+      name: interval
+      start_date: 2025-12-21T11:15:00
+      config:
+        hours: 10
+mapping:
+  enable: true
+  table_name: dwd_station_locations_mapping
+  strategy:
+    type: knn
+    link_on:
+      mapping_column: dwd_station_id
+      base_column: dwd_station_id
+      basis: nearest_by_distance
+  config:
+    base_geometry_column: geometry
+    enrichment_geometry_column: point
+    distance_sql: ST_Distance({base_geometry}::geography, {enrichment_geometry}::geography)
+    order_by_sql: ST_Distance({base_geometry}::geography, {enrichment_geometry}::geography)
+    select_columns:
+      - expression: |
+          MOD(
+            (DEGREES(
+              ST_Azimuth(
+                ST_StartPoint({base_geometry}),
+                ST_EndPoint({base_geometry})
+              )
+            ) + 360)::NUMERIC,
+            360
+          )
+        alias: bearing_degree
+  base_table:
+    column_name: "dwd_station_id"
+    column_type: String
+storage:
+  force_create: false
+  persistent: true
+  staging:
+    table_name: dwd_station_locations_staging
+    table_class: DwdStationsTable
+    persistent: false
+  enrichment:
+    table_name: dwd_station_locations_enrichment
+    table_class: DwdWeatherStationEnrichmentTable

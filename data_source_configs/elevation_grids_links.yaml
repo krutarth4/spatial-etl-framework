@@ -1,0 +1,51 @@
+# Atom feed of 1m DEM tile download links. Produces the grid-links JSON that
+# the `elevation` datasource consumes as its multi-fetch URL list.
+name: elevation_grids_links
+description: " 1m elevation Grid links "
+enable: false
+check_before_update: true
+class_name: elevationGrid
+debug:
+  endpoint: elevation-grids
+data_type: dynamic
+source:
+  input: none
+  mode: single
+  check_metadata:
+    enable: true
+    keys: ["last_modified"]
+  url: https://gdi.berlin.de/data/dgm1/atom/0.atom
+  file_path: ""
+  fetch: http
+  stream: True
+  save_local: True
+  destination: tmp/elevation_grid/elevation.xml
+  response_type: xml
+  header:
+    Accept: "application/atom+xml"
+  params:
+before_filter_hook:
+  enable: true
+after_filter_hook:
+  save: true
+  # Explicit output path consumed by the `elevation` datasource's multi_fetch.
+  destination: data/grid/elevation_grid_links.json
+before_load_hook:
+  enable: false
+post-database-processing:
+  enable: false
+job:
+  name: elevationJob
+  id: elevationJob
+  trigger:
+    type:
+      name: interval
+      config:
+        hours: 168   # re-run every 7 days
+mapping:
+  enable: false
+  base_table:
+    column_name: "elevation_factor"
+    column_type: Integer
+storage:
+  persistent: false

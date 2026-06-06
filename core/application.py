@@ -10,7 +10,7 @@ from core.init_graph import InitGraph
 from core.init_scheduler import InitScheduler
 from core.init_server import InitServer
 from communication.comm_service import CommService
-from database.db_instancce import DbInstance
+from database.db_instance import DbInstance
 from log_manager.logger_manager import LoggerManager
 from main_core.core_config import CoreConfig
 from main_core.data_source_mapper import DataSourceMapper

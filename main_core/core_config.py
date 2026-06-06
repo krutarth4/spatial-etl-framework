@@ -31,7 +31,9 @@ class CoreConfig(YamlReader):
         self.logger = LoggerManager(type(self).__name__)
         self.config = YamlReader.read(self)
         self._apply_env_overrides()
+        self._load_datasource_configs()
         self._apply_datasource_overrides()
+        self._apply_datasource_defaults()
         self._merge_mapping_defaults()
         self._resolve_mapping_sql_files()
         self._merge_mv_configs()
@@ -146,6 +148,110 @@ class CoreConfig(YamlReader):
             raise ValueError(
                 f"Datasource feature configuration errors in {self.filepath}:\n{lines}"
             )
+
+    def _load_datasource_configs(self):
+        """Load per-datasource YAML files from `data_folder` and append them to
+        `datasources`.
+
+        Each file holds a single datasource mapping (or a small list of them).
+        Files are read through YamlReader so per-file `${{ ... }}` Python blocks
+        and `tmp/...` path resolution behave exactly like the main config. The
+        inline `datasources:` list in config.yaml (if any) is preserved and
+        files are appended after it; duplicate names are ignored with a warning.
+        """
+        folder = self.config.get("data_folder")
+        if not folder:
+            return
+
+        base_dir = Path(self.filepath).resolve().parent
+        ds_dir = (base_dir / folder).resolve()
+        if not ds_dir.is_dir():
+            self.logger.warning(
+                f"data_folder '{ds_dir}' does not exist, skipping per-file datasource load"
+            )
+            return
+
+        datasources = self.config.get("datasources")
+        if datasources is None:
+            datasources = []
+            self.config["datasources"] = datasources
+        if not isinstance(datasources, list):
+            self.logger.warning("'datasources' is not a list; skipping per-file datasource load")
+            return
+
+        existing = {ds.get("name") for ds in datasources if isinstance(ds, dict)}
+        for ds_file in sorted(ds_dir.glob("*.yaml")):
+            try:
+                content = YamlReader.get_yaml_content(str(ds_file))
+            except Exception as e:
+                self.logger.warning(f"Failed to load datasource config {ds_file.name}: {e}")
+                continue
+            items = content if isinstance(content, list) else [content]
+            for ds in items:
+                if not isinstance(ds, dict) or not ds.get("name"):
+                    self.logger.warning(f"Skipping invalid datasource in {ds_file.name}")
+                    continue
+                if ds["name"] in existing:
+                    self.logger.warning(
+                        f"Duplicate datasource '{ds['name']}' from {ds_file.name} ignored"
+                    )
+                    continue
+                datasources.append(ds)
+                existing.add(ds["name"])
+                self.logger.info(f"Loaded datasource config: {ds_file.name} ({ds['name']})")
+
+    def _apply_datasource_defaults(self):
+        """Fill omitted schema / base_table / job values from global defaults.
+
+        Per-datasource config files only need to declare what is distinctive;
+        the uniform boilerplate (table schemas, the mapping base table, common
+        job flags) is filled here from `env_variables.base_schema` and `base`.
+        Table names fall back to the `<name>_<stage>` convention only when
+        omitted, so existing explicit names are never overwritten.
+        """
+        datasources = self.config.get("datasources")
+        if not isinstance(datasources, list):
+            return
+
+        env_vars = self.config.get("env_variables") or {}
+        default_schema = env_vars.get("base_schema")
+        base_conf = self.config.get("base") or {}
+        base_table_name = base_conf.get("table_name")
+        base_table_schema = base_conf.get("table_schema") or default_schema
+
+        for ds in datasources:
+            if not isinstance(ds, dict):
+                continue
+            name = ds.get("name")
+
+            storage = ds.get("storage")
+            if isinstance(storage, dict):
+                for stage in ("staging", "enrichment"):
+                    tbl = storage.get(stage)
+                    if isinstance(tbl, dict):
+                        if default_schema is not None:
+                            tbl.setdefault("table_schema", default_schema)
+                        if not tbl.get("table_name") and name:
+                            tbl["table_name"] = f"{name}_{stage}"
+
+            mapping = ds.get("mapping")
+            if isinstance(mapping, dict):
+                base_table = mapping.get("base_table")
+                if isinstance(base_table, dict):
+                    if base_table_name is not None:
+                        base_table.setdefault("table_name", base_table_name)
+                    if base_table_schema is not None:
+                        base_table.setdefault("table_schema", base_table_schema)
+
+            job = ds.get("job")
+            if isinstance(job, dict):
+                if name:
+                    job.setdefault("name", f"{name}Job")
+                job.setdefault("id", job.get("name"))
+                job.setdefault("replace_existing", True)
+                job.setdefault("coalesce", True)
+                job.setdefault("max_instances", 1)
+                job.setdefault("next_run_time", "none")
 
     def _merge_mapping_defaults(self):
         """Fill missing top-level mapping keys from mapping_defaults for every datasource."""
