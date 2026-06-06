@@ -71,13 +71,32 @@ class MappingInspectorMixin:
         rows: list[dict[str, Any]] = []
         visualization_mode = "table_only"
 
-        base_geom_col = self._guess_geom_col(base_table, ["geometry", "geom", "line_geometry"])
-        enrich_geom_col = self._guess_geom_col(enrichment_table, ["point", "geometry", "geom"])
+        base_geom_col = self._guess_geom_col(
+            base_table, ["geometry", "geom", "line_geometry", "geometry_25833", "geom_25833"]
+        )
+        # Detect point OR line enrichment geometry, in 4326 or 25833.
+        enrich_geom_col = self._guess_geom_col(
+            enrichment_table,
+            ["point", "geom_4326", "geometry_4326", "geometry", "geom", "geometry_25833", "geom_25833"],
+        )
+
+        # Resolve the join key linking mapping rows to enrichment rows.
+        # Configured strategies provide it via link_on/joins_on; custom strategies
+        # (e.g. pleasant_bicycling) declare neither, so fall back to a column shared
+        # by both the mapping and enrichment tables (e.g. connection_id).
+        if enrichment_table is not None and (
+            not mapping_column
+            or mapping_column not in mapping_table.c
+            or mapping_column not in enrichment_table.c
+        ):
+            mapping_column = self._shared_join_col(mapping_table, enrichment_table) or mapping_column
+
         can_spatial_join = (
             base_table is not None
             and enrichment_table is not None
             and base_geom_col is not None
             and enrich_geom_col is not None
+            and mapping_column is not None
             and mapping_column in mapping_table.c
             and mapping_column in enrichment_table.c
             and "way_id" in mapping_table.c
@@ -91,31 +110,40 @@ class MappingInspectorMixin:
         )
 
         if can_spatial_join:
+            bgeom = f"b.{self._quote_ident(base_geom_col)}"
+            egeom = f"e.{self._quote_ident(enrich_geom_col)}"
+            # Distance + connector are computed in metric CRS (25833) so they work
+            # for point- AND line-enrichment regardless of the source SRID;
+            # geometries are emitted as WGS84 for Leaflet. ST_Transform on an
+            # already-4326 column is a no-op, so this is safe for every mapper.
+            b25 = f"ST_Transform({bgeom}, 25833)"
+            e25 = f"ST_Transform({egeom}, 25833)"
+            dist_col = next(
+                (c for c in ("distance", "distance_m", "distance_meters") if c in mapping_table.c), None
+            )
+            dist_expr = (
+                f"COALESCE(m.{self._quote_ident(dist_col)}, ST_Distance({b25}, {e25}))"
+                if dist_col
+                else f"ST_Distance({b25}, {e25})"
+            )
+            where_clause = "WHERE m.way_id = :way_id" if way_id is not None else ""
+            # Line enrichment tables hold many rows per join key (e.g. 24 hourly
+            # rows per connection_id); DISTINCT ON keeps the nearest one per way.
             sql = f"""
-                SELECT
+                SELECT DISTINCT ON (m.way_id)
                     m.way_id,
                     m.{self._quote_ident(mapping_column)} AS mapped_value,
-                    COALESCE(
-                        m.distance,
-                        ST_Distance(
-                            b.{self._quote_ident(base_geom_col)}::geography,
-                            e.{self._quote_ident(enrich_geom_col)}::geography
-                        )
-                    ) AS distance_meters,
-                    ST_AsGeoJSON(b.{self._quote_ident(base_geom_col)}) AS base_geometry,
-                    ST_AsGeoJSON(e.{self._quote_ident(enrich_geom_col)}) AS mapped_geometry,
-                    ST_AsGeoJSON(
-                        ST_ShortestLine(
-                            b.{self._quote_ident(base_geom_col)},
-                            e.{self._quote_ident(enrich_geom_col)}
-                        )
-                    ) AS link_geometry
+                    {dist_expr} AS distance_meters,
+                    ST_AsGeoJSON(ST_Transform({bgeom}, 4326)) AS base_geometry,
+                    ST_AsGeoJSON(ST_Transform({egeom}, 4326)) AS mapped_geometry,
+                    ST_AsGeoJSON(ST_Transform(ST_ShortestLine({b25}, {e25}), 4326)) AS link_geometry
                 FROM "{mapping_schema}"."{mapping_table_name}" m
                 JOIN "{base_table_schema}"."{base_table_name}" b
                     ON b.id = m.way_id
                 LEFT JOIN "{enrichment_table_schema}"."{enrichment_table_name}" e
                     ON e.{self._quote_ident(mapping_column)} = m.{self._quote_ident(mapping_column)}
-                {f"WHERE m.way_id = :way_id" if way_id is not None else ""}
+                {where_clause}
+                ORDER BY m.way_id, {dist_expr} NULLS LAST
                 LIMIT :limit
             """
             params: dict[str, Any] = {"limit": limit}

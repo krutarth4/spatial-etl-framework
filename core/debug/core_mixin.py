@@ -280,6 +280,22 @@ class DebugCoreMixin:
                 return col.name
         return None
     @staticmethod
+    def _shared_join_col(mapping_table, enrichment_table) -> str | None:
+        """Find a non-geometry column present in both tables, used as the join key
+        when a custom mapping strategy declares no explicit link_on/joins_on."""
+        if mapping_table is None or enrichment_table is None:
+            return None
+        skip = {"way_id", "id", "uid", "geom", "geometry", "line_geometry"}
+        enrich_cols = {c.name.lower() for c in enrichment_table.columns}
+        for col in mapping_table.columns:
+            name = col.name.lower()
+            if name in skip or "geom" in name or "distance" in name:
+                continue
+            if name in enrich_cols:
+                return col.name
+        return None
+
+    @staticmethod
     def _guess_geom_col(table, candidates: list[str]) -> str | None:
         if table is None:
             return None
