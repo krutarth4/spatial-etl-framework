@@ -34,6 +34,7 @@ class Application:
     _datasources = "datasources"
     _graph = "graph"
     _base_graph = "base"
+    _communication = "communication"
 
     def __init__(self):
         self._pipeline_lock = threading.Lock()
@@ -44,6 +45,7 @@ class Application:
         self.comm_service: CommService | None = None
         self.graph: InitGraph | None = None
         self.graph_conf = None
+        self.comm_conf = {}
         self.sources_conf = None
         self.server_core = None
         self.scheduler_core = None
@@ -90,8 +92,10 @@ class Application:
 
         self.metadata_service = DataSourceMetadataService(self.db_instance,metadata)
         self.graph_conf = self.core_conf.get_value(self._graph)
-        comm_conf = (self.graph_conf or {}).get("communication", {}) if isinstance(self.graph_conf, dict) else {}
-        comm_enabled = bool(comm_conf.get("enable", True))
+        self.comm_conf = self.core_conf.get_value(self._communication) or {}
+        if not isinstance(self.comm_conf, dict):
+            self.comm_conf = {}
+        comm_enabled = bool(self.comm_conf.get("enable", True))
         comm_schema = metadata.get("table_schema") if isinstance(metadata, dict) else None
         self.comm_service = CommService(self.db_instance, comm_schema) if comm_enabled else None
 
@@ -102,7 +106,7 @@ class Application:
             # Reset completion flags on every app startup so comm-based checks re-run.
             self.comm_service.reset_all_task_completion_flags()
         else:
-            self.logger.info("Communication service disabled by graph.communication.enable=false")
+            self.logger.info("Communication service disabled by communication.enable=false")
 
         # start scheduler and server
         server = self.core_conf.get_value(self._server)
@@ -121,7 +125,7 @@ class Application:
         # core graph logic for the base table
         self.base_graph_conf = self.core_conf.get_value(self._base_graph)
         self.graph = InitGraph(self.graph_conf, self.base_graph_conf, self.metadata_service, self.db_instance,
-                               self.comm_service, self.scheduler_core)
+                               self.comm_service, self.scheduler_core, self.comm_conf)
 
         if not server["enable"] and scheduler["enable"]:
             self.logger.warning("Fallback mechanism activated for keeping thread alive.")
