@@ -24,6 +24,7 @@ class DataSourceMetadata(Base):
     file_path = Column(ARRAY(String))
     file_checksum = Column(String)
     file_size_bytes = Column(Integer)
+    file_mtime = Column(DateTime)   # last-seen source mtime, for the cheap stat fast-path
 
     # --- timestamps
     last_ingested_at = Column(DateTime)

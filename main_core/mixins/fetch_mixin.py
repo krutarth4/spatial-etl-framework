@@ -6,6 +6,7 @@ Writes to self:   self._last_fetch_performed_download
 """
 import re
 import time
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import Enum
 from itertools import product
@@ -102,8 +103,13 @@ class FetchMixin:
                 paths.append(resolved_path or source.destination)
 
         elif source.fetch in FetchTypeEnum.LOCAL.value:
-            self._last_fetch_performed_download = False
             path = Path(source.file_path)
+            if source.check_metadata.enable:
+                self._last_fetch_performed_download = self.is_local_source_changed(path)
+            else:
+                # No change detection configured: never short-circuit (None means
+                # "no metadata check performed" to run_pipeline_mixin).
+                self._last_fetch_performed_download = None
             paths.append(path)
         else:
             self.logger.error(f"Invalid fetch type: {source.fetch}")
@@ -233,6 +239,82 @@ class FetchMixin:
         return paths
 
     # ── Metadata comparison ───────────────────────────────────────────────
+
+    def is_local_source_changed(self, path) -> bool:
+        """Detect whether a local source file changed since the last successful run.
+
+        Tiered, mirroring HTTP's validator logic:
+          1. os.stat → compare size + mtime against the stored signature (no read).
+          2. Both unchanged → not changed (fast path, no hashing).
+          3. Either differs → sha256 the file and compare to the stored checksum,
+             confirming a real content change (absorbs `touch`-only false positives).
+          4. First run / unknown signature → changed.
+
+        The signature is persisted in the metadata table's file_checksum /
+        file_size_bytes / file_mtime columns. `check_metadata.keys` is HTTP-specific
+        and intentionally ignored here.
+        """
+        p = Path(path)
+        if not p.exists():
+            self.logger.warning(f"Local source file missing: {p} — nothing to process")
+            return False
+
+        svc = getattr(self, "metadata_service", None)
+        if svc is None or getattr(svc, "metadata_repository", None) is None:
+            self.logger.warning(
+                "Metadata service unavailable — cannot compare local signature; "
+                "processing local source unconditionally."
+            )
+            return True
+
+        stat = p.stat()
+        size = stat.st_size
+        mtime = datetime.utcfromtimestamp(stat.st_mtime)
+
+        row = svc.metadata_repository.get_metadata(self.data_source_name)
+        old_checksum = getattr(row, "file_checksum", None) if row else None
+        old_size = getattr(row, "file_size_bytes", None) if row else None
+        old_mtime = getattr(row, "file_mtime", None) if row else None
+
+        # First run / no recorded signature → treat as changed and record it.
+        if old_checksum is None:
+            self._persist_local_signature(size, mtime, FileHandler.compute_checksum(p))
+            self.logger.info(f"[{self.data_source_name}] No prior signature — processing local source.")
+            return True
+
+        # Cheap tier: stat unchanged → assume unchanged, skip hashing.
+        if old_size == size and old_mtime == mtime:
+            self.logger.info(
+                f"[{self.data_source_name}] Local source unchanged (size + mtime match) — skipping."
+            )
+            return False
+
+        # Stat changed → confirm via content hash before reprocessing.
+        new_checksum = FileHandler.compute_checksum(p)
+        self._persist_local_signature(size, mtime, new_checksum)
+        if new_checksum != old_checksum:
+            self.logger.info(f"[{self.data_source_name}] Local source content changed — processing.")
+            return True
+        self.logger.info(
+            f"[{self.data_source_name}] Local source stat changed but content identical "
+            f"(checksum match) — skipping."
+        )
+        return False
+
+    def _persist_local_signature(self, size, mtime, checksum) -> None:
+        """Store the latest local-file signature in the metadata table."""
+        try:
+            self.metadata_service.update(
+                self.data_source_name,
+                {
+                    "file_size_bytes": size,
+                    "file_mtime": mtime,
+                    "file_checksum": checksum,
+                    "last_checked_at": datetime.utcnow(),
+                },
+            )
+        except Exception as e:
+            self.logger.warning(f"Failed to persist local source signature: {e}")
 
     def is_metadata_for_single_fetch_changed(self) -> bool:
         """Compare HTTP response headers with cached metadata to detect new data."""
