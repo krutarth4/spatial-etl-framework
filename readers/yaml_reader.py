@@ -1,3 +1,4 @@
+import ast
 import os
 import re
 import textwrap
@@ -14,7 +15,13 @@ load_dotenv()
 
 class YamlReader:
     PYTHON_BLOCK_PATTERN = r"(?<!#)\$\{\{(.*?)\}\}"
-    safe_globals = {
+
+    # Centralized allow-list of names exposed to `${{ }}` config blocks.
+    # Configs are NOT allowed to `import` anything directly — if a new package
+    # is genuinely needed, add it here (one place, reviewed) and reference it by
+    # name in the config. Keeping this internal means configs stay declarative
+    # and can't pull in arbitrary modules.
+    SAFE_IMPORTS = {
         "datetime": datetime,
         "ZoneInfo": ZoneInfo,
         "os": os,
@@ -48,20 +55,21 @@ class YamlReader:
 
     def _evaluate_python_block(self, code: str):
         code = textwrap.dedent(code).strip()
+
+        # Configs may not import anything directly. Allowed packages must be
+        # registered in SAFE_IMPORTS and referenced by name instead.
+        self._reject_imports(code)
+
         lines = code.splitlines()
 
         # last line = return value expression
         final_expr = lines[-1]
 
-        # remaining lines = exec() part (imports, helpers)
+        # remaining lines = exec() part (helpers only — no imports)
         exec_part = "\n".join(lines[:-1])
 
-        # safe environment (allowed modules only)
-        safe_globals = {
-            "datetime": datetime,
-            "ZoneInfo": ZoneInfo,
-            "os": os,
-        }
+        # safe environment (only the centrally allow-listed names)
+        safe_globals = dict(self.SAFE_IMPORTS)
 
         local_env = {}
 
@@ -77,6 +85,35 @@ class YamlReader:
         self.logger.info(f"YAML reader Python eval is {result}")
 
         return result
+
+    @staticmethod
+    def _reject_imports(code: str) -> None:
+        """Disallow imports inside config `${{ }}` blocks.
+
+        Catches `import x`, `from x import y`, and `__import__(...)`. Anything a
+        config legitimately needs should be added to SAFE_IMPORTS instead.
+        """
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            # Let the downstream exec/eval surface the real syntax error.
+            return
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                raise ValueError(
+                    "`import` is not allowed in config ${{ }} blocks. "
+                    "Register the package in YamlReader.SAFE_IMPORTS and "
+                    "reference it by name instead."
+                )
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "__import__"
+            ):
+                raise ValueError(
+                    "`__import__` is not allowed in config ${{ }} blocks. "
+                    "Register the package in YamlReader.SAFE_IMPORTS instead."
+                )
 
     # TODO:  also write for schema validation once correctly general schema available
 

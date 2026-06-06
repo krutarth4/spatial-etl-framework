@@ -20,8 +20,6 @@ source:
     params:
       date: >
         ${{
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
         datetime.now(ZoneInfo("Europe/Berlin")).isoformat()
         }}
   stream: True
