@@ -14,7 +14,6 @@ source:
     keys: ["content_type"]
   file_path: data/pleasant_bicycle/aggregated_metrics.parquet
   fetch: local
-  stream: True
   save_local: True
   destination: tmp/pleasant_bicycle/pleasant.csv
   response_type: csv
