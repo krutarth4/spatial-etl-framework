@@ -495,6 +495,14 @@ datasources:
     coalesce: true
     max_instances: 1
     next_run_time: none
+  enrichment_operators:
+    operators:
+    - type: raster_aggregate
+      source_table: staging
+      raster_col: rast
+      target_col: rast
+      cell_size: 10
+      algorithm: Average
   mapping:
     enable: true
     joins_on: id
@@ -502,7 +510,7 @@ datasources:
     strategy:
       type: sql_template
     config:
-      sql_file: mapping_sql/elevationDeprecated.sql
+      sql_file: mapping_sql/elevation_raster.sql
     base_table:
       table_name: ways_base
       table_schema: exp_null

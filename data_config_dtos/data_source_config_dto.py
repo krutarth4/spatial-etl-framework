@@ -251,6 +251,9 @@ class EnrichmentOperatorDTO:
     aggregations: Optional[List[AggregationFunctionDTO]] = None
     conflict_columns: Optional[List[str]] = None
     filter: Optional[str] = None
+    # raster_aggregate
+    raster_col: Optional[str] = None
+    algorithm: Optional[str] = None  # ST_Resample algorithm: 'Average', 'Bilinear', 'Min', 'Max', ...
 
 
 @dataclass

@@ -11,6 +11,8 @@ In-place (UPDATE, no row count change):
 Reshape (bypass default staging→enrichment sync, TRUNCATE + INSERT SELECT):
   aggregate         — temporal/attribute GROUP BY with aggregation functions
   spatial_aggregate — snap geometry to grid + GROUP BY in one pass
+  raster_aggregate  — downsample a raster to a coarser grid via ST_Resample
+                      (e.g. 1 m DEM → 10 m cells averaging each block)
 """
 from __future__ import annotations
 
@@ -23,7 +25,7 @@ if TYPE_CHECKING:
         EnrichmentOperatorsConfigDTO,
     )
 
-_RESHAPE_TYPES = {"aggregate", "spatial_aggregate"}
+_RESHAPE_TYPES = {"aggregate", "spatial_aggregate", "raster_aggregate"}
 _VALID_AGG_FUNCTIONS = {"avg", "sum", "count", "max", "min"}
 
 
@@ -271,6 +273,45 @@ class SpatialAggregateOperatorStrategy:
         )
 
 
+class RasterAggregateOperatorStrategy:
+    """Downsample a raster column into a coarser raster via ST_Resample.
+
+    Reshape operator: TRUNCATE + INSERT the resampled raster. Each output pixel
+    aggregates the source pixels beneath it using the GDAL resampling `algorithm`
+    ('Average' by default → block-mean; also 'Min'/'Max'/'Bilinear'/'Mode'/...).
+    """
+    name = "raster_aggregate"
+    is_reshape = True
+
+    def build_sql(self, operator: "EnrichmentOperatorDTO", ctx: EnrichmentOperatorContext) -> str:
+        if not operator.cell_size:
+            raise ValueError("raster_aggregate requires cell_size")
+
+        raster_col = operator.raster_col or "rast"
+        target_col = operator.target_col or "rast"
+        algorithm = operator.algorithm or "Average"
+        cell = operator.cell_size
+
+        source_table = operator.source_table or "staging"
+        if source_table == "staging":
+            src = f"{ctx.staging_schema}.{ctx.staging_table}"
+        else:
+            src = f"{ctx.enrichment_schema}.{ctx.enrichment_table}"
+
+        where_parts = [f"{raster_col} IS NOT NULL"]
+        if operator.filter:
+            where_parts.append(operator.filter)
+        where_sql = " AND ".join(where_parts)
+
+        return (
+            f"TRUNCATE TABLE {ctx.enrichment_schema}.{ctx.enrichment_table};\n\n"
+            f"INSERT INTO {ctx.enrichment_schema}.{ctx.enrichment_table} ({target_col})\n"
+            f"SELECT ST_Resample({raster_col}, {cell}, -{cell}, 0, 0, 0, 0, '{algorithm}')\n"
+            f"FROM {src}\n"
+            f"WHERE {where_sql};"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Registry and Builder
 # ---------------------------------------------------------------------------
@@ -323,3 +364,4 @@ enrichment_operator_registry.register(ReprojectOperatorStrategy())
 enrichment_operator_registry.register(SnapToGridOperatorStrategy())
 enrichment_operator_registry.register(AggregateOperatorStrategy())
 enrichment_operator_registry.register(SpatialAggregateOperatorStrategy())
+enrichment_operator_registry.register(RasterAggregateOperatorStrategy())

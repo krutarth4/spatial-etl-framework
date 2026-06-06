@@ -206,23 +206,6 @@ class ElevationMapper(DataSourceABCImpl):
                 nodata=-9999,
         ) as dst:
             dst.write(raster, 1)
-        # with rasterio.open(
-        #         tif_path,
-        #         "w",
-        #         driver="GTiff",
-        #         height=height,
-        #         width=width,
-        #         count=1,
-        #         dtype=raster.dtype,
-        #         crs=CRS.from_epsg(25833),
-        #         transform=transform,
-        #         nodata=-9999,
-        #         compress="LZW",  # 🔥 important for size
-        #         tiled=True,  # 🔥 important for performance
-        #         blockxsize=256,
-        #         blockysize=256,
-        # ) as dst:
-        #     dst.write(raster, 1)
 
         return str(tif_path)
 
@@ -273,10 +256,6 @@ class ElevationMapper(DataSourceABCImpl):
             ElevationTable.__tablename__,
             tif_path
         )
-
-        # Optional: remove TIFF after insert
-        # self.ensure_raster_constraints(self.data_source_config.storage.staging.table_schema,ElevationTable.__tablename__)
-        # os.remove(tif_path)
 
     def insert_into_staging(self, source_schema, source_name, file_path):
         self.logger.info(f"Inserting into staging table {source_schema}.{source_name} -> {file_path}")

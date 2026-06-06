@@ -196,6 +196,15 @@ class DataSourceMapper:
 
     def run_data_source_mapper(self):
         n = len(self.data_sources)
+        # Warm the mapper package in the main thread first. data_mappers/__init__.py
+        # eagerly imports every mapper module; importing it concurrently from N worker
+        # threads races on Python's per-module import locks and can deadlock
+        # (_DeadlockError on _ModuleLock). Pre-importing single-threaded makes the
+        # threaded import_module() calls below pure cache hits.
+        try:
+            importlib.import_module(self._prefix_path)
+        except Exception as e:
+            self.logger.error(f"Error pre-importing mapper package '{self._prefix_path}': {e}")
         self.logger.info(f"Starting {n} datasources in parallel")
         with ThreadPoolExecutor(max_workers=n, thread_name_prefix="DSMapper") as pool:
             futures = {pool.submit(self._run_one_datasource, src): src for src in self.data_sources}
