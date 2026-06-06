@@ -589,6 +589,190 @@ class AggregateWithinDistanceMappingSelectStrategy(SpatialRelationshipMappingSel
         raise NotImplementedError("This strategy overrides build_select directly")
 
 
+class IDWMappingSelectStrategy(SpatialRelationshipMappingSelectStrategy):
+    """Inverse-distance-weighted interpolation of a continuous field onto each way.
+
+    For every base geometry it takes the ``k`` nearest enrichment features and
+    interpolates each configured value column with weights ``1 / d^power``::
+
+        value(way) = Σ_k (v_k / d_k^power) / Σ_k (1 / d_k^power)
+
+    Scalar columns are interpolated to a single value. Array-valued columns
+    (e.g. hourly pollutant forecasts) are interpolated *element-wise* via
+    ``unnest(...) WITH ORDINALITY`` so element i of the result is the IDW of
+    element i across the k neighbours. The k neighbours must already be aligned
+    (same array length / forecast origin) — scope them with
+    ``enrichment_filter_sql`` (which supports the ``{enrichment_table}`` and
+    ``{enrichment_alias}`` tokens, e.g. a "latest forecast_time" predicate).
+
+    Config:
+      k                          number of nearest features (default 4)
+      power                      distance decay exponent (default 2)
+      epsilon                    distance floor to avoid div-by-zero (default 0.001)
+      base_geometry_column       (default 'geometry')
+      base_geometry_sql          optional expr override, formatted with {base_alias}
+      enrichment_geometry_column (default 'geometry')
+      value_columns              list of {name, type: scalar|array}
+      distance_alias             nearest-distance diagnostic column (default 'nearest_distance_m')
+      enrichment_filter_sql      optional predicate scoping the k-NN candidates
+      base_filter_sql            optional predicate on base rows
+    """
+
+    name = "idw"
+    aliases = ("inverse_distance", "inverse_distance_weighting")
+
+    def _value_columns(self, config: dict[str, Any]) -> list[dict[str, str]]:
+        raw = config.get("value_columns")
+        if not raw:
+            raise ValueError(
+                "Mapping strategy 'idw' requires mapping.config.value_columns "
+                "(a list of {name, type: scalar|array})"
+            )
+        cols: list[dict[str, str]] = []
+        for item in raw:
+            if isinstance(item, str):
+                cols.append({"name": item, "type": "scalar"})
+            elif isinstance(item, dict) and item.get("name"):
+                cols.append({"name": str(item["name"]), "type": str(item.get("type") or "scalar").lower()})
+            else:
+                raise ValueError(f"Unsupported value_columns entry: {item!r}")
+        return cols
+
+    def _format_filter(self, sql: Any, *, enrichment_table: str, enrichment_alias: str) -> str:
+        if not sql:
+            return ""
+        normalized = str(sql).strip().rstrip(";")
+        if normalized.lower().startswith("where "):
+            normalized = normalized[6:].strip()
+        if not normalized:
+            return ""
+        return normalized.format(enrichment_table=enrichment_table, enrichment_alias=enrichment_alias)
+
+    def build_select(self, datasource: "DataSourceABCImpl") -> str:
+        base = datasource.data_source_config.mapping.base_table
+        storage = datasource.data_source_config.storage
+        enrichment = storage.enrichment if storage.enrichment else storage.staging
+        if not enrichment:
+            raise ValueError(
+                f"Datasource {datasource.data_source_name} must have either enrichment or staging "
+                f"storage configured for the 'idw' mapping strategy"
+            )
+
+        config = datasource.get_mapping_config()
+        value_columns = self._value_columns(config)
+        scalar_cols = [c["name"] for c in value_columns if c["type"] == "scalar"]
+        array_cols = [c["name"] for c in value_columns if c["type"] == "array"]
+        if scalar_cols and array_cols:
+            raise ValueError(
+                "Mapping strategy 'idw' does not support mixing scalar and array "
+                "value_columns in one mapping (unnest would distort the scalar "
+                "weighting). Split them into separate mappings."
+            )
+
+        k = int(config.get("k", 4))
+        power = config.get("power", 2)
+        epsilon = config.get("epsilon", 0.001)
+        base_id_column = str(config.get("base_id_column") or "id")
+        base_geometry_column = str(config.get("base_geometry_column") or "geometry")
+        enrichment_geometry_column = str(config.get("enrichment_geometry_column") or "geometry")
+        distance_alias = str(config.get("distance_alias") or "nearest_distance_m")
+
+        base_alias = "b"
+        enrichment_table = f"{enrichment.table_schema}.{enrichment.table_name}"
+        base_geometry_sql = str(
+            config.get("base_geometry_sql") or f"{base_alias}.{base_geometry_column}"
+        ).format(base_alias=base_alias)
+        enrichment_geometry_sql = f"e.{enrichment_geometry_column}"
+        distance_sql = f"{enrichment_geometry_sql} <-> {base_geometry_sql}"
+
+        enrichment_filter = self._format_filter(
+            config.get("enrichment_filter_sql"),
+            enrichment_table=enrichment_table,
+            enrichment_alias="e",
+        )
+        knn_where = f"\n                    WHERE {enrichment_filter}" if enrichment_filter else ""
+
+        base_filter_sql = self._normalize_where_clause(config.get("base_filter_sql"))
+        incremental_pred = _build_incremental_filter_sql(datasource, base_alias, base_id_column)
+        if incremental_pred:
+            base_filter_sql = _merge_where_clauses(base_filter_sql, incremental_pred)
+
+        value_col_list = ", ".join(c["name"] for c in value_columns)
+        weight_sql = f"1.0 / power(GREATEST(e.dist, {epsilon}), {power})"
+
+        # k-NN candidates per way, with IDW weight and distance.
+        knn_cte = f"""knn AS (
+                SELECT
+                    {base_alias}.{base_id_column} AS way_id,
+                    {value_col_list},
+                    e.dist,
+                    {weight_sql} AS wgt
+                FROM {base.table_schema}.{base.table_name} {base_alias}
+                JOIN LATERAL (
+                    SELECT {value_col_list}, {distance_sql} AS dist
+                    FROM {enrichment_table} e{knn_where}
+                    ORDER BY {distance_sql}
+                    LIMIT {k}
+                ) e ON TRUE
+                {base_filter_sql}
+            )"""
+
+        if array_cols:
+            # Element-wise IDW: unnest the k arrays in parallel, weight per index,
+            # then re-aggregate back into arrays ordered by element position.
+            unnest_args = ", ".join(f"knn.{c}" for c in array_cols)
+            unnest_cols = ", ".join(f"{c}_e" for c in array_cols)
+            per_index_selects = ",\n                    ".join(
+                f"SUM({c}_e * knn.wgt) / NULLIF(SUM(knn.wgt), 0) AS {c}_v" for c in array_cols
+            )
+            outer_array_selects = ",\n                ".join(
+                f"array_agg({c}_v ORDER BY ord) AS {c}" for c in array_cols
+            )
+            return f"""
+            WITH {knn_cte},
+            expanded AS (
+                SELECT
+                    knn.way_id,
+                    ord,
+                    {per_index_selects},
+                    MIN(knn.dist) AS {distance_alias}
+                FROM knn,
+                LATERAL unnest({unnest_args}) WITH ORDINALITY AS u({unnest_cols}, ord)
+                GROUP BY knn.way_id, ord
+            )
+            SELECT
+                way_id,
+                {outer_array_selects},
+                MIN({distance_alias}) AS {distance_alias}
+            FROM expanded
+            GROUP BY way_id
+            """
+
+        scalar_selects = ",\n                ".join(
+            f"SUM(knn.{c} * knn.wgt) / NULLIF(SUM(knn.wgt), 0) AS {c}" for c in scalar_cols
+        )
+        return f"""
+            WITH {knn_cte}
+            SELECT
+                way_id,
+                {scalar_selects},
+                MIN(knn.dist) AS {distance_alias}
+            FROM knn
+            GROUP BY way_id
+            """
+
+    def infer_insert_spec(self, datasource: "DataSourceABCImpl") -> "MappingInsertSpec":
+        config = datasource.get_mapping_config()
+        value_columns = self._value_columns(config)
+        distance_alias = str(config.get("distance_alias") or "nearest_distance_m")
+        columns = ["way_id"] + [c["name"] for c in value_columns] + [distance_alias]
+        update_cols = [c for c in columns if c != "way_id"]
+        return MappingInsertSpec(columns=columns, conflict_columns=["way_id"], update_columns=update_cols)
+
+    def build_join_sql(self, *args, **kwargs) -> str:  # pragma: no cover - overrides build_select
+        raise NotImplementedError("This strategy overrides build_select directly")
+
+
 class AttributeJoinMappingSelectStrategy:
     """
     Non-spatial join based on attribute columns (e.g., station ID, road name).
@@ -672,6 +856,7 @@ class MappingSelectSqlStrategyRegistry:
         self.register(IntersectionMappingSelectStrategy())
         self.register(NearestKMappingSelectStrategy())
         self.register(AggregateWithinDistanceMappingSelectStrategy())
+        self.register(IDWMappingSelectStrategy())
         self.register(AttributeJoinMappingSelectStrategy())
 
     def register(self, strategy: MappingSelectSqlStrategy) -> None:

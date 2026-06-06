@@ -74,7 +74,9 @@ class AirPollutionGridMappingTable(MappingTable):
     no2 = Column(ARRAY(Float), nullable=True)
     pm10 = Column(ARRAY(Float), nullable=True)
     pm25 = Column(ARRAY(Float), nullable=True)
-    total_intersection_length_m = Column(Float, nullable=True)
+    # Distance (m) to the nearest contributing grid cell — a diagnostic, not an
+    # intersection length. (Was misnamed total_intersection_length_m.)
+    nearest_distance_m = Column(Float, nullable=True)
 
 
 class AirQualityDataMapper(DataSourceABCImpl):
