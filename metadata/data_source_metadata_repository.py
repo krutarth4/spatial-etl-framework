@@ -1,4 +1,4 @@
-from database.db_instancce import DbInstance
+from database.db_instance import DbInstance
 
 from sqlalchemy import String, DateTime, Column, Integer, Text, Boolean, JSON, func, select
 from sqlalchemy.dialects.postgresql import ARRAY

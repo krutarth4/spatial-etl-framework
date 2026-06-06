@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIRST_PARTY = {
     "core", "main_core", "data_mappers", "data_config_dtos",
     "handlers", "readers", "graph", "database", "database_tables",
-    "communication", "log_manager", "utils", "yaml_helper",
+    "communication", "log_manager", "utils",
     "materialized_views", "metadata", "proj",
 }
 
@@ -122,7 +122,7 @@ CORE_MODULES = [
     "main_core.mapping_sql_builder",
     "main_core.core_config",
     "main_core.data_source_mapper",
-    "database.db_instancce",
+    "database.db_instance",
     "database.db_repository",
     "core.init_scheduler",
 ]
@@ -244,7 +244,7 @@ def test_blast_radius_mapper_count(core_module):
         "main_core.mapping_sql_builder":   3,
         "main_core.core_config":           1,    # mappers should NOT need CoreConfig
         "main_core.data_source_mapper":    0,    # orchestrator, not for mappers
-        "database.db_instancce":           0,    # mappers get DB via __init__ injection
+        "database.db_instance":           0,    # mappers get DB via __init__ injection
         "database.db_repository":          2,
         "core.init_scheduler":             0,    # scheduler passed via __init__
     }

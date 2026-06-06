@@ -1,0 +1,54 @@
+# Air quality grid (DCAITI / TU Berlin). Paged JSON fetch via url_template.
+name: "air_quality_data_download"
+description: "Air quality data from the dcaiti Tu Berlin server"
+enable: false
+class_name: airQualityData
+debug:
+  endpoint: air-quality
+data_type: dynamic
+source:
+  fetch: http
+  mode: multi
+  check_metadata:
+    enable: true
+    keys: ["last_modified"]
+  url: https://werkzeug.dcaiti.tu-berlin.de/fairqberlin/
+  multi_fetch:
+    enable: true
+    strategy: url_template
+    url_template: https://werkzeug.dcaiti.tu-berlin.de/fairqberlin/inwt_fairq_cache_skip_{skip}_limit_100000.json.gz
+    template_params:
+      skip: [0, 100000, 200000, 300000]
+  stream: True
+  save_local: true
+  destination: tmp/dcaiti/airqualityAPI/fairq.gz
+  response_type: json.gz
+  header:
+    Accept:
+job:
+  name: airPollutionJob
+  id: airPollutionJob
+  trigger:
+    type:
+      name: interval
+      config:
+        hours: 8
+mapping:
+  enable: true
+  table_name: air_pollution_grid_mapping
+  strategy:
+    type: sql_template
+  config:
+    sql_file: mapping_sql/air_quality.sql
+  base_table:
+    column_name: "air_pollution"
+    column_type: Integer
+storage:
+  persistent: true
+  expires_after: 6h
+  staging:
+    table_name: air_pollution_grid
+    table_class: AirPollutionGridStagingTable
+  enrichment:
+    table_name: air_pollution_grid_enrichment
+    table_class: AirPollutionGridEnrichmentTable

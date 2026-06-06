@@ -17,9 +17,6 @@ import custom_graph_base_tables
 from main_core.core_config import CoreConfig
 
 
-# from data_mappers import * # TODO maybe don't need it anymore as fixed through base import from db
-
-
 class DbInstance(DBRepository):
 
     def __init__(self, db_conf, base, graph):

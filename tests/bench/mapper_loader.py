@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
 from dacite import Config, from_dict
 
 from data_config_dtos.data_source_config_dto import DataSourceDTO
-from database.db_instancce import DbInstance
+from database.db_instance import DbInstance
 from main_core.core_config import CoreConfig
 from metadata.data_source_metadata_service import DataSourceMetadataService
 

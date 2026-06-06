@@ -7,8 +7,7 @@ ETL flow:
   mapping      — `sql_template` (mapping_sql/elevation_raster.sql) samples the
                  averaged raster along each way → per-way ascent/descent/slope
 
-Replaces the old numpy/cKDTree per-way approach, now kept in
-elevationNumpyDeprecatedMapper.py.
+Replaces an older numpy/cKDTree per-way approach.
 """
 import os
 import zipfile

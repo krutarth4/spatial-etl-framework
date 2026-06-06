@@ -14,7 +14,7 @@ from typing import Any
 
 from core.base_graph import BaseGraph
 from core.init_scheduler import InitScheduler
-from database.db_instancce import DbInstance
+from database.db_instance import DbInstance
 from log_manager.logger_manager import PipelineLogger
 from main_core.safe_class import safe_class
 from data_config_dtos.data_source_config_dto import DataSourceDTO, SourceInputDTO
@@ -114,9 +114,6 @@ class StateMixin:
         if old_data is None or new_data is None or (len(old_data) != len(new_data)):
             return True
         return False
-
-    def should_load_transformed_data(self, transformed_data, path: str) -> bool:
-        return bool(transformed_data)
 
     def _safe_table_count(self, table_name: str, schema: str) -> int:
         """Return row count of a table, or 0 if it does not exist yet."""
