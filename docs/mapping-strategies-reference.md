@@ -323,6 +323,96 @@ config:
 
 ---
 
+#### `idw` / `inverse_distance` / `inverse_distance_weighting` ✨ NEW
+Interpolates a **continuous field** sampled at discrete points (e.g. pollutant
+grid, temperature field) onto each way using **inverse-distance weighting** over
+the `k` nearest features:
+
+```
+value(way) = Σₖ (vₖ / dₖ^power) / Σₖ (1 / dₖ^power)
+```
+
+Unlike `nearest_neighbour` (which snaps each way to one cell and produces hard
+Voronoi steps between cells), `idw` produces a smooth, continuous estimate.
+
+**Use Case**: Interpolate NO₂ / PM₁₀ / PM₂.₅ onto each road segment from a coarse
+air-quality grid.
+
+```yaml
+mapping:
+  enable: true
+  strategy:
+    type: idw
+  config:
+    k: 4          # number of nearest cells (default 4)
+    power: 2      # distance decay exponent (default 2)
+    base_geometry_column: geometry_25833
+    enrichment_geometry_column: geom_25833
+    distance_alias: nearest_distance_m
+    value_columns:
+      - { name: no2,  type: array }   # element-wise IDW across the array
+      - { name: pm10, type: array }
+      - { name: pm25, type: array }
+    # k neighbours must be aligned (same array length / forecast origin);
+    # {enrichment_table} expands to the fully-qualified enrichment table.
+    enrichment_filter_sql: >
+      e.no2 IS NOT NULL
+      AND e.forecast_time = (SELECT MAX(ee.forecast_time) FROM {enrichment_table} ee)
+  table_name: air_pollution_grid_mapping
+```
+
+**Scalar vs array columns**:
+- `type: scalar` — interpolated to a single value.
+- `type: array` — interpolated **element-wise** (element *i* of the result is the
+  IDW of element *i* across the k neighbours), via `unnest(...) WITH ORDINALITY`.
+- Mixing scalar and array columns in one mapping is rejected (the unnest would
+  distort scalar weighting) — split them into separate mappings.
+
+**Generated SQL Pattern** (array variant):
+```sql
+WITH knn AS (
+    SELECT b.id AS way_id, no2, pm10, pm25, e.dist,
+           1.0 / power(GREATEST(e.dist, 0.001), 2) AS wgt
+    FROM ways_base b
+    JOIN LATERAL (
+        SELECT no2, pm10, pm25, e.geom_25833 <-> b.geometry_25833 AS dist
+        FROM enrichment e
+        WHERE e.no2 IS NOT NULL
+        ORDER BY e.geom_25833 <-> b.geometry_25833
+        LIMIT 4
+    ) e ON TRUE
+),
+expanded AS (
+    SELECT knn.way_id, ord,
+           SUM(no2_e * knn.wgt) / NULLIF(SUM(knn.wgt), 0) AS no2_v,
+           ...,
+           MIN(knn.dist) AS nearest_distance_m
+    FROM knn,
+    LATERAL unnest(knn.no2, knn.pm10, knn.pm25) WITH ORDINALITY AS u(no2_e, pm10_e, pm25_e, ord)
+    GROUP BY knn.way_id, ord
+)
+SELECT way_id,
+       array_agg(no2_v ORDER BY ord) AS no2, ...,
+       MIN(nearest_distance_m) AS nearest_distance_m
+FROM expanded
+GROUP BY way_id
+```
+
+**Config Options**:
+- `k` (default: 4) - number of nearest features to interpolate over
+- `power` (default: 2) - inverse-distance decay exponent
+- `epsilon` (default: 0.001) - distance floor guarding against div-by-zero when a
+  way sits exactly on a cell
+- `value_columns` (required) - list of `{name, type: scalar|array}` to interpolate
+- `distance_alias` (default: `nearest_distance_m`) - diagnostic nearest-distance column
+- `base_geometry_sql` (optional) - expression override for the base geometry,
+  formatted with `{base_alias}` (e.g. a `COALESCE`/`ST_Transform` fallback)
+- `enrichment_filter_sql` (optional) - scopes the k-NN candidates; supports the
+  `{enrichment_table}` and `{enrichment_alias}` tokens
+- All geometry/filter options from `nearest_neighbour` also apply
+
+---
+
 ### 3. Non-Spatial Strategies
 
 #### `attribute_join` / `id_join` / `key_join` ✨ NEW
@@ -529,6 +619,7 @@ mapping:
 | `within_distance` | Fast with GIST index | Known max distance | Unbounded distances |
 | `intersection` | Fast with GIST index | Polygon overlays | Point-to-point |
 | `aggregate_within_distance` | Moderate (GROUP BY) | Moderate feature counts | Millions of features per buffer |
+| `idw` | Moderate (LATERAL k-NN + GROUP BY) | Continuous fields from point/grid samples | Discrete categorical data |
 | `attribute_join` | Very fast (B-tree index) | Non-spatial joins | N/A |
 
 ---
