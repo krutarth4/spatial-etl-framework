@@ -5,6 +5,10 @@
 -- value at each sample point, then derive ascent/descent/slope from the
 -- consecutive elevation differences.
 --
+-- Every way in ways_base gets exactly one row. Ways with no raster coverage
+-- (outside the loaded tiles, or sampling only nodata) default to all-zero with
+-- sample_count = 0, which is the "no elevation data" sentinel.
+--
 -- Placeholders are filled by the sql_template mapping strategy:
 --   {base_schema}.{base_table}              -> ways_base (alias w, geometry_25833 LINESTRING)
 --   {enrichment_schema}.{enrichment_table}  -> elevation_enrichment (raster)
@@ -15,13 +19,13 @@ WITH params AS (
     SELECT 10.0::float8 AS step_m            -- sample spacing in metres
 ),
 ways AS (
+    -- All ways in the batch — no geometry filter here so every way reaches the
+    -- final LEFT JOIN and gets a row (defaulted when it has no usable geometry).
     SELECT
         w.id                       AS way_id,
         w.geometry_25833           AS geom,
         ST_Length(w.geometry_25833) AS len
     FROM {base_schema}.{base_table} w
-    WHERE w.geometry_25833 IS NOT NULL
-      AND ST_Length(w.geometry_25833) > 0
 ),
 samples AS (
     SELECT
@@ -37,6 +41,10 @@ samples AS (
         0,
         GREATEST(1, CEIL(wy.len / p.step_m)::int)
     ) AS gs(i)
+    -- Only sample ways that can actually be walked; others fall through to the
+    -- LEFT JOIN as no-data defaults.
+    WHERE wy.geom IS NOT NULL
+      AND wy.len > 0
 ),
 elev AS (
     SELECT
@@ -45,7 +53,10 @@ elev AS (
         ST_Value(r.rast, s.pt) AS z
     FROM samples s
     JOIN {enrichment_schema}.{enrichment_table} r
-      ON ST_Intersects(r.rast, s.pt)
+      -- && on the convex-hull geometry hits idx_..._rast (GiST); without it the
+      -- planner seq-scans every tile per sample point. ST_Intersects refines.
+      ON ST_ConvexHull(r.rast) && s.pt
+     AND ST_Intersects(r.rast, s.pt)
 ),
 diffs AS (
     SELECT
@@ -66,15 +77,15 @@ agg AS (
     GROUP BY way_id
 )
 SELECT
-    a.way_id,
-    a.total_ascent,
-    a.total_descent,
-    CASE WHEN p.step_m > 0 THEN a.max_step_rise / p.step_m ELSE 0 END        AS max_slope,
-    CASE WHEN wy.len   > 0 THEN (a.total_ascent + a.total_descent) / wy.len ELSE 0 END AS avg_slope,
-    a.sample_count
-FROM agg a
-JOIN ways wy ON wy.way_id = a.way_id
+    wy.way_id,
+    COALESCE(a.total_ascent, 0)  AS total_ascent,
+    COALESCE(a.total_descent, 0) AS total_descent,
+    CASE WHEN p.step_m > 0 THEN COALESCE(a.max_step_rise, 0) / p.step_m ELSE 0 END AS max_slope,
+    CASE WHEN wy.len   > 0 THEN (COALESCE(a.total_ascent, 0) + COALESCE(a.total_descent, 0)) / wy.len ELSE 0 END AS avg_slope,
+    COALESCE(a.sample_count, 0)  AS sample_count
+FROM ways wy
 CROSS JOIN params p
+LEFT JOIN agg a ON a.way_id = wy.way_id
 ON CONFLICT (way_id) DO UPDATE SET
     total_ascent  = EXCLUDED.total_ascent,
     total_descent = EXCLUDED.total_descent,

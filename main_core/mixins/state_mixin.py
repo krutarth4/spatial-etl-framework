@@ -386,6 +386,18 @@ class StateMixin:
             except Exception as e:
                 self.logger.error(f"Failed to drop expired table {schema}.{table}: {e}")
 
+    def _source_has_change_detection(self) -> bool:
+        """True when the source is configured to detect upstream changes via a
+        metadata check (e.g. last_modified), so a completed run_once datasource
+        should still poll the source instead of being skipped outright.
+        """
+        try:
+            source = getattr(self.data_source_config, "source", None)
+            check = getattr(source, "check_metadata", None) if source else None
+            return bool(check and getattr(check, "enable", False))
+        except Exception:
+            return False
+
     def _is_run_once_and_completed(self) -> bool:
         """Return True when the datasource uses a run_once trigger, has already
         finished successfully, AND downstream tables are still healthy.
@@ -404,6 +416,16 @@ class StateMixin:
             if self.metadata_service is None:
                 return False
             if not self.metadata_service.has_completed_successfully(self.data_source_name):
+                return False
+            # When the source can detect upstream changes (e.g. last_modified),
+            # don't blanket-skip. Let the run proceed so extract() performs the
+            # cheap metadata check; execute_run_pipeline() then skips the heavy
+            # transform/load/mapping stages itself when nothing new was fetched.
+            if self._source_has_change_detection():
+                self.logger.info(
+                    f"[run_once] '{self.data_source_name}' completed before, but source "
+                    f"has change detection — running metadata check instead of skipping."
+                )
                 return False
             populated, reason = self._downstream_tables_are_populated()
             if not populated:

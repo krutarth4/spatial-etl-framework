@@ -344,7 +344,7 @@ class DataOpsMixin:
             )
 
         # 🔑 infer business key from enrichment table
-        conflict_cols = DBRepository.resolve_conflict_columns(enrichment_table)
+        conflict_cols = self.resolve_conflict_columns(enrichment_table)
 
         # 🔄 determine which columns enrichment actually stores
         update_cols = [
@@ -462,8 +462,8 @@ class DataOpsMixin:
         if staging_table is None:
             raise ValueError(f"Staging table {staging_schema}.{staging_table_name} not found")
 
-        conflict_cols = DBRepository.resolve_conflict_columns(staging_table)
-        update_cols = DBRepository.resolve_update_columns(
+        conflict_cols = self.resolve_conflict_columns(staging_table)
+        update_cols = self.resolve_update_columns(
             staging_table,
             conflict_cols,
             # exclude_cols=["ingested_at"]
