@@ -287,7 +287,10 @@ class StateMixin:
         for name in names:
             upstream = self.peer_configs.get(name)
             if upstream is None:
+                # Unknown name can never complete on its own — treat as blocking
+                # (skip) rather than waiting forever on a config typo.
                 reasons.append(f"unknown upstream datasource '{name}'")
+                blocking_disabled.append(name)
                 continue
 
             upstream_unmet: list[str] = []
