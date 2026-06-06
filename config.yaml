@@ -481,6 +481,9 @@ datasources:
     enable: true # to use the data source or not
 #    check_before_update: false # only valid for api call
     class_name: elevation
+    # Waits for elevation_grids_links to finish: it produces the grid-links JSON
+    # (&gridlinks) that this datasource consumes as its source input.
+    depends_on: elevation_grids_links
     debug:
       endpoint: elevation
     data_type: static # static / Dynamic

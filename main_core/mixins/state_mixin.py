@@ -9,6 +9,7 @@ Calls into:  MetadataTrackingMixin._register_datasource_metadata()  (at end of _
 """
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from core.base_graph import BaseGraph
@@ -16,7 +17,7 @@ from core.init_scheduler import InitScheduler
 from database.db_instancce import DbInstance
 from log_manager.logger_manager import PipelineLogger
 from main_core.safe_class import safe_class
-from data_config_dtos.data_source_config_dto import DataSourceDTO
+from data_config_dtos.data_source_config_dto import DataSourceDTO, SourceInputDTO
 
 
 @safe_class
@@ -43,6 +44,9 @@ class StateMixin:
         self.base_graph = BaseGraph(db_instance, base_graph_conf)
         self.data_source_config = data_source_conf
         self.data_source_name = data_source_conf.name
+        # name -> DataSourceDTO for peer datasources; injected by DataSourceMapper
+        # before execute(). Empty when run standalone (no dependencies resolvable).
+        self.peer_configs: dict = {}
         self.db = db_instance
         self.job_configuration = data_source_conf.job
         self.scheduler = scheduler_core
@@ -189,6 +193,174 @@ class StateMixin:
         if reasons:
             return False, "; ".join(reasons)
         return True, ""
+
+    # ── Dependency resolution (depends_on) ─────────────────────────────────
+
+    @staticmethod
+    def is_file_present_and_nonempty(path) -> bool:
+        """Return True if path points to an existing, non-empty file."""
+        if not path:
+            return False
+        try:
+            p = Path(path)
+            return p.exists() and p.is_file() and p.stat().st_size > 0
+        except OSError:
+            return False
+
+    def _normalize_depends_on(self) -> list[str]:
+        """Return depends_on as a list of upstream names ([] when unset)."""
+        raw = getattr(self.data_source_config, "depends_on", None)
+        if not raw:
+            return []
+        if isinstance(raw, str):
+            return [raw]
+        if isinstance(raw, (list, tuple)):
+            return [str(name) for name in raw if name]
+        return []
+
+    def _resolve_source_input_paths(self) -> list[str]:
+        """Auto-resolve the file(s) this datasource consumes as its source input.
+
+        Returns [] when there is no pre-existing input file to verify (e.g.
+        multi-fetch strategies that download during extract).
+        """
+        source = getattr(self.data_source_config, "source", None)
+        if source is None:
+            return []
+
+        multi = getattr(source, "multi_fetch", None)
+        if multi is not None and getattr(multi, "enable", False):
+            strategy = getattr(multi, "strategy", None)
+            if strategy == "explicit_url_list":
+                urls = getattr(multi, "urls", None)
+                if isinstance(urls, SourceInputDTO):
+                    return [urls.input]
+                if isinstance(urls, dict) and urls.get("input"):
+                    return [urls["input"]]
+            # expand_params / url_template fetch during extract — nothing to verify
+            return []
+
+        if source.fetch in ("local",):
+            return [source.file_path] if source.file_path else []
+
+        # single http: verify the cached download if present
+        resolved = self.resolve_latest_saved_path(source.destination)
+        candidate = resolved or source.destination
+        return [candidate] if candidate else []
+
+    def _upstream_tables_satisfied(self, upstream_dto) -> tuple[bool, list[str]]:
+        """Check an upstream's configured output tables exist and are non-empty.
+
+        Tables not configured on the upstream are skipped. An upstream with no
+        configured DB tables (file-only producer) is satisfied vacuously.
+        """
+        reasons: list[str] = []
+        if self.db is None:
+            return True, []  # cannot verify; do not block on table check
+        storage = getattr(upstream_dto, "storage", None)
+        if storage and getattr(storage, "staging", None):
+            s = storage.staging
+            if self._safe_table_count(s.table_name, s.table_schema) == 0:
+                reasons.append(f"staging table {s.table_schema}.{s.table_name} empty/missing")
+        if storage and getattr(storage, "enrichment", None):
+            e = storage.enrichment
+            if self._safe_table_count(e.table_name, e.table_schema) == 0:
+                reasons.append(f"enrichment table {e.table_schema}.{e.table_name} empty/missing")
+        mapping = getattr(upstream_dto, "mapping", None)
+        if mapping and getattr(mapping, "enable", False) and getattr(mapping, "table_name", None):
+            if self._safe_table_count(mapping.table_name, mapping.table_schema) == 0:
+                reasons.append(f"mapping table {mapping.table_schema}.{mapping.table_name} empty/missing")
+        return (not reasons), reasons
+
+    def _dependency_satisfied(self) -> tuple[bool, list[str], list[str]]:
+        """Evaluate all depends_on conditions.
+
+        Returns (satisfied, unmet_reasons, blocking_disabled_upstreams).
+        """
+        names = self._normalize_depends_on()
+        if not names:
+            return True, [], []
+
+        reasons: list[str] = []
+        blocking_disabled: list[str] = []
+
+        for name in names:
+            upstream = self.peer_configs.get(name)
+            if upstream is None:
+                reasons.append(f"unknown upstream datasource '{name}'")
+                continue
+
+            upstream_unmet: list[str] = []
+
+            # (1) metadata: upstream completed successfully at least once
+            completed = bool(
+                self.metadata_service
+                and self.metadata_service.has_completed_successfully(name)
+            )
+            if not completed:
+                upstream_unmet.append(f"'{name}' not completed in metadata")
+
+            # (2) upstream output tables exist & non-empty (vacuous if none configured)
+            tables_ok, table_reasons = self._upstream_tables_satisfied(upstream)
+            if not tables_ok:
+                upstream_unmet.append(f"'{name}': " + "; ".join(table_reasons))
+
+            if upstream_unmet:
+                reasons.extend(upstream_unmet)
+                if not getattr(upstream, "enable", False):
+                    blocking_disabled.append(name)
+
+        # (3) current datasource's own source input file(s) present & non-empty
+        for input_path in self._resolve_source_input_paths():
+            if not self.is_file_present_and_nonempty(input_path):
+                reasons.append(f"source input file missing/empty: {input_path}")
+
+        return (not reasons), reasons, blocking_disabled
+
+    def _wait_or_skip_for_dependencies(self) -> tuple[str, str]:
+        """Gate the run on depends_on. Returns ("proceed", "") or ("skip", reason).
+
+        - Already satisfied        -> proceed immediately.
+        - Unmet + disabled upstream -> warn + skip (it can never finish on its own).
+        - Unmet, all enabled        -> warn + poll every 5s (no timeout) until satisfied.
+        """
+        if not self._normalize_depends_on():
+            return "proceed", ""
+
+        waited = False
+        while True:
+            satisfied, reasons, blocking_disabled = self._dependency_satisfied()
+            if satisfied:
+                if waited:
+                    self.logger.info(
+                        f"[{self.data_source_name}] Dependencies satisfied — proceeding."
+                    )
+                return "proceed", ""
+
+            reason_text = "; ".join(reasons)
+            if blocking_disabled:
+                msg = (
+                    f"[{self.data_source_name}] depends_on not met and upstream(s) "
+                    f"{blocking_disabled} are DISABLED — skipping this run. "
+                    f"Enable and run them first. Details: {reason_text}"
+                )
+                self.logger.warning(msg)
+                return "skip", reason_text
+
+            self.logger.warning(
+                f"[{self.data_source_name}] Waiting for dependencies (poll 5s): {reason_text}"
+            )
+            if self.metadata_service is not None:
+                try:
+                    self.metadata_service.update_run_status(
+                        self.data_source_name,
+                        status="waiting",
+                        message=f"Waiting for dependencies: {reason_text}",
+                    )
+                except Exception:
+                    pass
+            waited = True
+            time.sleep(5)
 
     def _is_dataset_expired(self) -> bool:
         """Return True if the dataset has passed its configured expiry date."""

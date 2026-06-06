@@ -24,8 +24,19 @@ class DataSourceMapper:
         self.logger.info(f"Found {len(self.data_sources)} data sources")
         self._register_all_datasource_metadata()
         all_sources = list(self.data_sources)  # keep full list for status table
+        # name -> DataSourceDTO for EVERY datasource (incl. disabled) so dependents
+        # can resolve an upstream's enable flag and output tables by name.
+        self._peer_configs = self._build_peer_configs(all_sources)
         self.data_sources = self.check_enable_data_sources()
         self._print_datasource_table(all_sources, self.data_sources)
+
+    def _build_peer_configs(self, all_sources) -> dict:
+        peers: dict = {}
+        for source in all_sources or []:
+            dto = self._to_datasource_dto(source)
+            if dto is not None and dto.name:
+                peers[dto.name] = dto
+        return peers
 
     @staticmethod
     def _to_datasource_dto(source) -> DataSourceDTO | None:
@@ -177,6 +188,7 @@ class DataSourceMapper:
             module = importlib.import_module(module_path)
             mapper_class = getattr(module, f"{class_name[0].upper() + class_name[1:]}Mapper")
             instance_data_source = mapper_class(data, self.db_instance, self.scheduler_core, self.base_graph_conf, self.metadata_service)
+            instance_data_source.peer_configs = self._peer_configs
             instance_data_source.execute()
             self.logger.info(f"{mapper_class.__name__} configuration step finished!!")
         except Exception as e:

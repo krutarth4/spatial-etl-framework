@@ -105,6 +105,14 @@ class RunPipelineMixin:
         Short-circuits when no new data is available AND downstream tables
         are already healthy (avoids redundant processing on repeated runs).
         """
+        # Gate on depends_on: wait for enabled upstreams to finish, or skip when
+        # a required upstream is disabled and has no usable output yet.
+        decision, reason = self._wait_or_skip_for_dependencies()
+        if decision == "skip":
+            return self.run_job_response(
+                f"Skipped — dependency not met: {reason}", level="warning"
+            )
+
         with self._time_stage("extract"):
             paths = self.extract()
         self._update_metadata_runtime_paths(paths)
