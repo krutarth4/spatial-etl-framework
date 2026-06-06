@@ -39,6 +39,9 @@ data_folder: ./data_source_configs/
 env_variables:
   base_schema: &db_schema exp_null
   base_table: &base_table_name ways_base
+  # Cache/tmp paths: write them as `tmp/...` below. The leading `tmp` root is
+  # resolved internally (readers/yaml_reader.py::_resolve_tmp_dir) to the TMP_DIR
+  # env var (see .env) or `./tmp` when unset — no per-datasource wiring needed.
 
 database:
   description: "Database used for APSScheduler + data storage"
@@ -133,7 +136,7 @@ graph:
   table_name: way_segment #links
   env:
     pass: ${{ os.getenv("DB_PASSWORD") }}
-  osm_file_path: &osmfile "./tmp/osm_graph/berlin.osm.pbf"
+  osm_file_path: &osmfile tmp/osm_graph/berlin.osm.pbf
   datasource:
     - name: "osm_graph"
       description: "gets weather station data with their location"
@@ -152,7 +155,7 @@ graph:
         url: "https://download.geofabrik.de/europe/germany/berlin-latest.osm.pbf"
         stream: True
         save_local: True
-        destination: &dest "./tmp/osm_graph/berlin.osm.pbf" # path where to save the response
+        destination: &dest tmp/osm_graph/berlin.osm.pbf # path where to save the response
         response_type: pbf # the response type
 
       job:
@@ -196,7 +199,7 @@ graph:
           table_class: StationLocationLink # create class file to be liknked to the table
 
   cmd: [ "osm2pgrouting",
-         "-f", "./tmp/osm_graph/berlin_latest.osm" ,"-d", *db_name,
+         "-f", "tmp/osm_graph/berlin_latest.osm" ,"-d", *db_name,
          "-p", *port,
          "-U", *username,
          "-W", *pass,
@@ -223,7 +226,7 @@ datasources:
       url: https://api.brightsky.dev/sources
       stream: True
       save_local: True
-      destination: "tmp/brightsky/stations/weatherStation.json" # path where to save the response
+      destination: tmp/brightsky/stations/weatherStation.json # path where to save the response
       response_type: json # the response type
       header:
         Accept: "application/json"
@@ -315,7 +318,7 @@ datasources:
             }}
       stream: True
       save_local: true
-      destination: "tmp/brightsky/weather-data/weather_forecast.json" # path where to save the response
+      destination: tmp/brightsky/weather-data/weather_forecast.json # path where to save the response
       response_type: json # the response type
       header:
         Accept: "application/json"
@@ -377,7 +380,7 @@ datasources:
           skip: [0, 100000, 200000, 300000]
       stream: True
       save_local: true
-      destination: "tmp/dcaiti/airqualityAPI/fairq.gz" # path where to save the response
+      destination: tmp/dcaiti/airqualityAPI/fairq.gz # path where to save the response
       response_type: json.gz # the response type
       header:
         Accept:
@@ -438,7 +441,7 @@ datasources:
       fetch: http #http \ local
       stream: True
       save_local: True
-      destination: "tmp/elevation_grid/elevation.xml" # path where to save the response
+      destination: tmp/elevation_grid/elevation.xml # path where to save the response
       response_type: xml # the response type
       header:
         Accept: "application/atom+xml"
@@ -497,7 +500,7 @@ datasources:
       fetch: http #http \ local
       stream: True
       save_local: True
-      destination: "../mdp/modular-data-pipeline/tmp/elevation_zips" #tmp/elevation_zips/elevation.zip# path where to save the response
+      destination: tmp/elevation_zips/elevation.zip #tmp/elevation_zips/elevation.zip# path where to save the response
       response_type: zip # the response type
       multi_fetch:
         enable : true
@@ -569,7 +572,7 @@ datasources:
       url: "https://gdi.berlin.de/services/wfs/baumbestand"
       stream: True
       save_local: True
-      destination: "tmp/tree_wfs/tree_ablage/gpkg_packet.gpkg" # path where to save the response
+      destination: tmp/tree_wfs/tree_ablage/gpkg_packet.gpkg # path where to save the response
       response_type: gpkg # the response type
       reader:
         engine: pyogrio
@@ -657,7 +660,7 @@ datasources:
       fetch: local #http \ local
       stream: True
       save_local: True
-      destination: "tmp/pleasant_bicycle/pleasant.csv" # path where to save the response
+      destination: tmp/pleasant_bicycle/pleasant.csv # path where to save the response
       response_type: csv # the response type
       multi_fetch:
         enable : false

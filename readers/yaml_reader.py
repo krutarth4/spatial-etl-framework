@@ -43,7 +43,8 @@ class YamlReader:
             except yaml.YAMLError as exc:
                 self.logger.error("YAML error parsing", exc)
                 raise exc
-            return self._strip_newlines_recursive(data)
+            data = self._strip_newlines_recursive(data)
+            return self._resolve_tmp_dir(data)
 
     def _evaluate_python_block(self, code: str):
         code = textwrap.dedent(code).strip()
@@ -138,6 +139,37 @@ class YamlReader:
             ]
 
         return obj
+
+    # Cache root sentinel. Any config path whose first segment is `tmp` is treated
+    # as living under the (relocatable) tmp/cache directory. The literal `tmp` root
+    # is rewritten to TMP_DIR (env var, e.g. set in .env) or `./tmp` when unset.
+    # Paths that don't start with `tmp` (e.g. `data/...`, absolute paths) are left
+    # untouched, so non-cache outputs are unaffected.
+    @staticmethod
+    def _tmp_base() -> str:
+        return os.getenv("TMP_DIR") or "./tmp"
+
+    def _resolve_tmp_dir(self, obj):
+        base = self._tmp_base()
+        return self._apply_tmp_base(obj, base)
+
+    def _apply_tmp_base(self, obj, base):
+        if isinstance(obj, str):
+            return self._rewrite_tmp_path(obj, base)
+        if isinstance(obj, dict):
+            return {k: self._apply_tmp_base(v, base) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [self._apply_tmp_base(v, base) for v in obj]
+        return obj
+
+    @staticmethod
+    def _rewrite_tmp_path(value: str, base: str) -> str:
+        for prefix in ("./tmp/", "tmp/"):
+            if value.startswith(prefix):
+                return f"{base}/{value[len(prefix):]}"
+        if value in ("tmp", "./tmp"):
+            return base
+        return value
 
     def _strip_newlines_recursive(self, obj, parent_key=None):
         # Keys that should preserve their exact formatting including newlines
