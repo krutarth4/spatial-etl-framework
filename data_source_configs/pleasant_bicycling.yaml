@@ -1,7 +1,7 @@
 # Pleasant-bicycling score per way (local parquet of aggregated metrics).
 name: pleasant_bicycling
 description: " Get the density of vehicles on the road "
-enable: true
+enable: false
 class_name: pleasantBicycling
 debug:
   endpoint: pleasant-bicycling
