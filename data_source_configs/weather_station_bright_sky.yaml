@@ -3,7 +3,7 @@
 # this file declares only what is distinctive to the datasource.
 name: "weather_station_bright_sky"
 description: "gets weather station data with their location"
-enable: false
+enable: true
 class_name: weatherStation
 debug:
   endpoint: weather-station

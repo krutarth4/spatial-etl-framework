@@ -1,7 +1,7 @@
 # Hourly weather forecast (DWD via Bright Sky) for the stations in `expand`.
 name: "weather_forecast_bright_sky"
 description: "get weather forecast for the dwd_stations in params with hourly forecast "
-enable: false
+enable: true
 class_name: weather
 debug:
   endpoint: weather-forecast

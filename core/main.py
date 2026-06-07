@@ -1,6 +1,10 @@
 import threading
+import time
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
 from communication.comm_service import CommService
@@ -17,6 +21,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class _RequestLogMiddleware(BaseHTTPMiddleware):
+    """Log every inbound request + response status/latency to the pipeline logger."""
+
+    async def dispatch(self, request: Request, call_next):
+        start = time.perf_counter()
+        response = await call_next(request)
+        ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            "%s %s → %d  (%.0fms)",
+            request.method,
+            request.url.path,
+            response.status_code,
+            ms,
+        )
+        return response
+
+
+app.add_middleware(_RequestLogMiddleware)
 
 logger = LoggerManager("CoreMain").get_logger()
 _pipeline_app: Application | None = None
@@ -174,6 +198,24 @@ def debug_mapping_visualization(mapper_endpoint: str, limit: int = 100, way_id: 
         return service.fetch_mapping_visualization(mapper_endpoint=mapper_endpoint, limit=limit, way_id=way_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except OperationalError as exc:
+        orig = str(getattr(exc, "orig", exc))
+        if "DiskFull" in orig or "No space left" in orig or "shared memory" in orig.lower():
+            logger.error(
+                "mapping-visualization [%s] failed — DB out of shared memory (DiskFull). "
+                "Hint: try a smaller ?limit= or increase Docker shm_size for the db service. orig=%s",
+                mapper_endpoint,
+                orig,
+            )
+            raise HTTPException(
+                status_code=507,
+                detail=(
+                    "Database ran out of shared memory while running the spatial query. "
+                    "Try a smaller limit (e.g. ?limit=50) or increase shm_size in docker-compose."
+                ),
+            )
+        logger.error("mapping-visualization [%s] DB error: %s", mapper_endpoint, exc)
+        raise HTTPException(status_code=500, detail=f"Database error: {orig}")
 
 
 @app.get("/debug/mappers/{mapper_endpoint}/enrichment-visualization")

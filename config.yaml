@@ -128,7 +128,7 @@ communication:
       require_is_completed: true
 
 graph:
-  enable: false # TODO prepare main graph tables for nodes and links
+  enable: true # TODO prepare main graph tables for nodes and links
   tool: external_ingest # terminal or custom local tool either use osm2pgrouting with config.xml to create the initial tables or custom osmosis class with the help of handler
   schema: *db_schema  # table schema
   table_name: way_segment #links

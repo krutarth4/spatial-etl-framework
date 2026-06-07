@@ -411,5 +411,9 @@ class InitGraph:
 
     def is_base_graph_ready(self):
         base_data_count = self.base_graph.get_base_graph_row_counts()
+        segment_table = self.db.get_table(self.graph_configuration.table_name,
+                                          self.graph_configuration.schema)
+        if segment_table is None:
+            return False
         return base_data_count == self.db.get_table_count(self.graph_configuration.table_name,
                                                           self.graph_configuration.schema)
