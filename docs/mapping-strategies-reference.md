@@ -6,6 +6,126 @@ This document provides a comprehensive guide to all available mapping strategies
 
 Mapping strategies define how enrichment data (weather stations, trees, air quality, etc.) gets linked to the base graph (`ways_base` table containing road segments). The pipeline supports multiple strategies ranging from simple spatial joins to complex aggregations.
 
+## The composable model: MATCH × REDUCE × PROJECT
+
+Every mapping compiles to the same skeleton:
+
+```sql
+INSERT INTO mapping (way_id, <cols>)
+SELECT b.id AS way_id, <projection>
+FROM   base b <JOIN> other e ON <predicate>
+[WHERE filters] [GROUP BY b.id]
+```
+
+There is **one** strategy engine (`ComposedMappingStrategy` in
+`main_core/mapping_sql_builder.py`). A mapping is a point in three orthogonal axes
+resolved from config by `resolve_axes`:
+
+| Axis | Question | Options |
+|------|----------|---------|
+| **MATCH** | how a base row finds candidate enrichment rows | `nearest` (k-NN LATERAL), `within` (`ST_DWithin`), `intersects` (`ST_Intersects`), `key` (attribute `=` join) |
+| **REDUCE** | how multiple candidates collapse | `none` (one row per pair), `agg` (`GROUP BY` → count/sum/avg/min/max/jsonb_agg/array_agg/jsonb_build_object), `idw` (inverse-distance interpolation) |
+| **PROJECT** | extra emitted columns | `project: [{expr, as}]` (also accepts the legacy `select_columns` with `{expression, alias}` or bare strings) |
+
+Cardinality knobs live on the MATCH: `k` (nearest), `max_distance` (within),
+`keep_unmatched` (`LEFT JOIN` instead of inner), `join_type` (key).
+
+### Authoring the axes directly
+
+```yaml
+mapping:
+  enable: true
+  table_name: my_mapping
+  strategy: { type: composed }
+  match:  { type: nearest, k: 3 }
+  reduce: { type: agg, aggregation_type: jsonb_agg, aggregation_column: sensor_id, aggregation_alias: nearest_3_sensors }
+  project:
+    - { expr: "ST_Length({base_geometry})", as: road_len_m }
+  config:
+    base_geometry_column: geometry_25833
+    enrichment_geometry_column: geometry_25833
+```
+
+`match` / `reduce` / `project` may be written at the top level (relocated into
+`config` at load time) **or** directly under `config`. Link columns for `key`
+match and for the `mapping_column` projection still come from
+`mapping.strategy.link_on` (`mapping_column` / `base_column`), exactly as before.
+
+**Compatibility rules** (enforced at startup by `_validate_mapping_strategies`):
+`reduce: idw` requires `match: nearest`; `match: within` requires `max_distance`
+(or a custom `join_condition_sql`); `match: key` requires both join columns.
+`reduce: agg` keeps every base way (`LEFT JOIN`) unless `keep_unmatched: false`.
+
+Because the axes are orthogonal, **new combinations are free** — e.g.
+`nearest` + `agg` (the example above: the 3 nearest sensors collected into a JSON
+array) needs no new code, where previously it would have required a hand-written
+`custom` SQL block.
+
+### Named strategies are aliases
+
+The legacy strategy names still work unchanged — `resolve_axes` expands each into
+its `(match, reduce)` axes, so **existing datasource configs need no edits**:
+
+| Named strategy (+ aliases) | → MATCH | → REDUCE |
+|----------------------------|---------|----------|
+| `knn` / `nearest_neighbour` / `nearest_station` | `nearest`, `k=1` | `none` |
+| `nearest_k` / `k_nearest` / `knn_multiple` | `nearest`, `k=N` | `none` |
+| `within_distance` | `within`, `max_distance` | `none` |
+| `intersection` | `intersects` | `none` |
+| `aggregate_within_distance` / `buffer_aggregate` | `within`, `max_distance`, `keep_unmatched` | `agg` |
+| `idw` / `inverse_distance` | `nearest`, `k=4` | `idw` |
+| `attribute_join` / `id_join` / `key_join` | `key`, `join_type` | `none` |
+
+`none` / `custom` / `sql_template` are control strategies and bypass the engine
+(see below). The per-strategy sections that follow document each alias's config —
+they remain accurate, and every option also works under the explicit
+`type: composed` shape.
+
+## Configuration shape
+
+Author a mapping as **one `strategy:` block** that holds the type, the link keys
+(`mapping_column` / `base_column` / `basis`) and all strategy params side by side:
+
+```yaml
+mapping:
+  enable: true
+  table_name: tree_mapping
+  strategy:
+    type: aggregate_within_distance
+    max_distance: 50
+    aggregation_type: jsonb_build_object
+    aggregation_alias: trees
+```
+
+At load time `CoreConfig._normalize_mapping_strategy()` splits this back into the
+internal `strategy` (type / description / `link_on`) + `config` (everything else)
+form the SQL builders consume, so the legacy two-block shape (a separate `config:`
+key and `strategy.link_on:` sub-block) still parses and takes precedence over
+flattened keys. The examples below list params under `config:`; they may
+equivalently be written flattened under `strategy:`.
+
+**Defaults (fill-missing — explicit values always win).** Shared spatial keys come
+from `mapping_defaults.config` in `config.yaml`, so a datasource only declares them
+when they deviate:
+
+```yaml
+mapping_defaults:
+  config:
+    base_geometry_column: geometry_25833     # Berlin local CRS
+    enrichment_geometry_column: geometry_25833
+    base_id_column: id
+```
+
+These are merged only into **enabled, geometry-consuming** strategies (not
+`attribute_join` / `sql_template` / `custom`). A disabled mapping may omit
+`base_table` entirely.
+
+**Validation.** `CoreConfig._validate_mapping_strategies()` runs at startup and
+fails fast on an unknown `type`, a missing required key (`idw` → `value_columns`,
+`aggregate_within_distance` → `max_distance`, `attribute_join` → link keys), and
+warns on unrecognized config keys (typo catcher). The per-strategy spec lives in
+`MAPPING_STRATEGY_SPECS` in `main_core/mapping_sql_builder.py`.
+
 ## Strategy Types
 
 ### 1. Control Strategies

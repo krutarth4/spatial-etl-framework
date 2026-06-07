@@ -28,8 +28,6 @@ source:
   header:
     Accept: "application/json"
 job:
-  name: weatherForecastJob
-  id: weatherForecastJob
   trigger:
     type:
       name: interval
@@ -37,10 +35,8 @@ job:
       config:
         hours: 10
 mapping:
+  # No per-way mapping: weather_enrichment is consumed directly by mv_weather.
   enable: false
-  base_table:
-    column_name: "station"
-    column_type: Integer
 storage:
   force_create: false
   persistent: true

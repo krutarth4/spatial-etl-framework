@@ -12,44 +12,32 @@
 #
 # Row count equals ways_base (one row per way), matching mv_tree / mv_pleasant.
 #
+# Boilerplate (schema, handler, build, refresh, triggers.only_on_data_change)
+# is filled from config.yaml -> mv_defaults; refresh defaults to `concurrently`
+# (one row per way + unique id index).
 # Schema reference: docs/materialized-views-reference.md
 # =============================================================================
-
-# ---- Identity --------------------------------------------------------------
-id: mv_weather
 name: mv_weather
-schema: &dbschema exp_null
 description: >
   Per-way hourly wind forecast as float arrays (wind_speed_hourly,
   wind_direction_hourly, visibility_hourly). Index i = forecast_start + i hours;
   -1 means no data. bearing_deg is the fixed segment travel bearing.
-enable: true
 
-# ---- Handler selection -----------------------------------------------------
-handler:
-  class: GenericMaterializedViewHandler
-  module: materialized_views.handlers
-
-# ---- Triggers --------------------------------------------------------------
 triggers:
-  on_datasource_success:
-    # Only the forecast datasource fires this MV. The station mapping is read via
-    # depends_on.tables below; listing both weather datasources made two ensure()/
-    # refresh() calls race on CREATE INDEX.
-    - weather_forecast_bright_sky
-  only_on_data_change: true
+  # Only the forecast datasource fires this MV. The station mapping is read via
+  # depends_on.tables below; listing both weather datasources made two ensure()/
+  # refresh() calls race on CREATE INDEX.
+  on_datasource_success: [weather_forecast_bright_sky]
 
-# ---- Dependencies ----------------------------------------------------------
 depends_on:
   datasources:
     - weather_forecast_bright_sky
     - weather_station_bright_sky
   tables:
-    - { schema: *dbschema, name: weather_enrichment }
-    - { schema: *dbschema, name: dwd_station_locations_mapping }
-    - { schema: *dbschema, name: ways_base }
+    - { name: weather_enrichment }
+    - { name: dwd_station_locations_mapping }
+    - { name: ways_base }
 
-# ---- Definition ------------------------------------------------------------
 # One row per way. A forecast-window CTE builds the global hour slots; a LATERAL
 # aggregate collapses each station's hourly forecast into per-way float arrays.
 # LEFT JOINs keep every way even when it has no station mapping or no forecast.
@@ -92,32 +80,7 @@ definition:
            AND date_trunc('hour', e."timestamp") = s.slot_ts
     ) agg ON TRUE
 
-# ---- Build options ---------------------------------------------------------
-build:
-  with_data: true
-  tablespace: null
-  storage_parameters: {}
-
-# ---- Indexes ---------------------------------------------------------------
 indexes:
-  - name: idx_mv_weather_id
-    columns: [id]
-    unique: true
-    method: btree
-    where: null
-  - name: idx_mv_weather_way_id
-    columns: [way_id, way_link_index]
-    unique: false
-    method: btree
-    where: null
-  - name: idx_mv_weather_way_id_only
-    columns: [way_id]
-    unique: false
-    method: btree
-    where: null
-
-# ---- Refresh behavior ------------------------------------------------------
-refresh:
-  enabled: true
-  mode: concurrently               # one row per way + unique index on id
-  with_data: true
+  - { name: idx_mv_weather_id, columns: [id], unique: true }
+  - { name: idx_mv_weather_way_id, columns: [way_id, way_link_index] }
+  - { name: idx_mv_weather_way_id_only, columns: [way_id] }

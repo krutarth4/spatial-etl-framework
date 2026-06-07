@@ -14,15 +14,13 @@ source:
     keys: ["content_type"]
   file_path: data/pleasant_bicycle/aggregated_metrics.parquet
   fetch: local
-  save_local: True
+  save_local: true
   destination: tmp/pleasant_bicycle/pleasant.csv
   response_type: csv
   multi_fetch:
     enable: false
     strategy: expand_params
 job:
-  name: pleasantJob
-  id: pleasantJob
   executor: process
   trigger:
     type:
@@ -30,7 +28,6 @@ job:
       start_date: 2025-12-21T11:15:00
       config:
         hours: 10
-  next_run_time: 00:00:00
 mapping:
   enable: true
   table_name: pleasant_mapping

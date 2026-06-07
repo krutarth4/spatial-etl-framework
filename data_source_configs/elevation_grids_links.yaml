@@ -17,7 +17,7 @@ source:
   url: https://gdi.berlin.de/data/dgm1/atom/0.atom
   file_path: ""
   fetch: http
-  save_local: True
+  save_local: true
   destination: tmp/elevation_grid/elevation.xml
   response_type: xml
   header:
@@ -34,8 +34,6 @@ before_load_hook:
 post-database-processing:
   enable: false
 job:
-  name: elevationJob
-  id: elevationJob
   trigger:
     type:
       name: interval
@@ -43,8 +41,5 @@ job:
         hours: 168   # re-run every 7 days
 mapping:
   enable: false
-  base_table:
-    column_name: "elevation_factor"
-    column_type: Integer
 storage:
   persistent: false
