@@ -49,6 +49,28 @@ The loader globs `mv_folder/*.yaml`, parses each file, and exposes the list as
 `materialized_views.views` to the manager. To stop a single MV from running,
 set `enable: false` in its file (or delete the file).
 
+### Shared defaults (`mv_defaults`)
+
+`config.yaml` carries an `mv_defaults` block that `CoreConfig._merge_mv_defaults()`
+deep-merges into every loaded MV (fill-missing — an explicit key in the file always
+wins). So an MV file declares only its distinctive parts (name, definition,
+depends_on, indexes, and any deviation); the boilerplate below is inherited:
+
+```yaml
+mv_defaults:
+  schema: *db_schema
+  enable: true
+  handler: { class: GenericMaterializedViewHandler, module: materialized_views.handlers }
+  build:    { with_data: true }
+  refresh:  { enabled: true, mode: concurrently, with_data: true }
+  triggers: { only_on_data_change: true }
+```
+
+`refresh.mode` defaults to `concurrently` (requires a unique index); views without
+one override it to `normal` (e.g. `mv_tree`, `mv_air_pollution`). Index entries can
+be written as `{ name, columns }` — `unique` defaults false and the method defaults
+to btree, so `method`/`where`/`unique: false` only appear when they deviate.
+
 ---
 
 ## 3. MV file schema (v2)

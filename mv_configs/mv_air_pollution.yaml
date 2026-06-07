@@ -23,41 +23,30 @@
 # The Java AirQualityRouteScorer reads this by way_id and computes the array
 # index from the route step's predicted traversal time relative to forecast_start.
 #
+# Boilerplate (schema, handler, build, refresh.enabled/with_data,
+# triggers.only_on_data_change) is filled from config.yaml -> mv_defaults.
 # Schema reference: docs/materialized-views-reference.md
 # =============================================================================
-
-# ---- Identity --------------------------------------------------------------
-id: mv_air_pollution
 name: mv_air_pollution
-schema: exp_null
 description: >
   Per-way air pollution forecast (NO2, PM10, PM2.5) packed as float arrays.
   One row per way segment (same length as ways_base). Array element i maps to
   forecast_start + (i-1) hours. Values are inverse-distance-weighted (IDW)
   interpolations of the k nearest grid cells, computed element-wise per hour.
-enable: true
 
-# ---- Handler selection -----------------------------------------------------
-handler:
-  class: GenericMaterializedViewHandler
-  module: materialized_views.handlers
+refresh:
+  mode: normal
 
-# ---- Triggers --------------------------------------------------------------
 triggers:
-  on_datasource_success:
-    - air_quality_data_download
-  only_on_data_change: true
+  on_datasource_success: [air_quality_data_download]
 
-# ---- Dependencies ----------------------------------------------------------
 depends_on:
-  datasources:
-    - air_quality_data_download
+  datasources: [air_quality_data_download]
   tables:
-    - { schema: exp_null, name: ways_base }
-    - { schema: exp_null, name: air_pollution_grid_enrichment }
-    - { schema: exp_null, name: air_pollution_grid_mapping }
+    - { name: ways_base }
+    - { name: air_pollution_grid_enrichment }
+    - { name: air_pollution_grid_mapping }
 
-# ---- Definition ------------------------------------------------------------
 definition:
   select_sql: |
     WITH forecast_meta AS (
@@ -83,27 +72,6 @@ definition:
     CROSS JOIN forecast_meta fm
     LEFT JOIN {schema}.air_pollution_grid_mapping m ON m.way_id = w.id
 
-# ---- Build options ---------------------------------------------------------
-build:
-  with_data: true
-  tablespace: null
-  storage_parameters: {}
-
-# ---- Indexes ---------------------------------------------------------------
 indexes:
-  - name: mv_air_pollution_way_id_idx
-    columns: [way_id]
-    unique: false
-    method: btree
-    where: null
-  - name: mv_air_pollution_id_idx
-    columns: [id]
-    unique: true
-    method: btree
-    where: null
-
-# ---- Refresh behavior ------------------------------------------------------
-refresh:
-  enabled: true
-  mode: normal
-  with_data: true
+  - { name: mv_air_pollution_way_id_idx, columns: [way_id] }
+  - { name: mv_air_pollution_id_idx, columns: [id], unique: true }

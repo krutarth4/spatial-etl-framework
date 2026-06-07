@@ -78,17 +78,43 @@ base:
   table_schema: *db_schema
   force_generate: false # To generate brand new table the other base tabkle will be backed up
 
-# Defaults merged into every datasource mapping block (fills missing keys only)
+# Defaults merged into every datasource mapping block (fills missing keys only).
+# `config` is deep-merged per-key into each datasource's resolved mapping config,
+# so a datasource only declares geometry columns when they deviate from these.
 mapping_defaults:
   table_schema: *db_schema
   incremental: false
+  config:
+    # Berlin local CRS — base ways and most enrichment tables store geometry_25833.
+    base_geometry_column: geometry_25833
+    enrichment_geometry_column: geometry_25833
+    base_id_column: id
+
+# Defaults merged (fill-missing) into every MV config loaded from mv_folder.
+# An MV file only declares what is distinctive (name, definition, indexes,
+# depends_on, and any deviation like refresh.mode: normal). Everything below is
+# filled in by CoreConfig._merge_mv_defaults() unless the file overrides it.
+mv_defaults:
+  schema: *db_schema
+  enable: true
+  handler:
+    class: GenericMaterializedViewHandler
+    module: materialized_views.handlers
+  build:
+    with_data: true
+  refresh:
+    enabled: true
+    mode: concurrently        # override to `normal` for views without a unique index
+    with_data: true
+  triggers:
+    only_on_data_change: true
 
 
 # Pipeline <-> router task coordination. Cross-cutting concern (not graph-specific):
 # the OSM graph stage is just the first consumer. state_file is the JSON snapshot
 # both sides read/write; router also gets HTTP notifications at {router.base_url}.
 communication:
-  enable: true # set false to run standalone without comm/router waits
+  enable: false # set false to run standalone without comm/router waits
   state_file: tmp/comm_state.json # JSON snapshot; router reads/writes via HTTP endpoints below
   router:
     base_url: http://localhost:8082 # e.g. http://router:9000; when set, pipeline POSTs status changes to {base_url}/comm/tasks/{key}
@@ -128,7 +154,7 @@ communication:
       require_is_completed: true
 
 graph:
-  enable: true # TODO prepare main graph tables for nodes and links
+  enable: false # TODO prepare main graph tables for nodes and links
   tool: external_ingest # terminal or custom local tool either use osm2pgrouting with config.xml to create the initial tables or custom osmosis class with the help of handler
   schema: *db_schema  # table schema
   table_name: way_segment #links

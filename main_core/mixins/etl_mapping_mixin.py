@@ -10,8 +10,7 @@ Calls into:       EtlQueryMixin (execute_query)
 from typing import Any
 
 from main_core.mapping_sql_builder import (
-    MappingInsertBuilder,
-    MappingInsertSpec,
+    build_mapping_query,
     mapping_select_sql_strategy_registry,
 )
 from main_core.safe_class import safe_class
@@ -152,20 +151,12 @@ class EtlMappingMixin:
         self.execute_query("Mapping", query)
 
     def build_mapping_db_query(self) -> str | None:
-        """Build the full INSERT … SELECT mapping query via the strategy builder."""
-        select_strategy = self.get_mapping_select_strategy()
-        if select_strategy is None:
-            return None
+        """Build the full INSERT … SELECT mapping query via the strategy builder.
 
-        select_sql = select_strategy.build_select(self)
-        insert_spec = self.get_mapping_insert_spec()
-        if insert_spec is None and hasattr(select_strategy, "infer_insert_spec"):
-            insert_spec = select_strategy.infer_insert_spec(self)
-        if insert_spec is None:
-            return select_sql
-
-        builder = MappingInsertBuilder()
-        return builder.build_insert(self.data_source_config.mapping, select_sql, insert_spec)
+        Delegates to the shared build_mapping_query so the production path and the
+        debug preview emit identical SQL.
+        """
+        return build_mapping_query(self, self.get_mapping_select_strategy())
 
     def execute_mapping_sql_template(self):
         """Execute the sql_template mapping strategy by formatting config.sql."""
@@ -297,18 +288,3 @@ class EtlMappingMixin:
         if custom_strategy is not None:
             return custom_strategy
         return mapping_select_sql_strategy_registry.get(self.get_mapping_strategy_type())
-
-    def get_mapping_insert_spec(self) -> MappingInsertSpec | None:
-        insert_conf = self.get_mapping_config().get("insert")
-        if not isinstance(insert_conf, dict):
-            return None
-
-        columns = insert_conf.get("columns") or []
-        conflict_columns = insert_conf.get("conflict_columns")
-        update_columns = insert_conf.get("update_columns")
-
-        return MappingInsertSpec(
-            columns=[str(column) for column in columns],
-            conflict_columns=[str(column) for column in conflict_columns] if conflict_columns else None,
-            update_columns=[str(column) for column in update_columns] if update_columns else None,
-        )

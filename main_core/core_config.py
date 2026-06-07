@@ -1,4 +1,5 @@
 import os
+from copy import deepcopy
 from pathlib import Path
 
 from config_features.registry import DatasourceFeatureRegistry
@@ -46,9 +47,12 @@ class CoreConfig(YamlReader):
         self._load_datasource_configs()
         self._apply_datasource_overrides()
         self._apply_datasource_defaults()
+        self._normalize_mapping_strategy()
         self._merge_mapping_defaults()
         self._resolve_mapping_sql_files()
+        self._validate_mapping_strategies()
         self._merge_mv_configs()
+        self._merge_mv_defaults()
         self._validate_job_triggers()
         self._validate_datasource_features()
         self._initialized = True
@@ -265,23 +269,143 @@ class CoreConfig(YamlReader):
                 job.setdefault("max_instances", 1)
                 job.setdefault("next_run_time", "none")
 
-    def _merge_mapping_defaults(self):
-        """Fill missing top-level mapping keys from mapping_defaults for every datasource."""
-        defaults = self.config.get("mapping_defaults")
-        if not isinstance(defaults, dict) or not defaults:
-            return
+    @staticmethod
+    def _deep_fill_defaults(target: dict, defaults: dict) -> None:
+        """Recursively fill keys absent from `target` using `defaults`.
+
+        Existing values in `target` always win (fill-missing semantics). Nested
+        dicts are merged key-by-key; defaults are deep-copied so distinct targets
+        never share mutable sub-dicts.
+        """
+        for key, value in defaults.items():
+            if isinstance(value, dict):
+                node = target.get(key)
+                if node is None:
+                    target[key] = deepcopy(value)
+                elif isinstance(node, dict):
+                    CoreConfig._deep_fill_defaults(node, value)
+            else:
+                target.setdefault(key, value)
+
+    def _normalize_mapping_strategy(self):
+        """Collapse the unified `mapping.strategy` block into the internal
+        `strategy` (type/description/link_on) + `config` (everything else) split
+        that the strategy builders consume.
+
+        Datasources may declare one `strategy:` block holding the type, the link
+        keys (mapping_column / base_column / basis) and all strategy params side
+        by side. This rewrites that into the legacy two-block shape, so the YAML
+        is authored in one place while downstream code is unchanged. An explicit
+        `config:` key and `strategy.link_on:` sub-block (legacy form) still work
+        and take precedence over flattened keys.
+
+        Also relocates top-level `mapping.match` / `mapping.reduce` / `mapping.project`
+        (the composed-engine authoring shape) into `mapping.config`, since the
+        MappingDTO only carries the free-form `config` dict; downstream the engine
+        reads the axes from there via resolve_axes.
+        """
         datasources = self.config.get("datasources")
         if not isinstance(datasources, list):
             return
+
+        link_keys = ("mapping_column", "base_column", "basis")
+        reserved = {"type", "description", "link_on", *link_keys}
+        axis_keys = ("match", "reduce", "project")
+
         for ds in datasources:
             if not isinstance(ds, dict):
                 continue
             mapping = ds.get("mapping")
             if not isinstance(mapping, dict):
                 continue
+
+            # Relocate top-level composed-engine axes into config (DTO-safe).
+            if any(key in mapping for key in axis_keys):
+                axis_config = mapping.get("config")
+                if not isinstance(axis_config, dict):
+                    axis_config = {}
+                for key in axis_keys:
+                    if key in mapping:
+                        axis_config.setdefault(key, mapping.pop(key))
+                mapping["config"] = axis_config
+
+            strategy = mapping.get("strategy")
+            if not isinstance(strategy, dict):
+                continue  # string strategy or absent — nothing to split
+
+            config = mapping.get("config")
+            if not isinstance(config, dict):
+                config = {}
+
+            link_on = strategy.get("link_on")
+            if not isinstance(link_on, dict):
+                link_on = {}
+            for key in link_keys:
+                if strategy.get(key) is not None:
+                    link_on.setdefault(key, strategy[key])
+
+            for key, value in strategy.items():
+                if key in reserved:
+                    continue
+                config.setdefault(key, value)
+
+            slim = {"type": strategy.get("type")}
+            if strategy.get("description") is not None:
+                slim["description"] = strategy.get("description")
+            if link_on:
+                slim["link_on"] = link_on
+            mapping["strategy"] = slim
+            if config:
+                mapping["config"] = config
+
+    def _merge_mapping_defaults(self):
+        """Fill missing mapping keys from mapping_defaults for every datasource.
+
+        Top-level keys (table_schema, incremental, ...) are filled when absent.
+        `mapping_defaults.config` is deep-merged per-key into the resolved mapping
+        config, but only for enabled, geometry-consuming strategies — so the
+        shared geometry-column defaults reach spatial datasources without
+        littering non-spatial ones (sql_template / custom / attribute_join). The
+        geometry gate keys off the resolved MATCH axis (nearest/within/intersects).
+        """
+        from main_core.mapping_sql_builder import match_uses_geometry, resolve_axes
+
+        defaults = self.config.get("mapping_defaults")
+        if not isinstance(defaults, dict) or not defaults:
+            return
+        datasources = self.config.get("datasources")
+        if not isinstance(datasources, list):
+            return
+
+        config_defaults = defaults.get("config")
+        config_defaults = config_defaults if isinstance(config_defaults, dict) else None
+
+        for ds in datasources:
+            if not isinstance(ds, dict):
+                continue
+            mapping = ds.get("mapping")
+            if not isinstance(mapping, dict):
+                continue
+
             for key, value in defaults.items():
+                if key == "config":
+                    continue
                 if key not in mapping:
                     mapping[key] = value
+
+            if not config_defaults or not mapping.get("enable", False):
+                continue
+            strategy = mapping.get("strategy")
+            type_str = strategy.get("type") if isinstance(strategy, dict) else strategy
+            cfg = mapping.get("config")
+            if not isinstance(cfg, dict):
+                cfg = {}
+                mapping["config"] = cfg
+            match, _ = resolve_axes(type_str if isinstance(type_str, str) else None, cfg)
+            if not match_uses_geometry(match):
+                continue
+            for key, value in config_defaults.items():
+                cfg.setdefault(key, value)
 
     def _resolve_mapping_sql_files(self):
         """Replace mapping.config.sql_file references with the file's SQL content."""
@@ -311,6 +435,147 @@ class CoreConfig(YamlReader):
                     f"Datasource '{ds.get('name')}' mapping.config.sql_file "
                     f"'{sql_file}' not found: {sql_path}"
                 )
+
+    def _validate_mapping_strategies(self):
+        """Fail fast on mapping-strategy misconfiguration before any ETL runs.
+
+        For every enabled datasource with mapping enabled: resolves the strategy
+        (preset alias or explicit `composed`) into its MATCH / REDUCE axes and
+        validates each axis against MATCH_SPECS / REDUCE_SPECS, plus a few
+        cross-axis rules (key-match needs join columns; idw-reduce needs
+        nearest-match). Warns on unrecognized config keys (typo catcher).
+        custom / mapper_sql / none are skipped; sql_template only needs config.sql.
+        """
+        from main_core.mapping_sql_builder import (
+            COMMON_MAPPING_CONFIG_KEYS,
+            KNOWN_STRATEGY_NAMES,
+            MATCH_SPECS,
+            REDUCE_SPECS,
+            canonical_strategy_name,
+            resolve_axes,
+        )
+
+        datasources = self.config.get("datasources")
+        if not isinstance(datasources, list):
+            return
+
+        special = {"custom", "mapper_sql", "none", "sql_template"}
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        for ds in datasources:
+            if not isinstance(ds, dict) or not ds.get("enable", False):
+                continue
+            mapping = ds.get("mapping")
+            if not isinstance(mapping, dict) or not mapping.get("enable", False):
+                continue
+            name = ds.get("name")
+            strategy = mapping.get("strategy")
+            if isinstance(strategy, str):
+                type_str = strategy
+            elif isinstance(strategy, dict):
+                type_str = strategy.get("type") or strategy.get("name")
+            else:
+                type_str = None
+
+            if not type_str:
+                errors.append(f"[{name}] mapping.enable is true but mapping.strategy.type is missing")
+                continue
+
+            t = str(type_str).lower()
+            if t in special:
+                if t == "sql_template":
+                    cfg = mapping.get("config") or {}
+                    if not cfg.get("sql") and not cfg.get("sql_file"):
+                        errors.append(
+                            f"[{name}] strategy 'sql_template' requires mapping.strategy.sql_file "
+                            f"(or config.sql)"
+                        )
+                continue
+
+            if canonical_strategy_name(t) is None:
+                errors.append(
+                    f"[{name}] unknown mapping strategy type '{type_str}'. "
+                    f"Known: {sorted(KNOWN_STRATEGY_NAMES)} or one of {sorted(special)}"
+                )
+                continue
+
+            config = mapping.get("config") if isinstance(mapping.get("config"), dict) else {}
+            match, reduce = resolve_axes(t, config)
+            match_type = str((match or {}).get("type") or "").lower()
+            reduce_type = str((reduce or {}).get("type") or "none").lower()
+
+            mspec = MATCH_SPECS.get(match_type)
+            rspec = REDUCE_SPECS.get(reduce_type)
+            if mspec is None:
+                errors.append(f"[{name}] '{t}' resolves to unknown match type '{match_type}'")
+            if rspec is None:
+                errors.append(f"[{name}] '{t}' resolves to unknown reduce type '{reduce_type}'")
+            if mspec is None or rspec is None:
+                continue
+
+            # required_any on the match axis (e.g. within needs max_distance|join_condition_sql)
+            for group in mspec.get("required_any", []):
+                if not any((match or {}).get(key) not in (None, "") for key in group):
+                    errors.append(f"[{name}] match '{match_type}' requires at least one of {group}")
+            # required keys on the reduce axis (e.g. idw needs value_columns)
+            for key in rspec.get("required", []):
+                if (reduce or {}).get(key) in (None, ""):
+                    errors.append(f"[{name}] reduce '{reduce_type}' requires '{key}'")
+
+            # cross-axis rules
+            link_on = strategy.get("link_on") if isinstance(strategy, dict) else None
+            link_on = link_on if isinstance(link_on, dict) else {}
+            if match_type == "key":
+                base_col = link_on.get("base_column") or config.get("base_join_column")
+                map_col = link_on.get("mapping_column") or config.get("enrichment_join_column")
+                if not base_col or not map_col:
+                    errors.append(
+                        f"[{name}] match 'key' requires base+enrichment join columns "
+                        f"(mapping.strategy.link_on or config.base_join_column/enrichment_join_column)"
+                    )
+            if reduce_type == "idw" and match_type != "nearest":
+                errors.append(f"[{name}] reduce 'idw' requires match 'nearest' (got '{match_type}')")
+
+            resolved = dict(config)
+            for key, value in link_on.items():
+                if value is not None:
+                    resolved.setdefault(key, value)
+            known_keys = COMMON_MAPPING_CONFIG_KEYS | mspec.get("known", set()) | rspec.get("known", set())
+            unknown = sorted(k for k in resolved if k not in known_keys)
+            if unknown:
+                warnings.append(
+                    f"[{name}] strategy '{t}' has unrecognized mapping config keys "
+                    f"{unknown} (typo? they will be ignored)"
+                )
+
+        for w in warnings:
+            self.logger.warning(str(w))
+        if errors:
+            lines = "\n".join(f"  {e}" for e in errors)
+            raise ValueError(
+                f"Mapping strategy configuration errors in {self.filepath}:\n{lines}"
+            )
+
+    def _merge_mv_defaults(self):
+        """Deep-fill each loaded MV config from `mv_defaults` (fill-missing).
+
+        Runs after `_merge_mv_configs` has populated materialized_views.views.
+        An MV file only declares its distinctive parts; handler/schema/build/
+        refresh/triggers boilerplate is filled here unless the file overrides it.
+        """
+        defaults = self.config.get("mv_defaults")
+        if not isinstance(defaults, dict) or not defaults:
+            return
+        mv_conf = self.config.get("materialized_views")
+        if not isinstance(mv_conf, dict):
+            return
+        views = mv_conf.get("views")
+        if not isinstance(views, list):
+            return
+        for view in views:
+            if isinstance(view, dict):
+                self._deep_fill_defaults(view, defaults)
 
     def _merge_mv_configs(self):
         mv_conf = self.config.get("materialized_views")

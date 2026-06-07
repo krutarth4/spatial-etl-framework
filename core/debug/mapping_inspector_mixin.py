@@ -322,21 +322,18 @@ class MappingInspectorMixin:
             return None
 
         # Path 4: registry strategy (knn, nearest_neighbour, within_distance, etc.)
+        # Delegate to the same builder the production ETL path uses so the preview
+        # matches the SQL that will actually run (including inferred insert specs).
         try:
-            from main_core.mapping_sql_builder import mapping_select_sql_strategy_registry, MappingInsertBuilder
+            from main_core.mapping_sql_builder import (
+                build_mapping_query,
+                mapping_select_sql_strategy_registry,
+            )
 
             strategy = mapping_select_sql_strategy_registry.get(strategy_type)
             if strategy is None:
                 return None
-
-            select_sql = strategy.build_select(adapter)
-            insert_spec = adapter._get_insert_spec()
-            if insert_spec is None:
-                return select_sql
-
-            builder = MappingInsertBuilder()
-            mapping_conf = adapter.data_source_config.mapping
-            return builder.build_insert(mapping_conf, select_sql, insert_spec)
+            return build_mapping_query(adapter, strategy)
         except Exception as exc:
             return f"-- SQL generation failed: {exc}"
     def _build_template_context(self, adapter: _DataSourceConfigAdapter) -> dict[str, str | None]:

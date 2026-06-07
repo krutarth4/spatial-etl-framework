@@ -7,6 +7,11 @@ In-place (UPDATE, no row count change):
   make_point        — ST_SetSRID(ST_MakePoint(x, y), srid)
   reproject         — ST_Transform(source_col, target_srid)
   snap_to_grid      — ST_SnapToGrid(source_col, cell_size)
+  derive            — target_col = <expression> per row (e.g. a score over other
+                      enrichment columns) so the value is debug-visible and the MV
+                      stays a thin LEFT JOIN
+  normalize         — scale source_col into target_col table-wide
+                      (minmax → [0,1], or zscore)
 
 Reshape (bypass default staging→enrichment sync, TRUNCATE + INSERT SELECT):
   aggregate         — temporal/attribute GROUP BY with aggregation functions
@@ -118,6 +123,69 @@ class SnapToGridOperatorStrategy:
             f"UPDATE {ctx.enrichment_schema}.{ctx.enrichment_table}\n"
             f"SET {operator.target_col} = ST_SnapToGrid({operator.source_col}, {operator.cell_size})\n"
             f"WHERE {operator.source_col} IS NOT NULL"
+            f"{condition_clause};"
+        )
+
+
+class DeriveOperatorStrategy:
+    """Compute a derived column from an expression over each enrichment row.
+
+    The expression is raw SQL evaluated per row against the enrichment table
+    (reference any of its columns), e.g. a normalized score::
+
+        - type: derive
+          target_col: pleasant_score
+          expression: "LEAST(1.0, GREATEST(0.0, avg_speed_performance_index / 30.0))"
+
+    Keeping the score in enrichment makes it debug-visible and lets the MV read it
+    with a plain LEFT JOIN. `target_col` must already exist on the enrichment table.
+    """
+    name = "derive"
+    is_reshape = False
+
+    def build_sql(self, operator: "EnrichmentOperatorDTO", ctx: EnrichmentOperatorContext) -> str:
+        if not operator.target_col or not operator.expression:
+            raise ValueError("derive requires target_col and expression")
+        where_clause = f"\nWHERE {operator.condition}" if operator.condition else ""
+        return (
+            f"UPDATE {ctx.enrichment_schema}.{ctx.enrichment_table}\n"
+            f"SET {operator.target_col} = {operator.expression}"
+            f"{where_clause};"
+        )
+
+
+class NormalizeOperatorStrategy:
+    """Scale a column into a normalized target column across the whole table.
+
+    method 'minmax' → (x - min) / (max - min) in [0, 1];
+    method 'zscore' → (x - avg) / stddev_pop. Rows where source is NULL are left
+    untouched. `target_col` must already exist on the enrichment table.
+    """
+    name = "normalize"
+    is_reshape = False
+
+    def build_sql(self, operator: "EnrichmentOperatorDTO", ctx: EnrichmentOperatorContext) -> str:
+        if not operator.source_col or not operator.target_col:
+            raise ValueError("normalize requires source_col and target_col")
+        table = f"{ctx.enrichment_schema}.{ctx.enrichment_table}"
+        src = operator.source_col
+        method = (operator.method or "minmax").lower()
+        if method == "minmax":
+            stats_sql = f"SELECT MIN({src}) AS min_v, MAX({src}) AS max_v FROM {table}"
+            expr = f"(e.{src} - stats.min_v) / NULLIF(stats.max_v - stats.min_v, 0)"
+        elif method == "zscore":
+            stats_sql = f"SELECT AVG({src}) AS avg_v, STDDEV_POP({src}) AS std_v FROM {table}"
+            expr = f"(e.{src} - stats.avg_v) / NULLIF(stats.std_v, 0)"
+        else:
+            raise ValueError(
+                f"normalize: unsupported method '{operator.method}' (expected 'minmax' or 'zscore')"
+            )
+        condition_clause = f"\n  AND {operator.condition}" if operator.condition else ""
+        return (
+            f"UPDATE {table} e\n"
+            f"SET {operator.target_col} = {expr}\n"
+            f"FROM ({stats_sql}) stats\n"
+            f"WHERE e.{src} IS NOT NULL"
             f"{condition_clause};"
         )
 
@@ -366,6 +434,8 @@ enrichment_operator_registry = EnrichmentOperatorRegistry()
 enrichment_operator_registry.register(MakePointOperatorStrategy())
 enrichment_operator_registry.register(ReprojectOperatorStrategy())
 enrichment_operator_registry.register(SnapToGridOperatorStrategy())
+enrichment_operator_registry.register(DeriveOperatorStrategy())
+enrichment_operator_registry.register(NormalizeOperatorStrategy())
 enrichment_operator_registry.register(AggregateOperatorStrategy())
 enrichment_operator_registry.register(SpatialAggregateOperatorStrategy())
 enrichment_operator_registry.register(RasterAggregateOperatorStrategy())

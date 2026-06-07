@@ -134,7 +134,8 @@ class MappingDTO:
     table_name: Optional[str]
     table_schema: Optional[str]
     enable: bool
-    base_table: BaseDataMappingSourceDTO
+    # Required only when mapping is enabled; a disabled mapping may omit it.
+    base_table: Optional[BaseDataMappingSourceDTO] = None
     config: Optional[Mapping[str, Any]] = None
     # When true, the mapping step runs only for ways present in the
     # ways_base_changes diff table instead of full-rescanning ways_base.
@@ -254,6 +255,10 @@ class EnrichmentOperatorDTO:
     # raster_aggregate
     raster_col: Optional[str] = None
     algorithm: Optional[str] = None  # ST_Resample algorithm: 'Average', 'Bilinear', 'Min', 'Max', ...
+    # derive: target_col = <expression> over each enrichment row (in-place UPDATE)
+    expression: Optional[str] = None
+    # normalize: scale source_col into target_col table-wide
+    method: Optional[str] = None  # 'minmax' (→[0,1]) | 'zscore'
 
 
 @dataclass

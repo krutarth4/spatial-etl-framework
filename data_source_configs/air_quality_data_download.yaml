@@ -25,8 +25,6 @@ source:
   header:
     Accept:
 job:
-  name: airPollutionJob
-  id: airPollutionJob
   trigger:
     type:
       name: interval
@@ -35,14 +33,14 @@ job:
 mapping:
   enable: true
   table_name: air_pollution_grid_mapping
+  # One unified block. base_geometry_column default (geometry_25833) is overridden
+  # by base_geometry_sql below; enrichment uses geom_25833 (not the default).
   strategy:
     type: idw
-  config:
     # Inverse-distance-weighted interpolation of the (continuous) pollutant field
     # onto each way. Smooths out the Voronoi steps the old nearest-1 mapping had.
     k: 4
     power: 2
-    base_geometry_column: geometry_25833
     # ways_base may carry only geometry (4326); fall back to a transform.
     base_geometry_sql: "COALESCE({base_alias}.geometry_25833, ST_Transform({base_alias}.geometry, 25833))"
     enrichment_geometry_column: geom_25833

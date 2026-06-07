@@ -84,23 +84,6 @@ class _DataSourceConfigAdapter:
         config = self.data_source_config.mapping.config
         return config if isinstance(config, dict) else {}
 
-    def _get_insert_spec(self):
-        """Extract insert specification from mapping config."""
-        from main_core.mapping_sql_builder import MappingInsertSpec
-
-        insert_conf = self.get_mapping_config().get("insert")
-        if not isinstance(insert_conf, dict):
-            return None
-
-        columns = insert_conf.get("columns") or []
-        conflict_columns = insert_conf.get("conflict_columns")
-        update_columns = insert_conf.get("update_columns")
-
-        return MappingInsertSpec(
-            columns=[str(column) for column in columns],
-            conflict_columns=[str(column) for column in conflict_columns] if conflict_columns else None,
-            update_columns=[str(column) for column in update_columns] if update_columns else None,
-        )
 
 class TableTarget:
     STAGING = "staging"

@@ -16,7 +16,7 @@ source:
     keys: ["last_modified"]
   file_path: ""
   fetch: http
-  save_local: True
+  save_local: true
   destination: tmp/elevation_zips/elevation.zip
   response_type: zip
   multi_fetch:
@@ -26,8 +26,6 @@ source:
       # Produced by the `elevation_grids_links` datasource (after_filter_hook).
       input: data/grid/elevation_grid_links.json
 job:
-  name: elevationJob
-  id: elevationJob
   executor: process
   trigger:
     type:
@@ -45,7 +43,6 @@ mapping:
   table_name: elevation_mapping
   strategy:
     type: sql_template
-  config:
     sql_file: mapping_sql/elevation_raster.sql
   base_table:
     column_name: "elevation_factor"

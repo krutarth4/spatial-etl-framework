@@ -15,7 +15,7 @@ source:
   file_path: ""
   fetch: http
   url: "https://gdi.berlin.de/services/wfs/baumbestand"
-  save_local: True
+  save_local: true
   destination: tmp/tree_wfs/tree_ablage/gpkg_packet.gpkg
   response_type: gpkg
   reader:
@@ -33,8 +33,6 @@ source:
       outputFormat: geopackage
       sortBy: gisid
 job:
-  name: treeJob
-  id: treeJob
   executor: process
   trigger:
     type:
@@ -42,16 +40,13 @@ job:
       start_date: 2025-12-21T11:15:00
       config:
         hours: 10
-  next_run_time: 00:00:00
 mapping:
   enable: true
   table_name: tree_mapping
+  # geometry columns come from mapping_defaults.config (geometry_25833).
   strategy:
     type: aggregate_within_distance
-  config:
     max_distance: 50
-    base_geometry_column: geometry_25833
-    enrichment_geometry_column: geometry_25833
     aggregation_type: jsonb_build_object
     aggregation_expression: |
       COALESCE(
@@ -67,7 +62,9 @@ mapping:
       )
     aggregation_alias: trees
   base_table:
-    column_name: "elevation_factor"
+    # Semantic label for this datasource's per-way contribution (table_name /
+    # table_schema are auto-filled; column_name/type are not consumed yet).
+    column_name: "tree_factor"
     column_type: Integer
 storage:
   persistent: true
