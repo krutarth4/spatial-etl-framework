@@ -218,6 +218,32 @@ def debug_mapping_visualization(mapper_endpoint: str, limit: int = 100, way_id: 
         raise HTTPException(status_code=500, detail=f"Database error: {orig}")
 
 
+@app.get("/debug/mappers/{mapper_endpoint}/coverage-visualization")
+def debug_coverage_visualization(mapper_endpoint: str, bbox: str | None = None, limit: int = 5000):
+    try:
+        service = _get_debug_service()
+        return service.fetch_coverage_visualization(mapper_endpoint=mapper_endpoint, bbox=bbox, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except OperationalError as exc:
+        orig = str(getattr(exc, "orig", exc))
+        if "DiskFull" in orig or "No space left" in orig or "shared memory" in orig.lower():
+            logger.error(
+                "coverage-visualization [%s] failed — DB out of shared memory (DiskFull). orig=%s",
+                mapper_endpoint,
+                orig,
+            )
+            raise HTTPException(
+                status_code=507,
+                detail=(
+                    "Database ran out of memory while building the coverage map. "
+                    "Try a smaller limit (e.g. ?limit=2000) or draw a smaller bounding box."
+                ),
+            )
+        logger.error("coverage-visualization [%s] DB error: %s", mapper_endpoint, exc)
+        raise HTTPException(status_code=500, detail=f"Database error: {orig}")
+
+
 @app.get("/debug/mappers/{mapper_endpoint}/enrichment-visualization")
 def debug_enrichment_visualization(
     mapper_endpoint: str,

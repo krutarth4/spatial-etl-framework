@@ -2,7 +2,7 @@
 # downsamples to a coarser averaged grid, then samples per-way ascent/descent.
 name: elevation
 description: " 1m elevation "
-enable: false
+enable: true
 class_name: elevation
 depends_on: elevation_grids_links
 debug:
@@ -56,3 +56,29 @@ storage:
   enrichment:
     table_name: elevation_enrichment
     table_class: ElevationEnrichmentTable
+
+# Materialized view for this datasource (replaces mv_configs/mv_elevation.yaml).
+# refresh defaults to `concurrently` (mv_defaults), valid here because of the
+# unique (way_id, way_link_index) index. The firing/dependency datasource name
+# defaults to this datasource; only the extra dependency tables are listed.
+materialized_view:
+  name: mv_ways_with_elevation
+  description: "Per-way elevation stats (ascent, descent, max slope) from the elevation pipeline"
+  depends_on:
+    tables:
+      - { name: ways_base }
+      - { name: elevation_mapping }
+  definition:
+    select_sql: |
+      SELECT
+          w.way_id AS way_id,
+          w.way_link_index,
+          COALESCE(m.total_ascent, 0.0)  AS total_ascent,
+          COALESCE(m.total_descent, 0.0) AS total_descent,
+          COALESCE(m.max_slope, 0.0)     AS max_slope
+      FROM {schema}.ways_base w
+      LEFT JOIN {schema}.elevation_mapping m
+          ON w.id = m.way_id
+  indexes:
+    - { name: idx_mv_elevation_way_id_link, columns: [way_id, way_link_index], unique: true }
+    - { name: idx_mv_elevation_way_id, columns: [way_id] }

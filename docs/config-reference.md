@@ -45,34 +45,41 @@ Used in `Application.keep_alive_forever()`.
 
 ### `materialized_views`
 
-Used by `materialized_views/manager.py` and handlers.
+Used by `materialized_views/manager.py` and handlers. In `config.yaml` this block
+only holds the global toggle and the optional folder pointer; individual views are
+defined inline per datasource (see below).
 
 | Key | Type | Allowed values | What it is for |
 |---|---|---|---|
 | `enable` | bool | `true` or `false` | Global MV orchestration toggle. |
-| `views` | list | List of view configs | Per-MV behavior. |
+| `mv_folder` | string | Any path | Optional folder of standalone MV files (empty by default). |
 
-Per-view keys:
+Each view is declared under a `materialized_view:` key inside its datasource
+config file. `CoreConfig._merge_embedded_mv_configs()` collects those inline blocks
+(and any standalone files from `mv_folder`) into `materialized_views.views`, then
+`_merge_mv_defaults()` fills boilerplate from `config.yaml`'s `mv_defaults`.
+
+Per-view keys (under `materialized_view:`):
 
 | Key | Type | Allowed values | What it is for |
 |---|---|---|---|
-| `id` | string | Any | Optional stable identifier. |
+| `name` | string | New view name | MV name (required). |
+| `id` | string | Any | Optional stable identifier (defaults to `<schema>.<name>`). |
 | `enable` | bool | `true` or `false` | Per-view toggle. |
-| `schema` | string | Existing DB schema | MV schema. |
-| `name` | string | Existing/new view name | MV name. |
-| `handler_class` | string | Class in handler module | Defaults to `GenericMaterializedViewHandler`. |
-| `handler_module` | string | Python module path | Defaults to `materialized_views.handlers`. |
-| `depends_on.datasources` | list[string] | Datasource names | MV refresh is triggered when these datasources succeed. |
-| `depends_on.tables` | list[string] | Any table refs | Informational dependency list. |
-| `refresh.enabled` | bool | `true` or `false` | Whether refresh is executed after ensure. |
-| `refresh.mode` | string | `normal`, `concurrently` | Controls `REFRESH MATERIALIZED VIEW` mode. |
-| `refresh.with_data` | bool | `true` or `false` | Used by generic handler for `WITH [NO] DATA`. |
-| `custom_sql.create` | string | SQL | Optional full custom create SQL. |
-| `custom_sql.refresh` | string | SQL | Optional full custom refresh SQL. |
-| `select_sql` | string | SQL SELECT | Generic handler create source if `custom_sql.create` absent. |
+| `schema` | string | Existing DB schema | MV schema; filled from `mv_defaults.schema`. |
+| `handler.class` / `handler.module` | string | Importable handler | Default `GenericMaterializedViewHandler` in `materialized_views.handlers`. |
+| `triggers.on_datasource_success` | list[string] | Datasource names | Datasources whose success triggers refresh; auto-filled from the host datasource. |
+| `depends_on.datasources` | list[string] | Datasource names | Dependency datasources; auto-filled from the host datasource. |
+| `depends_on.tables` | list[{name}] | Table refs | Dependency tables; view creation waits until they exist. |
+| `refresh.enabled` / `refresh.mode` / `refresh.with_data` | mixed | `normal`, `concurrently`, bools | Refresh behavior. |
+| `definition.select_sql` | string | SQL SELECT | Generic handler create source. |
+| `definition.custom_sql.{create,refresh}` | string | SQL | Optional full custom DDL. |
+| `indexes` | list | `{ name, columns, unique, method, where }` | Indexes re-asserted on each refresh. |
 
-Weather-specific handler keys in your file:
-`mapping_table`, `weather_table`, `ways_table`, `timestamp_filter`, `indexes`.
+The legacy flat keys (`handler_class`, `handler_module`, `select_sql`,
+`custom_sql`, `mapping_table`, `weather_table`, `ways_table`, `timestamp_filter`)
+and the domain `WeatherMaterializedViewHandler` are still accepted. Full schema:
+[materialized-views-reference.md](materialized-views-reference.md).
 
 ### `scheduler`
 

@@ -189,10 +189,10 @@ JOIN LATERAL (
 ) latest ON ...
 ```
 
-The air-quality mapper uses exactly this pattern: the enrichment table keeps all forecast rows, and mapping selects the latest per grid cell. See [config.yaml](../config.yaml#L430-L457).
+The air-quality mapper uses exactly this pattern: the enrichment table keeps all forecast rows, and mapping selects the latest per grid cell. See [air_quality_data_download.yaml](../data_source_configs/air_quality_data_download.yaml).
 
-**Pattern B — fixed timestamp in a materialized view.**
-When you want an analyst-facing snapshot pinned to a specific hour, the mapping stays cell-to-road and a materialized view layered on top picks the timestamp. Weather works this way via `timestamp_filter` on `mv_weather` (see [config.yaml](../config.yaml#L25-L56)).
+**Pattern B — forecast window packed into a materialized view.**
+When you want an analyst-facing snapshot of a whole forecast window, the mapping stays cell-to-road and a materialized view layered on top reshapes it for reading. The weather view works this way: `mv_weather` packs each way's hourly wind/visibility forecast into per-hour float arrays. The view is defined inline at the end of [weather_forecast_bright_sky.yaml](../data_source_configs/weather_forecast_bright_sky.yaml).
 
 **Which to use:**
 - Operational routing that always wants "right now" → Pattern A.

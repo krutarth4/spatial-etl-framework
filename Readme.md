@@ -248,38 +248,49 @@ class MyDataMapper(DataSourceABCImpl):
 **2. Datasource config:**
 
 ```yaml
-# data_source_configs/my_data.yaml
-datasources:
-  - name: my_data
-    enable: true
-    class_name: MyDataMapper        # omit if using the built-in reader directly
-    debug: {endpoint: my-data}
-    source: {fetch: http, url: "https://api.example.com/data.json", response_type: json}
-    job:
-      trigger: {type: {name: interval, config: {hours: 6}}}
-    storage:
-      staging:    {table_name: my_staging,    table_schema: test_osm_base_graph}
-      enrichment: {table_name: my_enrichment, table_schema: test_osm_base_graph}
-    mapping:
-      enable: true
-      strategy: {type: knn}
-      table_name: my_mapping
-      table_schema: test_osm_base_graph
+# data_source_configs/my_data.yaml — one flat datasource mapping per file.
+name: my_data
+enable: true
+class_name: MyDataMapper        # omit if using the built-in reader directly
+debug: {endpoint: my-data}
+source: {fetch: http, url: "https://api.example.com/data.json", response_type: json}
+job:
+  trigger: {type: {name: interval, config: {hours: 6}}}
+storage:
+  staging:    {table_name: my_staging,    table_schema: test_osm_base_graph}
+  enrichment: {table_name: my_enrichment, table_schema: test_osm_base_graph}
+mapping:
+  enable: true
+  strategy: {type: knn}
+  table_name: my_mapping
+  table_schema: test_osm_base_graph
+# Optional: this datasource's per-way materialized view, defined inline.
+materialized_view:
+  name: mv_my_data
+  depends_on:
+    tables: [{name: ways_base}, {name: my_mapping}]
+  definition:
+    select_sql: |
+      SELECT w.id, w.way_id, w.way_link_index, m.value
+      FROM {schema}.ways_base w
+      LEFT JOIN {schema}.my_mapping m ON m.way_id = w.id
+  indexes:
+    - {name: idx_mv_my_data_id, columns: [id], unique: true}
 ```
 
 → Every field explained: **[Config reference](docs/config-reference.md)** · quick start: **[Config README](docs/config-README.md)**.
 → Pick a `strategy.type`: **[Mapping strategies reference](docs/mapping-strategies-reference.md)** · one-pager: **[Mapping quick reference](docs/mapping-quick-reference.md)**.
 → Real migration from custom SQL to a built-in strategy: **[Tree mapper migration example](docs/migration-example-tree-mapper.md)**.
 
-**3. Register in `config.yaml`:**
+**3. Nothing to register** — `config.yaml` points `data_folder` at the configs
+directory and every `*.yaml` in it is loaded automatically:
 
 ```yaml
 data_folder: "./data_source_configs/"
-datasources:
-  - file: my_data.yaml
+datasources: []   # files in data_folder are appended here at startup
 ```
 
-The pipeline picks up the change in ~2 s and starts the first run.
+The pipeline picks up the new file on the next config reload and starts the first run.
 
 ---
 
@@ -292,8 +303,8 @@ spatial-etl-framework/
 ├── core/                         # FastAPI server, scheduler, debug API
 ├── main_core/                    # Base mapper class + config loader
 ├── data_mappers/                 # One file per datasource
-├── data_source_configs/          # Per-datasource YAML configs
-├── materialized_views/           # MV dependency + refresh orchestration
+├── data_source_configs/          # Per-datasource YAML configs (each carries its own materialized_view block)
+├── materialized_views/           # MV refresh orchestration (definitions live inline per datasource)
 ├── database/                     # DB utilities + connection pool
 ├── readers/                      # Format readers (CSV, JSON, GeoJSON, raster, …)
 ├── handlers/                     # HTTP / file download + metadata checks
@@ -317,6 +328,7 @@ spatial-etl-framework/
 | [Batch processing](docs/BATCH_PROCESSING.md) | Batch-insert sizing and tuning |
 | [JSON styling](docs/json_styling.md) | JSONPath conventions for source configs |
 | [Mapping improvements summary](docs/MAPPING_IMPROVEMENTS_SUMMARY.md) | What changed in the mapping system and why |
+| [Debug panel reference](docs/debug-panel-reference.md) | How the debug panel computes coverage, the staging fallback, and the coverage map |
 
 ---
 
