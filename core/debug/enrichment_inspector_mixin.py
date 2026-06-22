@@ -48,15 +48,51 @@ class EnrichmentInspectorMixin:
             raise ValueError("limit must be > 0")
 
         ds = self._resolve_datasource(mapper_endpoint)
-        enrichment = (ds.get("storage") or {}).get("enrichment") or {}
+        storage = ds.get("storage") or {}
+        enrichment = storage.get("enrichment") or {}
         table_name = enrichment.get("table_name")
         table_schema = enrichment.get("table_schema")
-        if not table_name:
-            raise ValueError(f"No enrichment table configured for datasource '{ds.get('name')}'.")
 
-        table = self.db.get_table(table_name, table_schema)
+        source = "enrichment"
+        warning: str | None = None
+
+        # Try the enrichment table first; only load it if a name is configured.
+        table = self.db.get_table(table_name, table_schema) if table_name else None
+
+        # Fall back to the staging table when enrichment is either not
+        # configured or its table is missing. This lets datasources without an
+        # enrichment step still be inspected, using their raw staging geometry.
         if table is None:
-            raise ValueError(f"Enrichment table '{table_schema}.{table_name}' does not exist.")
+            staging = storage.get("staging") or {}
+            staging_name = staging.get("table_name")
+            staging_schema = staging.get("table_schema")
+            staging_table = (
+                self.db.get_table(staging_name, staging_schema) if staging_name else None
+            )
+            if staging_table is not None:
+                if not table_name:
+                    warning = (
+                        f"Datasource '{ds.get('name')}' has no enrichment table. "
+                        f"Showing raw staging data from '{staging_schema}.{staging_name}' instead."
+                    )
+                else:
+                    warning = (
+                        f"Enrichment table '{table_schema}.{table_name}' does not exist. "
+                        f"Showing raw staging data from '{staging_schema}.{staging_name}' instead."
+                    )
+                table = staging_table
+                table_name, table_schema = staging_name, staging_schema
+                source = "staging"
+
+        if table is None:
+            if not table_name:
+                raise ValueError(
+                    f"Datasource '{ds.get('name')}' has neither an enrichment nor a staging table configured."
+                )
+            raise ValueError(
+                f"Neither the enrichment table nor the staging table for "
+                f"datasource '{ds.get('name')}' exists in the database."
+            )
 
         envelope = self._parse_bbox(bbox)
 
@@ -69,12 +105,12 @@ class EnrichmentInspectorMixin:
         if raster_col is not None:
             return self._fetch_raster(
                 ds, mapper_endpoint, table_schema, table_name, raster_col,
-                envelope, raster_max_cells,
+                envelope, raster_max_cells, source=source, warning=warning,
             )
         if vector_col is not None:
             return self._fetch_vector(
                 ds, mapper_endpoint, table, table_schema, table_name, vector_col,
-                envelope, limit,
+                envelope, limit, source=source, warning=warning,
             )
         raise ValueError(
             f"No supported geometry/raster column found on '{table_schema}.{table_name}'."
@@ -83,7 +119,7 @@ class EnrichmentInspectorMixin:
     # ------------------------------------------------------------------ vector
     def _fetch_vector(
         self, ds, mapper_endpoint, table, table_schema, table_name, geom_col,
-        envelope, limit,
+        envelope, limit, source="enrichment", warning=None,
     ) -> dict[str, Any]:
         prop_cols = [
             c.name for c in table.columns
@@ -134,12 +170,13 @@ class EnrichmentInspectorMixin:
         return self._build_response(
             mapper_endpoint, ds, geom_type_label, geom_col, envelope,
             features, self._value_stats(numeric_vals),
+            extra={"source": source, "warning": warning},
         )
 
     # ------------------------------------------------------------------ raster
     def _fetch_raster(
         self, ds, mapper_endpoint, table_schema, table_name, raster_col,
-        envelope, raster_max_cells,
+        envelope, raster_max_cells, source="enrichment", warning=None,
     ) -> dict[str, Any]:
         if envelope is None:
             raise ValueError(
@@ -229,6 +266,8 @@ class EnrichmentInspectorMixin:
             extra={
                 "pixel_size": pixel_size,
                 "downsampled": pixel_size is not None and pixel_size > 1.0,
+                "source": source,
+                "warning": warning,
             },
         )
 

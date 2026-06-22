@@ -48,3 +48,68 @@ storage:
     table_name: weather_staging
     table_class: WeatherStagingTable
     persistent: false
+
+# Materialized view for this datasource (replaces mv_configs/mv_weather.yaml).
+# One row per way segment. Wind/visibility forecasts are stored as float arrays,
+# one entry per hour of the forecast window; index i = forecast_start + i hours,
+# -1 means no data. bearing_deg is the fixed segment travel bearing.
+# Only the forecast datasource fires this MV (auto-filled from this datasource);
+# the station mapping is read via depends_on.tables. depends_on.datasources is
+# kept explicit so the station datasource is also tracked as a dependency.
+# refresh defaults to `concurrently` (mv_defaults): one row per way + unique id.
+materialized_view:
+  name: mv_weather
+  description: >
+    Per-way hourly wind forecast as float arrays (wind_speed_hourly,
+    wind_direction_hourly, visibility_hourly). Index i = forecast_start + i hours;
+    -1 means no data. bearing_deg is the fixed segment travel bearing.
+  depends_on:
+    datasources:
+      - weather_forecast_bright_sky
+      - weather_station_bright_sky
+    tables:
+      - { name: weather_enrichment }
+      - { name: dwd_station_locations_mapping }
+      - { name: ways_base }
+  definition:
+    select_sql: |
+      WITH bounds AS (
+          SELECT
+              date_trunc('hour', MIN("timestamp")) AS forecast_start,
+              date_trunc('hour', MAX("timestamp")) AS forecast_end
+          FROM {schema}.weather_enrichment
+      ),
+      slots AS (
+          SELECT
+              gs                                                       AS slot_ts,
+              (EXTRACT(EPOCH FROM (gs - b.forecast_start)) / 3600)::int AS slot_idx
+          FROM bounds b
+          CROSS JOIN generate_series(b.forecast_start, b.forecast_end, INTERVAL '1 hour') AS gs
+      )
+      SELECT
+          w.id,
+          w.way_id,
+          w.way_link_index,
+          m.bearing_degree                       AS bearing_deg,
+          (SELECT forecast_start FROM bounds)    AS forecast_start,
+          (SELECT forecast_end   FROM bounds)    AS forecast_end,
+          agg.wind_speed_hourly,
+          agg.wind_direction_hourly,
+          agg.visibility_hourly
+      FROM {schema}.ways_base w
+      LEFT JOIN {schema}.dwd_station_locations_mapping m
+          ON m.way_id = w.id
+      LEFT JOIN LATERAL (
+          SELECT
+              array_agg(COALESCE(e.wind_speed, -1)     ORDER BY s.slot_idx) AS wind_speed_hourly,
+              array_agg(COALESCE(e.wind_direction, -1) ORDER BY s.slot_idx) AS wind_direction_hourly,
+              array_agg(COALESCE(e.visibility, -1)     ORDER BY s.slot_idx) AS visibility_hourly
+          FROM slots s
+          LEFT JOIN {schema}.weather_enrichment e
+              ON e.dwd_station_id::INTEGER = m.dwd_station_id::INTEGER
+             AND date_trunc('hour', e."timestamp") = s.slot_ts
+      ) agg ON TRUE
+  indexes:
+    - { name: idx_mv_weather_id, columns: [id], unique: true }
+    - { name: idx_mv_weather_way_id, columns: [way_id, way_link_index] }
+    - { name: idx_mv_weather_way_id_only, columns: [way_id] }

@@ -66,3 +66,51 @@ storage:
   enrichment:
     table_name: air_pollution_grid_enrichment
     table_class: AirPollutionGridEnrichmentTable
+
+# Materialized view for this datasource (replaces mv_configs/mv_air_pollution.yaml).
+# One row per way segment (same length as ways_base). no2/pm10/pm25 are float
+# arrays; element i maps to forecast_start + (i-1) hours. Values are inverse-
+# distance-weighted (IDW, k=4, p=2) interpolations of the k nearest grid cells,
+# computed element-wise per hour. Ways with no intersecting grid cells get NULL
+# arrays. The Java AirQualityRouteScorer reads this by way_id.
+materialized_view:
+  name: mv_air_pollution
+  description: >
+    Per-way air pollution forecast (NO2, PM10, PM2.5) packed as float arrays.
+    One row per way segment (same length as ways_base). Array element i maps to
+    forecast_start + (i-1) hours. Values are inverse-distance-weighted (IDW)
+    interpolations of the k nearest grid cells, computed element-wise per hour.
+  refresh:
+    mode: normal
+  depends_on:
+    tables:
+      - { name: ways_base }
+      - { name: air_pollution_grid_enrichment }
+      - { name: air_pollution_grid_mapping }
+  definition:
+    select_sql: |
+      WITH forecast_meta AS (
+          SELECT
+              timezone('UTC', MIN(forecast_time))                                              AS forecast_start,
+              timezone('UTC',
+                  MIN(forecast_time) + (MAX(array_length(no2, 1)) - 1) * INTERVAL '1 hour'
+              )                                                                                AS forecast_end
+          FROM {schema}.air_pollution_grid_enrichment
+          WHERE no2 IS NOT NULL
+            AND forecast_time IS NOT NULL
+      )
+      SELECT
+          w.id,
+          w.way_id,
+          w.way_link_index,
+          fm.forecast_start,
+          fm.forecast_end,
+          m.no2,
+          m.pm10,
+          m.pm25
+      FROM {schema}.ways_base w
+      CROSS JOIN forecast_meta fm
+      LEFT JOIN {schema}.air_pollution_grid_mapping m ON m.way_id = w.id
+  indexes:
+    - { name: mv_air_pollution_way_id_idx, columns: [way_id] }
+    - { name: mv_air_pollution_id_idx, columns: [id], unique: true }

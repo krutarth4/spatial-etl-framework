@@ -1,10 +1,15 @@
 # Materialized Views — Configuration Reference
 
-This document defines the schema for materialized view (MV) configs that live in
-[`mv_configs/`](../mv_configs/) and explains **why** each field exists.
+This document defines the schema for materialized view (MV) configs and explains
+**why** each field exists. An MV is normally defined **inline** inside the
+datasource it belongs to, under a `materialized_view:` key in that datasource's
+config (see [`data_source_configs/`](../data_source_configs/)). Standalone files
+in [`mv_configs/`](../mv_configs/) are still loaded for backward compatibility,
+but the folder is empty by default.
 
-> Single source of truth: `config.yaml` enables the subsystem and points at the
-> folder; every YAML file in that folder is one MV.
+> Single source of truth: `config.yaml` enables the subsystem. Each datasource
+> config carries its own MV under `materialized_view:`; the loader also merges any
+> standalone files from `mv_folder`.
 
 ---
 
@@ -33,7 +38,8 @@ MaterializedViewManager.on_datasource_success(name, sync_result)
 Source files:
 - Manager: [`materialized_views/manager.py`](../materialized_views/manager.py)
 - Handlers: [`materialized_views/handlers.py`](../materialized_views/handlers.py)
-- Loader: [`main_core/core_config.py`](../main_core/core_config.py) (`_merge_mv_configs`)
+- Loader: [`main_core/core_config.py`](../main_core/core_config.py)
+  (`_merge_embedded_mv_configs` for inline blocks, `_merge_mv_configs` for the folder)
 
 ---
 
@@ -42,12 +48,37 @@ Source files:
 ```yaml
 materialized_views:
   enable: true              # master switch — false disables the entire subsystem
-  mv_folder: ./mv_configs/  # every *.yaml in here is loaded as one MV definition
+  mv_folder: ./mv_configs/  # optional standalone *.yaml files (empty by default)
 ```
 
-The loader globs `mv_folder/*.yaml`, parses each file, and exposes the list as
-`materialized_views.views` to the manager. To stop a single MV from running,
-set `enable: false` in its file (or delete the file).
+The loader collects two sources into `materialized_views.views` for the manager:
+the inline `materialized_view:` block from each datasource config, plus any
+standalone `*.yaml` in `mv_folder`. For an inline block the firing datasource
+(`triggers.on_datasource_success`) and `depends_on.datasources` default to the
+host datasource's name, so the view only declares its distinctive parts. To stop
+a single MV from running, set `enable: false` on its `materialized_view:` block.
+
+### Defining an MV inline
+
+```yaml
+# inside data_source_configs/<datasource>.yaml
+materialized_view:
+  name: mv_example
+  description: "one row per way ..."
+  refresh:
+    mode: normal            # omit to inherit `concurrently` (needs a unique index)
+  depends_on:
+    tables:                 # datasources is auto-filled from the host datasource
+      - { name: ways_base }
+      - { name: example_mapping }
+  definition:
+    select_sql: |
+      SELECT w.id, w.way_id, ...
+      FROM {schema}.ways_base w
+      LEFT JOIN {schema}.example_mapping m ON m.way_id = w.id
+  indexes:
+    - { name: idx_mv_example_id, columns: [id], unique: true }
+```
 
 ### Shared defaults (`mv_defaults`)
 
@@ -73,7 +104,13 @@ to btree, so `method`/`where`/`unique: false` only appear when they deviate.
 
 ---
 
-## 3. MV file schema (v2)
+## 3. MV schema (v2)
+
+The same schema applies whether the view is written inline under a datasource's
+`materialized_view:` key (the normal case) or as a standalone file in `mv_folder`.
+Inline blocks may omit `schema` (filled from `mv_defaults.schema`),
+`triggers.on_datasource_success`, and `depends_on.datasources` (both auto-filled
+from the host datasource name).
 
 ```yaml
 # ── Identity ──────────────────────────────────────────────────────────────
@@ -148,7 +185,7 @@ refresh:
 |---|---|---|
 | `id` | no (defaults to `<schema>.<name>`) | Stable identifier for logs, metrics, and dependency-graph tools. Decouples human-readable id from physical name so you can rename the MV without breaking dashboards. |
 | `name` | yes | The actual Postgres MV name. |
-| `schema` | yes | Target schema. Kept explicit (not derived from `config.yaml`) so an MV can live in a different schema than its source tables. |
+| `schema` | no (filled from `mv_defaults.schema`) | Target schema. Set it explicitly only when the MV must live in a different schema than the shared default. |
 | `description` | no | Self-documentation; useful when the codebase grows past a handful of views. |
 | `enable` | no (default `true`) | Disables a single MV without deleting its file — handy for staged rollouts and incident response. |
 
@@ -243,13 +280,21 @@ across handlers (tablespaces, `WITH NO DATA`, index re-assertion).
 
 ## 6. Full example (the canonical one)
 
-See [`mv_configs/mv_weather.yaml`](../mv_configs/mv_weather.yaml). It uses:
-- `WeatherMaterializedViewHandler` (domain handler)
-- `definition.source` (structured table refs + a `timestamp_eq` filter)
-- A `way_id` btree index
-- `triggers.on_datasource_success` for both station and forecast datasources
-- `only_on_data_change: true` to skip refreshes when a forecast poll returns
-  the cache it already has
+See the `materialized_view:` block at the end of
+[`data_source_configs/weather_forecast_bright_sky.yaml`](../data_source_configs/weather_forecast_bright_sky.yaml).
+It uses:
+- `GenericMaterializedViewHandler` (from `mv_defaults`) with `definition.select_sql`
+  that packs each way's hourly wind forecast into float arrays
+- `depends_on.datasources` kept explicit (both the forecast and station
+  datasources) while `triggers.on_datasource_success` auto-fills to the host
+  forecast datasource
+- A unique `id` index (so `refresh.mode` inherits `concurrently`) plus `way_id` indexes
+- `only_on_data_change: true` (from `mv_defaults`) to skip refreshes when a
+  forecast poll returns the cache it already has
+
+The domain-specific `WeatherMaterializedViewHandler` and the `definition.source`
+shape still exist in code for cases that need a code-driven builder, but the
+shipped weather view is a plain `select_sql` under the generic handler.
 
 ---
 

@@ -2,6 +2,7 @@ from database.db_instance import DbInstance
 
 from sqlalchemy import String, DateTime, Column, Integer, Text, Boolean, JSON, func, select
 from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.orm import make_transient
 
 from database.base import Base
 from log_manager.logger_manager import LoggerManager
@@ -88,7 +89,14 @@ class DataSourceMetadataRepository:
                 select(DataSourceMetadata)
                 .where(DataSourceMetadata.source_key == source_key)
             )
-            return session.execute(stmt).scalar_one_or_none()
+            result = session.execute(stmt).scalar_one_or_none()
+            if result is not None:
+                # Expunge before commit so the object isn't expired when the session
+                # closes; make_transient clears SA identity so attributes are readable
+                # without a live session.
+                session.expunge(result)
+                make_transient(result)
+            return result
 
     def get_last_successful_run_at(self, source_key: str):
         with self.db.session_scope() as session:

@@ -52,6 +52,7 @@ class CoreConfig(YamlReader):
         self._resolve_mapping_sql_files()
         self._validate_mapping_strategies()
         self._merge_mv_configs()
+        self._merge_embedded_mv_configs()
         self._merge_mv_defaults()
         self._validate_job_triggers()
         self._validate_datasource_features()
@@ -602,6 +603,82 @@ class CoreConfig(YamlReader):
                 self.logger.warning(f"Failed to load MV config {mv_file.name}: {e}")
 
         mv_conf["views"] = views
+
+    @staticmethod
+    def _autofill_embedded_view(view: dict, ds_name: str) -> None:
+        """Fill the trigger/dependency datasource name for an inline MV block.
+
+        A `materialized_view` block lives inside one datasource config, so the
+        datasource that fires it is already known. When the block omits
+        `triggers.on_datasource_success` or `depends_on.datasources`, both
+        default to that datasource name. An explicit value always wins, so a
+        view can still depend on extra datasources (e.g. weather reads the
+        station mapping table while only the forecast datasource fires it).
+        """
+        if not ds_name:
+            return
+        triggers = view.get("triggers")
+        if not isinstance(triggers, dict):
+            triggers = {}
+            view["triggers"] = triggers
+        triggers.setdefault("on_datasource_success", [ds_name])
+
+        depends_on = view.get("depends_on")
+        if not isinstance(depends_on, dict):
+            depends_on = {}
+            view["depends_on"] = depends_on
+        depends_on.setdefault("datasources", [ds_name])
+
+    def _merge_embedded_mv_configs(self):
+        """Collect inline `materialized_view` blocks from datasource configs.
+
+        Each datasource config may carry its materialized view definition under a
+        `materialized_view` key (a single dict or a list of dicts) instead of a
+        separate file in mv_folder. The block is popped off the datasource (so it
+        is never treated as datasource config downstream), its trigger/dependency
+        datasource name is auto-filled, and it is appended to
+        `materialized_views.views`. Folder-loaded and inline views coexist; both
+        receive mv_defaults in the following step.
+        """
+        datasources = self.config.get("datasources")
+        if not isinstance(datasources, list):
+            return
+        mv_conf = self.config.get("materialized_views")
+        if not isinstance(mv_conf, dict):
+            return
+
+        views = mv_conf.get("views")
+        if not isinstance(views, list):
+            views = []
+            mv_conf["views"] = views
+
+        existing = {v.get("name") for v in views if isinstance(v, dict)}
+        for ds in datasources:
+            if not isinstance(ds, dict):
+                continue
+            embedded = ds.pop("materialized_view", None)
+            if embedded is None:
+                continue
+            ds_name = ds.get("name")
+            items = embedded if isinstance(embedded, list) else [embedded]
+            for view in items:
+                if not isinstance(view, dict) or not view.get("name"):
+                    self.logger.warning(
+                        f"Datasource '{ds_name}': invalid materialized_view block ignored"
+                    )
+                    continue
+                if view["name"] in existing:
+                    self.logger.warning(
+                        f"Datasource '{ds_name}': duplicate materialized view "
+                        f"'{view['name']}' ignored (already defined elsewhere)"
+                    )
+                    continue
+                self._autofill_embedded_view(view, ds_name)
+                views.append(view)
+                existing.add(view["name"])
+                self.logger.info(
+                    f"Loaded embedded MV config from datasource '{ds_name}': {view['name']}"
+                )
 
 
 if __name__ == "__main__":

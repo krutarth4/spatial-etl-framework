@@ -72,3 +72,78 @@ storage:
   staging:
     table_name: tree_staging
     table_class: TreeStaging
+  # Enrichment unpacks the raw `attributes` JSONB from staging into clean, typed
+  # columns so the debug panel shows readable tree records instead of raw German
+  # cadastre fields. The table schema is the TreeEnrichmentTable class; the
+  # default staging->enrichment sync copies source_id, geometry_25833 and
+  # attributes, then the enrichment_operators below fill the normalized columns.
+  enrichment:
+    table_name: tree_enrichment
+    table_class: TreeEnrichmentTable
+
+# Enrichment operators run after the staging->enrichment sync (in-place UPDATEs).
+# Each `derive` reads the raw `attributes` JSONB and writes one normalized column.
+# Extraction operators run first; size_class is derived last because it reads the
+# already-populated height_m. Empty JSON strings are guarded with NULLIF before
+# casting so missing values become NULL rather than raising.
+enrichment_operators:
+  operators:
+    - { type: derive, target_col: species_de,  expression: "attributes->>'art_dtsch'" }
+    - { type: derive, target_col: species_bot, expression: "attributes->>'art_bot'" }
+    - { type: derive, target_col: genus,       expression: "attributes->>'gattung'" }
+    - { type: derive, target_col: street,      expression: "attributes->>'strname'" }
+    - { type: derive, target_col: district,    expression: "attributes->>'bezirk'" }
+    - { type: derive, target_col: planting_year,          expression: "NULLIF(attributes->>'pflanzjahr','')::int" }
+    - { type: derive, target_col: age_years,              expression: "NULLIF(attributes->>'standalter','')::numeric" }
+    - { type: derive, target_col: crown_diameter_m,       expression: "NULLIF(attributes->>'kronedurch','')::numeric" }
+    - { type: derive, target_col: trunk_circumference_cm, expression: "NULLIF(attributes->>'stammumfg','')::numeric" }
+    - { type: derive, target_col: height_m,               expression: "NULLIF(attributes->>'baumhoehe','')::numeric" }
+    # Normalize the German leaf-type group into an English label.
+    - type: derive
+      target_col: leaf_type
+      expression: >
+        CASE attributes->>'art_gruppe'
+          WHEN 'Laubbäume'  THEN 'deciduous'
+          WHEN 'Nadelbäume' THEN 'coniferous'
+          ELSE NULLIF(attributes->>'art_gruppe','')
+        END
+    # Derived size band from the extracted height (runs after height_m is set).
+    - type: derive
+      target_col: size_class
+      expression: >
+        CASE
+          WHEN height_m >= 20 THEN 'large'
+          WHEN height_m >= 10 THEN 'medium'
+          WHEN height_m >  0  THEN 'small'
+          ELSE 'unknown'
+        END
+
+# Materialized view for this datasource (replaces the old mv_configs/mv_tree.yaml).
+# The firing datasource (triggers.on_datasource_success) and depends_on.datasources
+# default to this datasource's name; only the extra dependency tables are listed.
+# Boilerplate (schema, handler, build, refresh.enabled/with_data,
+# triggers.only_on_data_change) is filled from config.yaml -> mv_defaults.
+materialized_view:
+  name: mv_tree
+  description: "Per-way tree aggregation (JSONB) within 50 m of each base way"
+  # tree_mapping has no unique id index → plain (non-concurrent) refresh.
+  refresh:
+    mode: normal
+  depends_on:
+    tables:
+      - { name: ways_base }
+      - { name: tree_mapping }
+  definition:
+    select_sql: |
+      SELECT
+          w.id,
+          w.way_id,
+          w.from_node_id,
+          w.to_node_id,
+          w.way_link_index,
+          COALESCE(m.trees, '[]'::jsonb) AS trees
+      FROM {schema}.ways_base w
+      LEFT JOIN {schema}.tree_mapping m
+          ON m.way_id = w.id
+  indexes:
+    - { name: idx_mv_tree_way_id, columns: [way_id] }

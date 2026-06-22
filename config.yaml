@@ -24,6 +24,9 @@ runtime:
 
 materialized_views:
   enable: true
+  # Materialized views are defined inline inside each datasource config under a
+  # `materialized_view:` key (see data_source_configs/). mv_folder is still loaded
+  # for any standalone view files, but is empty by default.
   mv_folder: ./mv_configs/
 
 scheduler:
@@ -90,10 +93,12 @@ mapping_defaults:
     enrichment_geometry_column: geometry_25833
     base_id_column: id
 
-# Defaults merged (fill-missing) into every MV config loaded from mv_folder.
-# An MV file only declares what is distinctive (name, definition, indexes,
-# depends_on, and any deviation like refresh.mode: normal). Everything below is
-# filled in by CoreConfig._merge_mv_defaults() unless the file overrides it.
+# Defaults merged (fill-missing) into every MV config, whether defined inline in
+# a datasource (`materialized_view:` block) or loaded from mv_folder. An MV only
+# declares what is distinctive (name, definition, indexes, dependency tables, and
+# any deviation like refresh.mode: normal). The firing/dependency datasource name
+# is auto-filled from the host datasource for inline blocks. Everything below is
+# filled in by CoreConfig._merge_mv_defaults() unless the view overrides it.
 mv_defaults:
   schema: *db_schema
   enable: true

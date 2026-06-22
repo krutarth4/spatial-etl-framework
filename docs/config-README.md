@@ -60,36 +60,42 @@ Controls process behavior outside the ETL itself.
 
 ### `materialized_views`
 
-Controls post-datasource materialized view refresh.
+Controls post-datasource materialized view refresh. In `config.yaml` this section
+only holds the global toggle and the (now optional) folder pointer:
 
 | Key | Meaning | Current example | Other supported values |
 |---|---|---|---|
 | `enable` | Global toggle for MV orchestration | `true` | `true`, `false` |
-| `views` | List of materialized view configs | one weather MV | Any list of view definitions |
+| `mv_folder` | Optional folder of standalone MV files (empty by default) | `./mv_configs/` | Any path |
 
-Per-view options:
+Each materialized view is now defined **inline inside the datasource it belongs
+to**, under a `materialized_view:` key in that datasource's config file (see
+`data_source_configs/`). At load time `CoreConfig._merge_embedded_mv_configs()`
+collects every inline block — plus any standalone file in `mv_folder` — into the
+`materialized_views.views` list the manager consumes. Shared boilerplate (schema,
+handler, build, refresh, `only_on_data_change`) is filled from `mv_defaults` in
+`config.yaml`, and the firing/dependency datasource name is auto-filled from the
+host datasource.
+
+Per-view options (declared under `materialized_view:`):
 
 | Key | Meaning | Current example | Other supported values |
 |---|---|---|---|
-| `id` | Stable identifier | `mv_weather` | Any string |
+| `name` | View name (required) | `mv_weather` | Any DB object name |
+| `id` | Stable identifier | defaults to `<schema>.<name>` | Any string |
 | `enable` | Per-view toggle | `true` | `true`, `false` |
-| `schema` | View schema | `test_osm_base_graph` | Any DB schema |
-| `name` | View name | `mv_weather` | Any DB object name |
-| `handler_class` | Handler class name | `WeatherMaterializedViewHandler` | Any handler importable from the configured module |
-| `handler_module` | Python module containing the handler | omitted | Defaults to `materialized_views.handlers`, but can be any module path |
-| `depends_on.datasources` | Refresh when these datasources succeed | weather datasources | Any datasource names |
-| `depends_on.tables` | Informational table dependency list | weather/mapping/base tables | Any table names |
-| `refresh.enabled` | Runs refresh after ensure/create | `true` | `true`, `false` |
-| `refresh.mode` | Refresh mode | `normal` | `normal`, `concurrently` |
-| `refresh.with_data` | Creates or refreshes with data | `true` | `true`, `false` |
-| `custom_sql.create` | Full custom CREATE MATERIALIZED VIEW SQL | omitted | Any SQL string |
-| `custom_sql.refresh` | Full custom REFRESH SQL | omitted | Any SQL string |
-| `select_sql` | Generic `SELECT` used to build the MV | omitted | Any SQL select |
-| `mapping_table` | Weather handler mapping table | `dwd_station_locations_mapping` | Handler-specific |
-| `weather_table` | Weather handler enrichment table | `weather_enrichment` | Handler-specific |
-| `ways_table` | Base graph table for weather handler | `ways_base` | Handler-specific |
-| `timestamp_filter` | Fixed timestamp snapshot | `2026-02-24 16:00:00+00` | Timestamp string or `null` |
-| `indexes` | Additional indexes for the MV | one `way_id` index | Any handler-supported index list |
+| `schema` | View schema | filled from `mv_defaults.schema` | Any DB schema |
+| `handler.class` / `handler.module` | Handler selection | `GenericMaterializedViewHandler` | Any importable handler |
+| `triggers.on_datasource_success` | Refresh when these datasources succeed | auto-filled from host datasource | Any datasource names |
+| `depends_on.datasources` | Dependency datasources | auto-filled from host datasource | Any datasource names |
+| `depends_on.tables` | Dependency table list (creation is skipped until they exist) | base/mapping/enrichment tables | Any `{name}` entries |
+| `refresh.enabled` / `refresh.mode` / `refresh.with_data` | Refresh behavior | `concurrently` (or `normal` without a unique index) | `normal`, `concurrently` |
+| `definition.select_sql` | `SELECT` the generic handler wraps into the MV | per datasource | Any SQL select |
+| `definition.custom_sql.{create,refresh}` | Full custom DDL run verbatim | omitted | Any SQL string |
+| `indexes` | Indexes for the MV (re-asserted on every refresh) | `id` + `way_id` indexes | `{ name, columns, unique, method, where }` |
+
+See [materialized-views-reference.md](materialized-views-reference.md) for the
+complete field-by-field schema and handler-selection guidance.
 
 ### `scheduler`
 
@@ -362,27 +368,51 @@ See [mapping-strategies-reference.md](mapping-strategies-reference.md) for detai
 | `enrichment.table_class` | SQLAlchemy class name | Any mapper table class |
 | `enrichment.persistent` | Optional DTO flag | `true`, `false` |
 
+### `enrichment_operators`
+
+Optional, declarative staging→enrichment transforms. When present, the enrichment
+step runs these operators instead of (or after) the default verbatim
+staging→enrichment copy. They are built into PostGIS SQL by
+`main_core/enrichment_operator_builder.py`. Two families exist:
+
+- **In-place** (UPDATE, no row-count change): `make_point`, `reproject`,
+  `snap_to_grid`, `derive` (set a column from a SQL expression over the row),
+  `normalize` (scale a column table-wide via minmax/zscore).
+- **Reshape** (TRUNCATE + INSERT SELECT, bypass the default sync): `aggregate`,
+  `spatial_aggregate`, `raster_aggregate`.
+
+| Key | Meaning |
+|---|---|
+| `operators` | Ordered list of operator blocks (each has a `type` plus type-specific fields like `target_col`, `expression`, `source_col`, `cell_size`, `aggregations`, …) |
+| `output_columns` | Optional. When set, the enrichment table is created dynamically from these `{ name, type, index }` specs (used by reshape operators) instead of a SQLAlchemy `table_class` |
+
+The `tree` datasource is the worked example of the in-place path: its enrichment
+table is a SQLAlchemy class (`TreeEnrichmentTable`), the default sync copies
+`source_id`/`geometry_25833`/`attributes` from staging, then a sequence of
+`derive` operators unpacks the raw `attributes` JSONB into normalized columns
+(`species_de`, `genus`, `height_m`, a German→English `leaf_type`, a derived
+`size_class`, …) so the debug panel shows clean records. `elevation` is the
+reshape example (`raster_aggregate`).
+
 ## Current datasource inventory
 
-Current datasource entries in [config.yaml](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/config.yaml):
+Datasources are one-per-file under `data_source_configs/` (loaded by
+`CoreConfig._load_datasource_configs()`). The `osm_graph` datasource still lives
+inline under `graph.datasource` in `config.yaml`.
 
-1. `graph.datasource[0]`: `osm_graph`
-2. `datasources[0]`: `weather_station_bright_sky`
-3. `datasources[1]`: `weather_forecast_bright_sky`
-4. `datasources[2]`: `air_quality_data_download`
-5. `datasources[3]`: `elevation_grids`
-6. `datasources[4]`: `elevation`
-7. `datasources[5]`: `elevation_python`
-8. `datasources[6]`: `tree_wfs_capabilities`
-9. `datasources[7]`: `tree`
-10. `datasources[8]`: `pleasant_bicycling`
+| File | Datasource `name` | Inline MV |
+|---|---|---|
+| `config.yaml` (`graph.datasource[0]`) | `osm_graph` | — |
+| `weather_station_bright_sky.yaml` | `weather_station_bright_sky` | — |
+| `weather_forecast_bright_sky.yaml` | `weather_forecast_bright_sky` | `mv_weather` |
+| `air_quality_data_download.yaml` | `air_quality_data_download` | `mv_air_pollution` |
+| `elevation_grids_links.yaml` | `elevation_grids_links` | — |
+| `elevation.yaml` | `elevation` | `mv_ways_with_elevation` |
+| `tree.yaml` | `tree` | `mv_tree` |
+| `pleasant_bicycling.yaml` | `pleasant_bicycling` | `mv_pleasant` |
 
-Currently enabled:
-
-1. `graph.enable: true`
-2. `datasources[8].enable: true`
-
-Most other datasources are present as ready-to-use templates but are disabled.
+Each datasource carries its own `enable` flag; toggle a file's `enable: false`
+to take it out of a run.
 
 ## What else can be configured
 
@@ -393,10 +423,11 @@ These are the main extension points the current code already supports, even if n
 3. `job.trigger.type.name: cron`, `date`, `calendar_interval`, `run_once`
 4. `mapping.strategy.type: sql_template`
 5. custom mapping strategies via mapper override
-6. custom materialized view handlers via `handler_module` and `handler_class`
-7. local-file datasources by setting `fetch: local` and `file_path`
-8. config-reload behavior via `runtime.config_watch`
-9. DB environment overrides via `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
+6. inline materialized views via a `materialized_view:` block per datasource (and custom MV handlers via `handler.class` / `handler.module`)
+7. declarative staging→enrichment transforms via `enrichment_operators`
+8. local-file datasources by setting `fetch: local` and `file_path`
+9. config-reload behavior via `runtime.config_watch`
+10. DB environment overrides via `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
 
 ## Practical caveats in the current code
 
@@ -464,4 +495,21 @@ datasources:
         table_name: example_enrichment
         table_schema: test_osm_base_graph
         table_class: ExampleEnrichmentTable
+
+    # Optional: per-way materialized view for this datasource. schema, handler,
+    # build/refresh boilerplate come from mv_defaults; triggers/depends_on
+    # datasources auto-fill from this datasource's name.
+    materialized_view:
+      name: mv_example
+      depends_on:
+        tables:
+          - { name: ways_base }
+          - { name: example_mapping }
+      definition:
+        select_sql: |
+          SELECT w.id, w.way_id, w.way_link_index, m.value
+          FROM {schema}.ways_base w
+          LEFT JOIN {schema}.example_mapping m ON m.way_id = w.id
+      indexes:
+        - { name: idx_mv_example_id, columns: [id], unique: true }
 ```

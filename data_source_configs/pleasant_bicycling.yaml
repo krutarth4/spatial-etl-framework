@@ -1,7 +1,7 @@
 # Pleasant-bicycling score per way (local parquet of aggregated metrics).
 name: pleasant_bicycling
 description: " Get the density of vehicles on the road "
-enable: false
+enable: true
 class_name: pleasantBicycling
 debug:
   endpoint: pleasant-bicycling
@@ -48,3 +48,44 @@ storage:
   enrichment:
     table_name: pleasant_enrichment
     table_class: PleasantEnrichmentTable
+
+# Materialized view for this datasource (replaces mv_configs/mv_pleasant.yaml).
+# One row per way segment. SPI values are stored as a 24-element float array,
+# one entry per hour of the day (index 0 = 00:00-01:00, index 23 = 23:00-24:00).
+# Missing hours (no bicycle data for that hour) are stored as -1. refresh defaults
+# to `concurrently` (mv_defaults), valid here because of the unique id index.
+materialized_view:
+  name: mv_pleasant
+  description: >
+    Per-way hourly SPI (speed performance index) as a 24-element float array.
+    spi_hourly[h] is the average speed performance index for hour h (0-23); -1 means no data.
+  depends_on:
+    tables:
+      - { name: ways_base }
+      - { name: pleasant_mapping }
+      - { name: pleasant_enrichment }
+  definition:
+    select_sql: |
+      WITH hours AS (
+          SELECT generate_series(0, 23) AS hour
+      )
+      SELECT
+          w.id,
+          w.way_id,
+          w.way_link_index,
+          array_agg(
+              COALESCE(pe.avg_speed_performance_index, -1)
+              ORDER BY h.hour
+          )                                               AS spi_hourly
+      FROM {schema}.ways_base w
+      CROSS JOIN hours h
+      LEFT JOIN {schema}.pleasant_mapping pm
+          ON pm.way_id = w.id
+      LEFT JOIN {schema}.pleasant_enrichment pe
+          ON pe.connection_id = pm.connection_id
+         AND pe.hour          = h.hour
+      GROUP BY w.id, w.way_id, w.way_link_index
+  indexes:
+    - { name: idx_mv_pleasant_id, columns: [id], unique: true }
+    - { name: idx_mv_pleasant_way_id, columns: [way_id, way_link_index] }
+    - { name: idx_mv_pleasant_way_id_only, columns: [way_id] }

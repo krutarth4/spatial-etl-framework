@@ -234,8 +234,167 @@ class MappingInspectorMixin:
                 "fallback": "If spatial fields are missing, API returns mapping rows only (table_only mode).",
             },
         }
+    def fetch_coverage_visualization(
+        self,
+        mapper_endpoint: str,
+        bbox: str | None = None,
+        limit: int = 5000,
+    ) -> dict[str, Any]:
+        """Classify base road segments as covered vs uncovered for the map.
+
+        A segment is *covered* when the mapping table holds a non-null real
+        value for it; otherwise it is *uncovered* (it has no row, or a null
+        value, and would only ever receive a default/sentinel in the
+        materialized view). The geometry comes from the base network so the
+        map shows exactly where real data is missing.
+        """
+        if self.db is None:
+            raise ValueError("Database is not initialized.")
+        if limit <= 0:
+            raise ValueError("limit must be > 0")
+
+        ds = self._resolve_datasource(mapper_endpoint)
+        mapping = ds.get("mapping") or {}
+        if not mapping.get("enable", False):
+            raise ValueError(f"Mapping is disabled for datasource '{ds.get('name')}'.")
+
+        mapping_table_name = mapping.get("table_name")
+        mapping_schema = mapping.get("table_schema")
+        if not mapping_table_name:
+            raise ValueError(f"No mapping table configured for datasource '{ds.get('name')}'.")
+        mapping_table = self.db.get_table(mapping_table_name, mapping_schema)
+        if mapping_table is None:
+            raise ValueError(f"Mapping table '{mapping_schema}.{mapping_table_name}' does not exist.")
+        if "way_id" not in mapping_table.c:
+            raise ValueError("Mapping table has no 'way_id' column to join on.")
+
+        primary_col = self._coverage_value_col(ds, mapping_table)
+        if not primary_col:
+            raise ValueError("Could not determine a mapped value column on the mapping table.")
+
+        base_conf = mapping.get("base_table") or {}
+        base_name = base_conf.get("table_name")
+        base_schema = base_conf.get("table_schema")
+        base_table = self.db.get_table(base_name, base_schema) if base_name else None
+        if base_table is None:
+            raise ValueError("Base road network table is not configured or does not exist.")
+        base_geom_col = self._guess_geom_col(
+            base_table, ["geometry", "geom", "line_geometry", "geometry_25833", "geom_25833"]
+        )
+        if base_geom_col is None:
+            raise ValueError("No geometry column found on the base road network table.")
+
+        envelope = self._parse_bbox(bbox)
+        bgeom = f"b.{self._quote_ident(base_geom_col)}"
+        where = ""
+        params: dict[str, Any] = {"limit": limit}
+        if envelope is not None:
+            where = (
+                f"WHERE ST_Intersects(ST_Transform({bgeom}, 4326), "
+                f"ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, 4326))"
+            )
+            params.update(envelope)
+
+        sql = f"""
+            SELECT
+                b.id AS way_id,
+                (cov.way_id IS NOT NULL) AS covered,
+                ST_AsGeoJSON(ST_Transform({bgeom}, 4326)) AS __geojson
+            FROM "{base_schema}"."{base_name}" b
+            LEFT JOIN (
+                SELECT DISTINCT way_id
+                FROM "{mapping_schema}"."{mapping_table_name}"
+                WHERE "{primary_col}" IS NOT NULL
+            ) cov ON cov.way_id = b.id
+            {where}
+            LIMIT :limit
+        """
+        with self.db.session_scope() as session:
+            result = session.execute(text(sql), params).mappings().all()
+
+        features: list[dict[str, Any]] = []
+        shown_covered = 0
+        for r in result:
+            geom = self._try_json_load(r.get("__geojson"))
+            if not geom:
+                continue
+            is_covered = bool(r.get("covered"))
+            if is_covered:
+                shown_covered += 1
+            features.append({
+                "type": "Feature",
+                "geometry": geom,
+                "properties": {"way_id": r.get("way_id"), "covered": is_covered},
+            })
+
+        return {
+            "mapper_endpoint": mapper_endpoint,
+            "datasource": ds.get("name"),
+            "value_column": primary_col,
+            "base_table": base_name,
+            "bbox": envelope,
+            "shown": len(features),
+            "shown_covered": shown_covered,
+            "shown_uncovered": len(features) - shown_covered,
+            # Network-wide totals (independent of the limit/bbox above).
+            "coverage": self._mapping_coverage(ds),
+            "geojson": {"type": "FeatureCollection", "features": features},
+        }
+
+    def _coverage_value_col(self, ds: dict[str, Any], mapping_table) -> str | None:
+        """Pick the mapping-table column that holds the real mapped value.
+
+        Prefers what the datasource declares in its strategy, so coverage tests
+        the actual value instead of an incidental column (e.g. a distance
+        alias). Resolution order, each guarded by existence in the mapping
+        table:
+          1. strategy.value_columns (e.g. air quality: no2/pm10/pm25)
+          2. strategy.aggregation_alias (e.g. tree: trees)
+          3. base_table.column_name (semantic label, used only if it maps to a
+             real column)
+          4. fall back to the first non-id/non-geom column, excluding the
+             strategy's distance alias.
+        """
+        cols = {c.name.lower(): c.name for c in mapping_table.columns}
+        mapping = ds.get("mapping") or {}
+        strategy = mapping.get("strategy")
+
+        candidates: list[str] = []
+        distance_alias: str | None = None
+        if isinstance(strategy, dict):
+            for vc in strategy.get("value_columns") or []:
+                if isinstance(vc, dict) and vc.get("name"):
+                    candidates.append(str(vc["name"]))
+                elif isinstance(vc, str):
+                    candidates.append(vc)
+            if strategy.get("aggregation_alias"):
+                candidates.append(str(strategy["aggregation_alias"]))
+            if strategy.get("distance_alias"):
+                distance_alias = str(strategy["distance_alias"]).lower()
+
+        base_col = (mapping.get("base_table") or {}).get("column_name")
+        if isinstance(base_col, str) and base_col:
+            candidates.append(base_col)
+
+        for cand in candidates:
+            if cand.lower() in cols:
+                return cols[cand.lower()]
+
+        exclude = {distance_alias} if distance_alias else None
+        return self._pick_primary_value_col(mapping_table, exclude=exclude)
+
     def _mapping_coverage(self, ds: dict[str, Any]) -> dict[str, Any] | None:
-        """Count covered (non-null mapped_value) vs total rows in the full mapping table."""
+        """Coverage of the road network by *real* mapped data.
+
+        Covered roads are road segments with a non-null mapped value in the
+        mapping table. The denominator is the full base road network
+        (``ways_base``), not the mapping table's own row count, so that roads
+        which only receive a default/sentinel value in the materialized view
+        (and therefore never get a row in the mapping table) are correctly
+        reported as uncovered. Defaults live only in the MV, so the mapping
+        table itself already excludes them — counting its real rows against the
+        base network gives an honest coverage figure.
+        """
         mapping = ds.get("mapping") or {}
         if not mapping.get("enable", False):
             return None
@@ -246,27 +405,52 @@ class MappingInspectorMixin:
         mapping_table = self.db.get_table(table_name, table_schema)
         if mapping_table is None:
             return None
-        primary_col = self._pick_primary_value_col(mapping_table)
+        primary_col = self._coverage_value_col(ds, mapping_table)
         if not primary_col:
             return None
+
+        base_conf = mapping.get("base_table") or {}
+        base_name = base_conf.get("table_name")
+        base_schema = base_conf.get("table_schema")
+        # Without a resolvable base table we cannot size the network; bail rather
+        # than report a misleading mapping-table-relative percentage.
+        if not base_name or not base_schema:
+            return None
+        join_col = "way_id" if "way_id" in mapping_table.c else None
+        if join_col is None:
+            return None
+
         try:
-            sql = text(
-                f'SELECT COUNT(*) AS total, COUNT("{primary_col}") AS covered '
-                f'FROM "{table_schema}"."{table_name}"'
-            )
             with self.db.session_scope() as session:
-                row = session.execute(sql).first()
-            if row is None:
-                return None
-            total = int(row[0] or 0)
-            covered = int(row[1] or 0)
-            uncovered = total - covered
+                # Total road segments in the network.
+                total = int(
+                    session.execute(
+                        text(f'SELECT COUNT(*) FROM "{base_schema}"."{base_name}"')
+                    ).scalar()
+                    or 0
+                )
+                # Distinct segments that carry a real (non-null) mapped value.
+                # DISTINCT guards against strategies that emit several rows per
+                # segment (reduce: none).
+                covered = int(
+                    session.execute(
+                        text(
+                            f'SELECT COUNT(DISTINCT "{join_col}") '
+                            f'FROM "{table_schema}"."{table_name}" '
+                            f'WHERE "{primary_col}" IS NOT NULL'
+                        )
+                    ).scalar()
+                    or 0
+                )
+            covered = min(covered, total)
+            uncovered = max(total - covered, 0)
             return {
                 "total": total,
                 "covered": covered,
                 "uncovered": uncovered,
                 "covered_pct": round(covered / total * 100, 1) if total > 0 else 0.0,
                 "value_column": primary_col,
+                "base_table": base_name,
             }
         except Exception:
             return None

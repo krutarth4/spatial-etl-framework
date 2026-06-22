@@ -295,6 +295,52 @@ The mapping table schema doesn't change, so existing data remains valid.
 
 ---
 
+## Current state: enrichment stage + inline materialized view
+
+Two things were added to the tree datasource after the mapping migration above.
+Both live in [`data_source_configs/tree.yaml`](../data_source_configs/tree.yaml)
+and the table class in [`data_mappers/treeMapper.py`](../data_mappers/treeMapper.py);
+no framework code changed.
+
+### 1. Enrichment stage (normalize the raw JSONB for the debug panel)
+
+Staging packs every raw Berlin cadastre field into one `attributes` JSONB
+(`art_dtsch`, `gattung`, `pflanzjahr`, `kronedurch`, …). That is unreadable in the
+debug panel, so an enrichment table unpacks it into clean, typed columns.
+
+- `TreeEnrichmentTable` (a SQLAlchemy class in the mapper) defines the schema:
+  `source_id`, `geometry_25833`, `attributes` (all copied verbatim by the default
+  staging→enrichment sync) plus normalized columns `species_de`, `species_bot`,
+  `genus`, `leaf_type`, `street`, `district`, `planting_year`, `age_years`,
+  `crown_diameter_m`, `trunk_circumference_cm`, `height_m`, `size_class`.
+- `enrichment_operators` in the config fills the normalized columns with a
+  sequence of `derive` operators (in-place UPDATEs). Extraction operators run
+  first; `leaf_type` maps the German group to `deciduous`/`coniferous`, and
+  `size_class` is derived last from the already-populated `height_m`.
+
+```yaml
+storage:
+  staging:    {table_name: tree_staging,    table_class: TreeStaging}
+  enrichment: {table_name: tree_enrichment, table_class: TreeEnrichmentTable}
+
+enrichment_operators:
+  operators:
+    - {type: derive, target_col: species_de,    expression: "attributes->>'art_dtsch'"}
+    - {type: derive, target_col: height_m,      expression: "NULLIF(attributes->>'baumhoehe','')::numeric"}
+    # … one derive per normalized column; size_class derived last from height_m
+```
+
+Because the mapping reads from enrichment when it exists (`storage.enrichment if
+storage.enrichment else storage.staging`), tree mapping now sources from
+`tree_enrichment`. Behavior is unchanged: the aggregation only references `.id`,
+`.source_id`, and `.geometry_25833`, all present on the enrichment table.
+
+### 2. Inline materialized view
+
+`mv_tree` is now declared under a `materialized_view:` key inside `tree.yaml`
+rather than a separate `mv_configs/mv_tree.yaml` file. See
+[materialized-views-reference.md](materialized-views-reference.md).
+
 ## Next Steps
 
 Once tree mapping works with the new strategy:
