@@ -636,6 +636,7 @@ Hot-reload: edit any file in `data_source_configs/` → save → pipeline reload
 
 ## Related Docs
 
+- [lifecycle-methods-reference.md](lifecycle-methods-reference.md) — every overridable method: signature, default behaviour, use cases, organized by ETL phase
 - [mapper-README.md](mapper-README.md) — full lifecycle reference, all method signatures
 - [mapping-strategies-reference.md](mapping-strategies-reference.md) — every strategy with full config examples
 - [mapping-quick-reference.md](mapping-quick-reference.md) — one-page strategy cheat sheet

@@ -2,6 +2,8 @@
 
 This document explains how datasource mappers are discovered, how `DataSourceABCImpl` runs them, which functions you can implement in a mapper class, and in which order those functions are called.
 
+For a complete per-method reference organized by ETL phase (signatures, defaults, use cases), see [lifecycle-methods-reference.md](lifecycle-methods-reference.md).
+
 Main files:
 
 - [main_core/data_source_mapper.py](../main_core/data_source_mapper.py) — discovers and instantiates mapper classes
