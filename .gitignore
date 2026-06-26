@@ -11,10 +11,9 @@ data/
 .env.*
 !.env.example
 
-# Claude Code local config (kept out of git)
-.claude/
-CLAUDE.md
-**/CLAUDE.md
+# Claude Code — commit the config folder and CLAUDE.md, but keep local settings private
+.claude/settings.local.json
+**/.claude/settings.local.json
 
 # Benchmark results — generated at runtime
 tests/bench/results/*.json
