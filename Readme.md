@@ -1,296 +1,84 @@
 # Spatial ETL Framework
 
-> A config-driven ETL framework for continuously enriching an OpenStreetMap / PostGIS road graph with real-world geospatial data.
+> A config-driven ETL pipeline for continuously enriching an OpenStreetMap / PostGIS road graph with real-world geospatial data.
 
 [![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.13%2B-3776AB?logo=python)](requirements.txt)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python)](requirements.txt)
 [![PostGIS](https://img.shields.io/badge/PostgreSQL-16%20%2B%20PostGIS-336791?logo=postgresql)](Dockerfile)
 
 ---
 
 ## What it is
 
-Spatial ETL Framework is the Python ETL backend extracted from the [MDP bicycle routing platform](https://github.com/) and released as a standalone project. It pulls geospatial feeds (weather, air quality, tree locations, elevation, accidents, …), stages and cleans them in PostGIS, and spatially joins them onto an OSM road graph — all driven by YAML.
+Spatial ETL Framework pulls geospatial feeds (weather, air quality, tree locations, elevation, accident data, …), stages and cleans them in PostGIS, and spatially joins each dataset onto an OSM road graph — all declared in YAML. Each road segment ends up with enriched per-edge attributes that any downstream consumer (router, tile server, dashboard, Jupyter notebook) can query.
 
-The framework does not care what the downstream consumer is. It writes enrichment tables and updates a base graph; anything (a router, a tile server, a dashboard, a Jupyter notebook) can read from it.
-
----
-
-## Why it exists
-
-Most geospatial projects end up re-implementing the same plumbing:
-
-- download a file, detect if it changed, store it somewhere sensible;
-- parse it, stage it in a database, clean it with some SQL;
-- spatially join it onto a base graph (KNN? buffer aggregate? intersection?);
-- refresh downstream materialized views in the right order;
-- repeat on a schedule.
-
-There are excellent open-source tools for each step (GDAL/OGR, osm2pgsql, Airflow, dbt, FME), but gluing them together for **continuously enriched routing graphs** still means writing bespoke code per dataset. This framework collapses that glue into a single YAML contract: declare the source, pick a spatial-join strategy, and the framework generates the PostGIS SQL for staging, enrichment, and mapping onto the graph.
-
-**Compared to adjacent tools:**
-
-| Tool | What it's for | What this framework adds |
-|------|---------------|--------------------------|
-| **osm2pgsql / osm2pgrouting** | Load OSM into PostGIS | These are _one_ of the inputs here; we enrich _on top_ of their output |
-| **Airflow / Prefect** | General DAG orchestration | Built-in scheduling scoped to geospatial ETL; no DAG authoring needed |
-| **dbt** | SQL transformations | Spatial-join strategies are first-class, not user-authored SQL |
-| **GDAL/OGR** | Format conversion + raster/vector ops | Used under the hood; framework wraps it behind a config |
+The pipeline handles scheduling, change detection, bulk ingestion, and materialized view refresh. You declare the source and pick a spatial-join strategy; the framework generates the PostGIS SQL for every stage.
 
 ---
 
-## What it's used for
+## What it does
 
-- **Context-aware routing** — feed weather, air quality, surface quality, crash history, or tree cover into a bicycle / pedestrian / vehicle router as per-edge attributes.
-- **Urban mobility and planning research** — a reproducible way to blend open city data onto a routable graph, so analyses can be re-run as feeds update.
-- **Live PostGIS dashboards** — the debug API + materialized views give you a refreshing layer any BI tool (Metabase, Superset, Grafana) can read.
-- **A template for other cities** — the Berlin datasources are examples; every source and the graph extent are config-driven.
-- **A sandbox for spatial-join strategies** — compare KNN vs. buffer-aggregate vs. intersection enrichments on the same base graph without touching Python.
-
----
-
-## What it can do
-
-**Extraction**
-- Fetch over HTTP / WFS / local file in `single` or `multi` mode (URL variants for batched APIs).
-- Skip re-downloads using ETag / Last-Modified metadata checks.
-- Process source files in parallel with a thread pool.
-
-**Transformation**
-- Pre / post filter hooks around a `read_file_content()` override.
-- Bulk insert into a raw-staging clone, with configurable batch size (default 10 000 rows/batch).
-- Sync raw-staging → staging → enrichment with SQL hooks at each boundary.
-
-**Spatial mapping** — all config-driven, no Python needed:
-- `knn` / `nearest_neighbour` — nearest road segment per feature
-- `nearest_k` — K nearest segments per feature
-- `within_distance` — features inside a buffer around each segment
-- `aggregate_within_distance` — avg / sum / count features within a buffer
-- `intersection` — spatial-intersect features and segments
-- `attribute_join` — standard SQL JOIN on a shared column
-- `sql_template` — parameterised SQL with placeholders
-- `custom` — escape hatch: full control via `mapping_db_query()` in your mapper
-
-**Orchestration**
-- Per-datasource schedules (cron or interval) declared in YAML.
-- Hot-reload: edits to `config.yaml` are picked up in ~2 s without restarting the process.
-- Materialized view dependency chains, refreshed in topological order after each run.
-- Run-level metadata (started / finished / error) persisted to the database.
-
-**Observability**
-- FastAPI debug server for inspecting staging / enrichment / mapping tables and visualising mapping results as GeoJSON.
-- Structured run logs and per-datasource run history.
+- **Fetch** from HTTP, WFS, or local files — single or multi-URL batch mode — with ETag / Last-Modified change detection to skip unchanged sources
+- **Stage** raw records into PostGIS with configurable batch inserts (default 10 000 rows/batch), then clean with SQL hooks between raw → staging → enrichment
+- **Spatially join** to the base road graph using built-in strategies: `knn`, `nearest_k`, `within_distance`, `aggregate_within_distance`, `intersection`, `attribute_join`, `sql_template`, or `custom`
+- **Schedule** each datasource independently (cron or interval), hot-reload config edits in ~2 s without restart
+- **Refresh** materialized views in topological dependency order after each successful run
+- **Inspect** with a FastAPI debug server — `/debug/datasources`, `/debug/mappers/{name}`, GeoJSON mapping visualization at `/debug/mappers/{name}/mapping-visualization`
 
 ---
 
 ## Quick start
 
-**Prerequisites:** Python 3.13+, PostgreSQL 16 with PostGIS 3, or Docker.
+**Prerequisites:** Python 3.13+ and PostgreSQL 16 with PostGIS 3.4, or Docker.
 
 ```bash
-# 1. Bring up a PostGIS container (or use an existing one)
+# Start a PostGIS container
 docker run --name postgres \
   -e POSTGRES_PASSWORD=admin123 -e POSTGRES_USER=postgres \
   -p 5432:5432 -d postgis/postgis:16-3.4
 
-# 2. Install deps and run
+# Install and run
 pip install -r requirements.txt
-python3 run.py
+DB_HOST=localhost DB_USER=postgres DB_PASSWORD=admin123 DB_NAME=mydb python3 run.py
 ```
 
-The pipeline reads `config.yaml`, schedules every enabled datasource, and exposes a debug API on `:8000`. Edits to `config.yaml` reload automatically in ~2 s.
+The pipeline reads `config.yaml`, schedules every enabled datasource, and exposes the debug API on `:8000`. Hot-reload picks up `config.yaml` changes in ~2 s.
 
-→ Next: configure your first datasource — see **[Config reference](docs/config-reference.md)** and the **[Adding a new data layer](#adding-a-new-data-layer)** walkthrough below.
+To run inside Docker alongside PostGIS, see [Docker configuration](docs/docker-configuration.md).
 
 ---
 
-## Selecting which datasources to run
+## Adding your first datasource
 
-By default, every datasource with `enable: true` in `config.yaml` runs. You can override that at startup — useful for running the same Docker image with different subsets active (e.g. one container only on `elevation`, another on everything except `weather`) without editing `config.yaml`.
-
-Two equivalent surfaces are supported. **CLI args take precedence over env vars, and either one fully overrides the per-datasource `enable` flags in `config.yaml`.**
-
-| Surface | Run only listed sources | Skip listed sources |
-|---|---|---|
-| CLI args | `--only elevation,weather` | `--disable trees` |
-| Env vars | `ENABLE_DATASOURCES=elevation,weather` | `DISABLE_DATASOURCES=trees` |
-
-`--only` and `--disable` are mutually exclusive. Names not present in `config.yaml` produce a warning, not a hard failure. Lists are comma-separated, whitespace-tolerant.
-
-### Local
-
-```bash
-python3 run.py --only elevation,weather
-ENABLE_DATASOURCES=elevation,weather python3 run.py
-DISABLE_DATASOURCES=trees python3 run.py
-```
-
-### `docker run`
-
-The image's `ENTRYPOINT` is `python run.py`, so flags after the image name are forwarded to argparse:
-
-```bash
-# CLI args
-docker run --rm spatial-etl --only elevation,weather
-docker run --rm spatial-etl --disable trees
-
-# Env vars
-docker run --rm -e ENABLE_DATASOURCES=elevation,weather spatial-etl
-docker run --rm -e DISABLE_DATASOURCES=trees spatial-etl
-```
-
-### `docker compose`
-
-Env vars are usually the cleanest fit for compose. To pass CLI flags instead, use `command:`.
+Most datasources need only a YAML config file — no Python:
 
 ```yaml
-services:
-  etl:
-    image: spatial-etl
-    environment:
-      DB_HOST: <HOST>
-      DB_PORT: <PORT>
-      DB_USER: <USER>
-      DB_PASSWORD: <PASS>
-      DB_NAME: <DB_NAME>
-      # Pick ONE of these (or neither, to use config.yaml as-is):
-      ENABLE_DATASOURCES: elevation,weather
-      # DISABLE_DATASOURCES: trees
-    # Or, equivalently, pass CLI args (overrides env vars):
-    # command: ["--only", "elevation,weather"]
-    depends_on:
-      - postgres
-```
-
-### Verifying
-
-On startup, `CoreConfig` logs the active override (e.g. `Datasource override (only): ['elevation', 'weather']`), and `DataSourceMapper` logs `Enable Found N data sources` reflecting the post-override count. Disabled sources are also marked `current_run_status: disabled` in the metadata table.
-
----
-
-## How it works
-
-Each datasource follows the same pipeline, implemented in `main_core/data_source_abc_impl.py`:
-
-```
- Source (HTTP / WFS / file)
-        │
-        ▼
-  read_file_content()          ← built-in handles gpkg/shp/geojson/parquet/csv/xlsx/json
-        │                         override only for gz, zip, xml, pbf, or custom schemas
-        ▼
-   raw_staging  (DB table)
-        │  bulk insert in batches
-        ▼
-     staging    ─── staging SQL hook
-        │
-        ▼
-   enrichment   ─── enrichment SQL hook
-        │
-        ▼
-   mapping strategy            ← auto-generated PostGIS SQL from YAML
-        │
-        ▼
-   ways_base    (enriched road graph)
-        │
-        ▼
-   materialized views refresh  (topological order)
-```
-
-Full sequence diagram: [ETL sequence diagram](#etl-sequence-diagram) at the bottom of this README.
-
----
-
-## Adding a new data layer
-
-In most cases, **no Python required** — just YAML.
-
-### Formats the built-in reader handles automatically
-
-Set `response_type` and the base class reads the file — no `read_file_content()` override needed:
-
-| `response_type` | Library | What you get |
-|---|---|---|
-| `gpkg`, `shp`, `geojson` | geopandas | `list[dict]` (geometry dropped; add `reader.target_crs` to reproject) |
-| `parquet` | pandas | `list[dict]` |
-| `csv`, `tsv` | pandas | `list[dict]` |
-| `xlsx`, `xls` | pandas | `list[dict]` |
-| `json` | orjson / stdlib | raw `dict` or `list` (use `source_filter()` to reshape) |
-
-For `gz`, `zip`, `xml`, `pbf` — or when you need WKB encoding, multi-file merges, or column validation — write a `read_file_content()` override.
-
-Optional spatial hints via `source.reader:`:
-```yaml
-source:
-  response_type: gpkg
-  reader:
-    engine: pyogrio      # "pyogrio" (default) or "fiona"
-    target_crs: 25833    # auto-reprojects if source CRS differs
-```
-
-→ Full format reference + examples: **[Mapper README](docs/mapper-README.md)**.
-
----
-
-**1. (Optional) Mapper class** — only needed when the built-in reader isn't enough:
-
-```python
-# data_mappers/myDataMapper.py
-from main_core.data_source_abc_impl import DataSourceABCImpl
-
-class MyDataMapper(DataSourceABCImpl):
-    def read_file_content(self, path: str) -> list:
-        ...  # parse raw file → list of dicts
-```
-
-→ Full lifecycle + override points: **[Mapper README](docs/mapper-README.md)**.
-
-**2. Datasource config:**
-
-```yaml
-# data_source_configs/my_data.yaml — one flat datasource mapping per file.
-name: my_data
+# data_source_configs/my_sensor.yaml
+name: my_sensor
 enable: true
-class_name: MyDataMapper        # omit if using the built-in reader directly
-debug: {endpoint: my-data}
-source: {fetch: http, url: "https://api.example.com/data.json", response_type: json}
+source:
+  fetch: http
+  url: "https://api.example.com/sensors.json"
+  response_type: json
 job:
-  trigger: {type: {name: interval, config: {hours: 6}}}
+  trigger:
+    type:
+      name: interval
+      config:
+        hours: 6
 storage:
-  staging:    {table_name: my_staging,    table_schema: test_osm_base_graph}
-  enrichment: {table_name: my_enrichment, table_schema: test_osm_base_graph}
+  staging:    {table_name: my_sensor_staging,    table_schema: myschema}
+  enrichment: {table_name: my_sensor_enrichment, table_schema: myschema}
 mapping:
   enable: true
   strategy: {type: knn}
-  table_name: my_mapping
-  table_schema: test_osm_base_graph
-# Optional: this datasource's per-way materialized view, defined inline.
-materialized_view:
-  name: mv_my_data
-  depends_on:
-    tables: [{name: ways_base}, {name: my_mapping}]
-  definition:
-    select_sql: |
-      SELECT w.id, w.way_id, w.way_link_index, m.value
-      FROM {schema}.ways_base w
-      LEFT JOIN {schema}.my_mapping m ON m.way_id = w.id
-  indexes:
-    - {name: idx_mv_my_data_id, columns: [id], unique: true}
+  table_name: my_sensor_mapping
+  table_schema: myschema
 ```
 
-→ Every field explained: **[Config reference](docs/config-reference.md)** · quick start: **[Config README](docs/config-README.md)**.
-→ Pick a `strategy.type`: **[Mapping strategies reference](docs/mapping-strategies-reference.md)** · one-pager: **[Mapping quick reference](docs/mapping-quick-reference.md)**.
-→ Real migration from custom SQL to a built-in strategy: **[Tree mapper migration example](docs/migration-example-tree-mapper.md)**.
+Drop this file in `data_source_configs/` — the framework picks it up automatically on the next reload. For non-standard source formats or custom SQL transforms, you can add a mapper class (a small Python file that overrides only the hooks you need).
 
-**3. Nothing to register** — `config.yaml` points `data_folder` at the configs
-directory and every `*.yaml` in it is loaded automatically:
-
-```yaml
-data_folder: "./data_source_configs/"
-datasources: []   # files in data_folder are appended here at startup
-```
-
-The pipeline picks up the new file on the next config reload and starts the first run.
+→ Full walkthrough: **[Adding a new data source](docs/configure-data-source-step-by-step.md)**
 
 ---
 
@@ -299,18 +87,18 @@ The pipeline picks up the new file on the next config reload and starts the firs
 ```
 spatial-etl-framework/
 ├── run.py                        # Entry point + config watcher
-├── config.yaml                   # Single source of truth
+├── config.yaml                   # Global config (datasources list auto-populated from data_source_configs/)
 ├── core/                         # FastAPI server, scheduler, debug API
-├── main_core/                    # Base mapper class + config loader
-├── data_mappers/                 # One file per datasource
-├── data_source_configs/          # Per-datasource YAML configs (each carries its own materialized_view block)
-├── materialized_views/           # MV refresh orchestration (definitions live inline per datasource)
-├── database/                     # DB utilities + connection pool
-├── readers/                      # Format readers (CSV, JSON, GeoJSON, raster, …)
-├── handlers/                     # HTTP / file download + metadata checks
-├── graph/                        # Base graph integration (OSM tables)
-├── docs/                         # Reference documentation (see below)
-└── Dockerfile                    # PostGIS image used for local dev
+├── main_core/                    # Base mapper class (DataSourceABCImpl) + config loader
+├── data_mappers/                 # One Python file per datasource (optional; only if built-in reader isn't enough)
+├── data_source_configs/          # Per-datasource YAML files (auto-discovered on startup)
+├── database_tables/              # SQLAlchemy table model base classes (StagingTable, EnrichmentTable, MappingTable)
+├── materialized_views/           # MV refresh orchestration
+├── database/                     # DB connection pool + utilities
+├── readers/                      # Format readers (CSV, JSON, GeoPackage, raster, …)
+├── handlers/                     # HTTP / file download + ETag metadata checks
+├── docs/                         # Reference documentation
+└── Dockerfile
 ```
 
 ---
@@ -319,16 +107,35 @@ spatial-etl-framework/
 
 | Doc | What's in it |
 |-----|--------------|
-| [Config README](docs/config-README.md) | `config.yaml` structure, per-section options |
-| [Config reference](docs/config-reference.md) | Full reference of every config field |
-| [Mapper README](docs/mapper-README.md) | Mapper discovery, lifecycle, override points |
-| [Mapping strategies reference](docs/mapping-strategies-reference.md) | All spatial-join strategies with examples |
-| [Mapping quick reference](docs/mapping-quick-reference.md) | One-page cheat sheet |
-| [Migration example: tree mapper](docs/migration-example-tree-mapper.md) | Real migration from custom SQL to a built-in strategy |
-| [Batch processing](docs/BATCH_PROCESSING.md) | Batch-insert sizing and tuning |
+| [Getting started](docs/getting-started.md) | **Start here** — zero-to-running: PostGIS setup, first run, ways_base bootstrap, troubleshooting |
+| [Adding a new data source](docs/configure-data-source-step-by-step.md) | Table models, YAML config, lifecycle hooks per ETL stage |
+| [Mapper lifecycle reference](docs/mapper-README.md) | Every override method with signatures, order, and available `self.*` attributes |
+| [Docker configuration](docs/docker-configuration.md) | Env vars, volumes, ports, run modes, compose example, Postgres tuning |
+| [Config README](docs/config-README.md) | `config.yaml` top-level sections explained |
+| [Config reference](docs/config-reference.md) | Full field-by-field YAML reference |
+| [Mapping strategies reference](docs/mapping-strategies-reference.md) | All 8 spatial-join strategies with examples |
+| [Mapping quick reference](docs/mapping-quick-reference.md) | One-page strategy cheat sheet |
+| [Migration example: tree mapper](docs/migration-example-tree-mapper.md) | Real migration from custom SQL → built-in strategy |
+| [Example: weather station (simple)](docs/example-weather-station-simplified.md) | Minimal end-to-end mapper skeleton |
+| **Examples — mappers** | |
+| [Tree mapper (Python)](docs/example-tree-mapper.md) | Custom `read_file_content`, JSONB staging, WKB geometry, custom MappingTable |
+| [Air quality mapper](docs/example-air-quality-mapper.md) | gzip JSON, EWKT geometry, `ARRAY(Float)` columns, CRS transform in enrichment |
+| [Elevation mapper](docs/example-elevation-mapper.md) | Override `load()`, XYZ → GeoTIFF, `ST_FromGDALRaster` + `ST_Tile`, raster dedup |
+| [Elevation grid links mapper](docs/example-elevation-grid-links.md) | XML parsing in `source_filter`, `after_filter_hook` writes a file, no DB storage |
+| [Pleasant bicycling mapper](docs/example-pleasant-bicycling-mapper.md) | Two-parquet join, skip default sync, custom hourly aggregation, `LEFT JOIN LATERAL` mapping |
+| [Weather forecast mapper](docs/example-weather-forecast-mapper.md) | `source_filter` flattens nested JSON, dynamic date param, no mapping, per-way time-series MV |
+| [Weather station mapper](docs/example-weather-station-mapper.md) | `source_filter` filter, `enrichment_db_query` lat/lon → geometry, `::geography` distance, `bearing_degree` |
+| [Graph mapper](docs/example-graph-mapper.md) | Override `execute_run_pipeline()`, OSM file download, `CommService` inter-process signal |
+| **Examples — configs** | |
+| [Tree config (YAML)](docs/example-tree-config.md) | WFS `multi_fetch`, `aggregate_within_distance`, `enrichment_operators`, inline MV |
+| [Air quality config](docs/example-air-quality-config.md) | `url_template` paged fetch, `idw` strategy, `enrichment_filter_sql`, forecast window CTE |
+| [Elevation config](docs/example-elevation-config.md) | `depends_on`, `run_once` trigger, `raster_aggregate` operator, `sql_template` mapping |
+| [Pleasant bicycling config](docs/example-pleasant-bicycling-config.md) | `fetch: local`, `strategy: custom`, no `expires_after`, `generate_series` hourly array MV |
+| [Weather station config](docs/example-weather-station-mapper.md#config) | Multi-value `params`, KNN with `::geography`, `select_columns` for bearing |
+| [Batch processing](docs/BATCH_PROCESSING.md) | Bulk-insert sizing and Postgres tuning |
+| [Materialized views](docs/materialized-views-reference.md) | MV dependency chains and refresh modes |
+| [Debug panel reference](docs/debug-panel-reference.md) | Debug API behavior and coverage calculation |
 | [JSON styling](docs/json_styling.md) | JSONPath conventions for source configs |
-| [Mapping improvements summary](docs/MAPPING_IMPROVEMENTS_SUMMARY.md) | What changed in the mapping system and why |
-| [Debug panel reference](docs/debug-panel-reference.md) | How the debug panel computes coverage, the staging fallback, and the coverage map |
 
 ---
 
@@ -339,179 +146,16 @@ spatial-etl-framework/
 | Runtime | Python 3.13, FastAPI, APScheduler |
 | Data access | SQLAlchemy, psycopg 3 (binary) |
 | Database | PostgreSQL 16 + PostGIS 3 |
-| OSM ingestion | osm2pgsql, osmium, optionally osm2pgrouting / Imposm 3 |
-| Packaging | Dockerfile (PostGIS) |
+| Geospatial readers | GeoPandas, pyogrio, rasterio, GDAL |
+| OSM ingestion | osm2pgsql, osmium |
 
 ---
 
 ## Contributing
 
-- Add a datasource mapper for your city or a new feed.
-- Add a new spatial-join strategy in `main_core/`.
-- Improve readers in `readers/` for additional source formats.
-- Expand `docs/` with real migration examples.
+- Add a datasource mapper for your city or a new open data feed.
+- Add a spatial-join strategy in `main_core/`.
+- Improve format readers in `readers/` for additional source types.
+- Expand `docs/` with real migration examples from your dataset.
 
-The framework is used in production for the [MDP bicycle routing platform](https://github.com/) in Berlin; PRs that keep the Berlin datasources working are appreciated.
-
-All contributors and participants are expected to follow the project's [Code of Conduct](CODE_OF_CONDUCT.md).
-
----
-
-## Code of Conduct
-
-This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md) adapted from the Contributor Covenant. By participating — whether by opening issues, submitting pull requests, or adding new datasources — you agree to uphold it. Report unacceptable behavior to **krutartparwal@gmail.com**.
-
----
-
-## Reference: operational notes
-
-These are working notes kept alongside the code — useful during setup, not required reading.
-
-### PostGIS raster drivers
-
-```sql
-ALTER DATABASE <DB_name> SET postgis.gdal_enabled_drivers TO 'GTiff';
-ALTER DATABASE <DB_name> SET postgis.enable_outdb_rasters TO true;
-```
-
-See: [Using cloud rasters with PostGIS](https://www.crunchydata.com/blog/using-cloud-rasters-with-postgis).
-
-### Installing PostGIS onto a vanilla Postgres image
-
-```bash
-docker exec -it my_postgres_container bash
-psql -U postgres -c "SELECT version();"
-apt-get update
-apt-get install -y postgis postgresql-<version>-postgis-3
-```
-
-### Postgres driver
-
-The project uses `psycopg 3` (binary) for Python 3.13 — `psycopg2` is not supported out of the box.
-
-```bash
-pip install "psycopg[binary]"
-```
-
-SQLAlchemy URL prefix: `postgresql+psycopg://…`. If you need `psycopg2`, install it separately and change the prefix to `postgresql+psycopg2://…`.
-
-### OSM tooling cheatsheet
-
-Convert PBF → OSM:
-```bash
-brew install osmium-tool
-osmium cat ./data_berlin.pbf -o ./berlin_latest.osm
-```
-
-Extract a bounding box:
-```bash
-osmium extract -b 13.30760,52.50644,13.33860,52.51802 \
-  --strategy=complete_ways -o ernst_extract.osm berlin.osm
-```
-
-Load OSM into PostGIS (`osm2pgsql`):
-```bash
-osm2pgsql -c -d osm_bbox_berlin -p berlin --number-processes=4 \
-  -U postgres -P 5433 -W -H localhost ./raw/map_extract.osm \
-  -r osm -S default.style --latlong
-```
-
-Build a routing topology (`osm2pgrouting`):
-```bash
-osm2pgrouting -f ./raw/map_extract.osm -d osm_bbox_berlin \
-  -U postgres -W admin123 -p 5433 -c mapconfig.xml \
-  --prefix routing --tags --addnodes --schema pgrouting
-```
-
-For large extracts, [Imposm 3](https://github.com/omniscale/imposm3) is faster than `osm2pgsql`. For a routing-engine comparison (Valhalla, GraphHopper, pgRouting), see [ImpOsm2pgRouting](https://github.com/makinacorpus/ImpOsm2pgRouting).
-
-### Roadmap / TODO
-
-- Auto-install `hstore` + `postgis` extensions on container start.
-- Bundle `osm2pgrouting` into the base image.
-- Ship a default compose file so `docker compose up` is the one-command start.
-
----
-
-## ETL sequence diagram
-
-```mermaid
-sequenceDiagram
-    participant S as Scheduler/Caller
-    participant D as DataSourceABCImpl.run()
-    participant M as metadata_service
-    participant H as HttpHandler/FileHandler
-    participant T as ThreadPool (process_file)
-    participant DB as Database
-    participant BG as BaseGraph/Mapping
-    participant MV as MaterializedViewManager
-
-    S->>D: run()
-    D->>D: start_execution()
-    D->>M: mark_run_started()
-
-    D->>D: execute_run_pipeline()
-    D->>D: extract()
-    D->>D: source()
-
-    alt SINGLE mode
-        D->>H: metadata check (remote vs saved)
-        alt changed
-            D->>H: download file
-        else unchanged
-            D->>H: resolve latest saved local file
-        end
-    else MULTI mode
-        loop each param/url variant
-            D->>H: metadata check
-            alt changed
-                D->>H: download variant file
-            else unchanged
-                D->>H: use latest saved variant file
-            end
-        end
-    end
-
-    D->>M: update_runtime_file_paths(paths)
-
-    alt no paths
-        D->>D: run_job_response("No files available")
-    else has paths
-        D->>DB: create_data_tables() + raw_staging clone
-        D->>T: run_threadpool_file_processing(paths)
-
-        par each file path
-            T->>D: process_file(path)
-            D->>D: transform(path)
-            D->>H: read_files()
-            D->>D: before/pre/source_filter/post/after hooks
-            alt transformed_data exists
-                D->>DB: bulk_insert(raw_staging, data)
-            else empty
-                D->>D: skip load
-            end
-        end
-
-        D->>DB: post_database_processing()
-        D->>DB: sync raw_staging -> staging
-        D->>DB: create staging indexes (if deferred)
-        D->>DB: execute_on_staging() SQL hook
-        D->>DB: sync staging -> enrichment
-        D->>DB: create enrichment indexes (if deferred)
-        D->>DB: execute_on_enrichment() SQL hook
-        D->>BG: map_to_base() / execute mapping strategy
-        D->>DB: create mapping indexes (if deferred)
-        D->>MV: trigger materialized views
-        D->>DB: clean_raw_staging_table(backup_if_sync_failed)
-
-        D->>D: run_job_response("Job finished Successfully !!!")
-    end
-
-    alt exception anywhere in run pipeline
-        D->>D: on_run_error()
-        D->>D: run_job_response("Job failed")
-    end
-
-    D->>M: mark_run_finished(success, message)
-    D->>D: run_end_cleanup(success/error)
-```
+All contributors are expected to follow the project's [Code of Conduct](CODE_OF_CONDUCT.md). Report unacceptable behavior to **krutarthparwal.ai@gmail.com**.
