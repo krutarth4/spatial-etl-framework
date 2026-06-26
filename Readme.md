@@ -158,4 +158,4 @@ spatial-etl-framework/
 - Improve format readers in `readers/` for additional source types.
 - Expand `docs/` with real migration examples from your dataset.
 
-All contributors are expected to follow the project's [Code of Conduct](CODE_OF_CONDUCT.md). Report unacceptable behavior to **krutarthparwal.ai@gmail.com**.
+All contributors are expected to follow the project's [Code of Conduct](CODE_OF_CONDUCT.md). Report unacceptable behavior to **krutarthparwal@gmail.com**.
