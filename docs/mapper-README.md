@@ -4,10 +4,9 @@ This document explains how datasource mappers are discovered, how `DataSourceABC
 
 Main files:
 
-1. [main_core/data_source_mapper.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_mapper.py)
-2. [main_core/data_source_abc_impl.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py)
-3. [main_core/data_source_abc_impl.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py)
-4. [main_core/data_source_abc.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc.py)
+- [main_core/data_source_mapper.py](../main_core/data_source_mapper.py) — discovers and instantiates mapper classes
+- [main_core/data_source_abc_impl.py](../main_core/data_source_abc_impl.py) — base class with all lifecycle hooks
+- [main_core/data_source_abc.py](../main_core/data_source_abc.py) — abstract method definitions
 
 ## How mapper loading works
 
@@ -238,132 +237,224 @@ After all files are processed:
 16. `cleanup_after_finalize(sync_result)`
 17. `clean_raw_staging_table(...)`
 
+## Available attributes in any mapper method
+
+These attributes are always available on `self` inside any hook:
+
+```python
+# Logger (prefixed with datasource name)
+self.logger.info(msg)
+self.logger.warning(msg)
+self.logger.error(msg, exc_info=True)   # includes traceback
+self.logger.debug(msg)
+
+# Database
+self.db.bulk_insert(table_name, schema, records_list, upsert=True)
+self.db.call_sql(sql_string)
+self.db.call_sql_batched(sql_string, batch_size=10_000)
+self.db.get_table_count(table_name, schema)  # → int
+self.db.table_exists(table_name, schema)     # → bool
+
+# Config — table names and schema for each stage
+self.data_source_config.storage.staging.table_name
+self.data_source_config.storage.staging.table_schema
+self.data_source_config.storage.enrichment.table_name
+self.data_source_config.storage.enrichment.table_schema
+self.data_source_config.mapping.table_name
+self.data_source_config.mapping.table_schema
+
+# Datasource identity
+self.data_source_name          # "weather_station_bright_sky"
+self.job_configuration         # JobConfigurationDTO
+
+# Metadata service
+self.metadata_service.has_completed_successfully(datasource_name)  # → bool
+self.metadata_service.is_dataset_expired(datasource_name, expires_after)  # → bool
+
+# All other datasource configs (for cross-datasource dependencies)
+self.peer_configs               # dict[name → DataSourceDTO]
+```
+
+---
+
 ## Functions you can write in a mapper
 
 These are the main extension points in `DataSourceABCImpl`.
 
-### Required in practice
-
-| Function | When to override | What it should do |
-|---|---|---|
-| `read_file_content(self, path)` | Almost always | Parse one file and return records |
-
 ### Source and transform hooks
 
-| Function | When to override | What it should do |
-|---|---|---|
-| `source_filter(self, data)` | Transform raw parsed payload into row dictionaries | Flatten or normalize data |
-| `before_filter_pipeline(self, data, path)` | You need file-aware preprocessing before filter | Mutate or inspect raw parsed data |
-| `after_filter_pipeline(self, data, path)` | You need post-filter enrichment | Final cleanups before load |
-| `pre_filter_processing(self, data)` | Custom preprocessing | Side effects or mutations before `source_filter` |
-| `post_filter_processing(self, data)` | Save or inspect filtered output | Usually export transformed data |
-| `should_load_transformed_data(self, transformed_data, path)` | Skip loads under custom rules | Return `False` to skip DB insert |
+| Method | Signature | When to override |
+|--------|-----------|-----------------|
+| `read_file_content(path)` | `(str) → list[dict]` | Custom/binary format (gz, zip, xml, pbf); WKB geometry needed |
+| `source_filter(data)` | `(list\|dict) → list[dict]` | Flatten nested JSON, filter rows, add derived fields |
+| `before_filter_pipeline(data, path)` | `(list, str) → None` | Per-file setup before any filtering |
+| `pre_filter_processing(data)` | `(list) → None` | Build in-memory index (KDTree) before `source_filter` |
+| `post_filter_processing(data)` | `(list) → None` | Post-filter validation or file export |
+| `after_filter_pipeline(data, path)` | `(list, str) → None` | Per-file metrics, progress counter |
+| `should_load_transformed_data(data, path)` | `(list, str) → bool` | Return `False` to skip DB insert for this file |
 
 ### File-level hooks
 
-| Function | When to override | What it should do |
-|---|---|---|
-| `before_process_file(self, path)` | Per-file setup | Temp dir creation, logging, side effects |
-| `after_process_file(self, path, transformed_data)` | Per-file teardown or extra work | Cleanup, stats, extra exports |
-| `on_process_file_error(self, path, error)` | Special error handling | Cleanup or custom logging |
+| Method | Signature | When to override |
+|--------|-----------|-----------------|
+| `before_process_file(path)` | `(str) → None` | Per-file setup before `transform()` |
+| `after_process_file(path, data)` | `(str, list) → None` | Per-file cleanup after `load()` |
+| `on_process_file_error(path, error)` | `(str, Exception) → None` | Custom error handling or file quarantine |
 
 ### Load and database hooks
 
-| Function | When to override | What it should do |
-|---|---|---|
-| `before_load(self, data)` | You need to mutate/validate before raw insert | Last-mile row preparation |
-| `after_load(self, data)` | Extra action after raw insert | Stats or follow-up logic |
-| `pre_database_processing(self)` | Work immediately before raw insert | Temp tables or DB prep |
-| `post_database_processing(self)` | Work after all raw inserts are complete | Batch cleanup or merge prep |
-| `staging_db_query(self)` | You need SQL against staging | Return SQL string |
-| `enrichment_db_query(self)` | You need SQL against enrichment | Return SQL string |
+| Method | Signature | When to override |
+|--------|-----------|-----------------|
+| `before_load(data)` | `(list) → None` | Final row mutation or validation before bulk insert |
+| `pre_database_processing()` | `() → None` | DB-side prep before bulk insert |
+| `after_load(data)` | `(list) → None` | Stats, reset per-file state |
+| `post_database_processing()` | `() → None` | Flush in-memory results accumulated across all files |
+| `load(data)` | `(list) → None` | Override entirely to skip DB (keep data in memory) |
 
-### Mapping hooks
+### Staging hook
 
-| Function | When to override | What it should do |
-|---|---|---|
-| `mapping_db_query(self)` | Default mapping strategy is SQL from mapper | Return mapping SQL |
+| Method | Signature | When to override |
+|--------|-----------|-----------------|
+| `staging_db_query()` | `() → str \| None` | Return SQL to run after raw→staging sync; `None` skips stage |
+| `sync_raw_to_staging()` | `() → dict` | Override for custom deduplication or aggregation on sync |
+
+```python
+def staging_db_query(self) -> str | None:
+    stg = self.data_source_config.storage.staging
+    return f"""
+        UPDATE {stg.table_schema}.{stg.table_name}
+        SET geom_4326 = ST_SetSRID(ST_MakePoint(lon, lat), 4326)
+        WHERE lon IS NOT NULL AND geom_4326 IS NULL
+    """
+```
+
+### Enrichment hook
+
+| Method | Signature | When to override |
+|--------|-----------|-----------------|
+| `enrichment_db_query()` | `() → str \| None` | Return SQL to run after staging→enrichment sync; `None` skips stage |
+| `sync_staging_to_enrichment()` | override | Custom aggregation on sync (hourly rollup, spatial grid) |
+
+```python
+# Real example from weatherStationMapper.py
+def enrichment_db_query(self) -> str | None:
+    staging = self.data_source_config.storage.staging
+    enrichment = self.data_source_config.storage.enrichment
+    return f"""
+        UPDATE {enrichment.table_schema}.{enrichment.table_name} e
+        SET point = ST_SetSRID(ST_MakePoint(s.lon, s.lat), 4326)
+        FROM {staging.table_schema}.{staging.table_name} s
+        WHERE e.dwd_station_id = s.dwd_station_id
+          AND e.point IS NULL
+    """
+```
+
+```python
+# Real example from airQualityDataMapper.py — CRS transform
+def enrichment_db_query(self) -> str | None:
+    enrichment = self.data_source_config.storage.enrichment
+    return f"""
+        UPDATE {enrichment.table_schema}.{enrichment.table_name}
+        SET geom_4326 = ST_Transform(geom_25833, 4326)
+        WHERE geom_25833 IS NOT NULL AND geom_4326 IS NULL
+    """
+```
+
+### Mapping hook
+
+| Method | Signature | When to override |
+|--------|-----------|-----------------|
+| `mapping_db_query()` | `() → str \| None` | Full INSERT…SELECT for `strategy.type: custom`; `None` skips |
+
+```python
+def mapping_db_query(self) -> str | None:
+    enr = self.data_source_config.storage.enrichment
+    m = self.data_source_config.mapping
+    return f"""
+        INSERT INTO {m.table_schema}.{m.table_name}
+            (way_id, dwd_station_id, distance)
+        SELECT DISTINCT ON (e.dwd_station_id)
+            w.id,
+            e.dwd_station_id,
+            ST_Distance(w.geometry_25833, e.point::geometry) AS distance
+        FROM {enr.table_schema}.{enr.table_name} e
+        CROSS JOIN LATERAL (
+            SELECT id, geometry_25833
+            FROM {m.table_schema}.ways_base
+            ORDER BY geometry_25833 <-> e.point::geometry
+            LIMIT 1
+        ) w
+        ON CONFLICT (way_id) DO UPDATE SET
+            dwd_station_id = EXCLUDED.dwd_station_id,
+            distance        = EXCLUDED.distance
+    """
+```
+
 ### Run-level hooks
 
-| Function | When to override | What it should do |
-|---|---|---|
-| `prepare_run_resources(self, paths)` | Extra setup before file processing | Additional temp tables or caches |
-| `process_extracted_paths(self, paths)` | Custom orchestration beyond threadpool | Replace default file-processing behavior |
-| `get_process_file_backend(self)` | Different backend selection | Return custom backend name |
-| `get_process_file_worker_count(self)` | Control parallelism | Return worker count |
-| `after_datasource_success(self)` | Extra success-side effects | Trigger external systems |
-| `run_end_cleanup(self, succeeded, error)` | Always-run cleanup | Delete temp files, release resources |
-| `on_run_error(self, error)` | Run-level error behavior | Custom reporting |
+| Method | Signature | When to override |
+|--------|-----------|-----------------|
+| `run_end_cleanup(succeeded, error)` | `(bool, Exception\|None) → None` | Always fires — temp file cleanup, memory release |
+| `check_before_update()` | `() → bool` | Return `False` to abort run before extraction starts |
+| `after_datasource_success()` | `() → None` | Extra success-side effects (notify external system) |
+| `on_run_error(error)` | `(Exception) → None` | Custom run-level error reporting |
+| `prepare_run_resources(paths)` | `(list) → None` | Extra setup before file processing starts |
+| `get_process_file_worker_count()` | `() → int` | Control thread pool parallelism |
 
 ## Mapping strategies
 
 Built-in mapping modes in [data_source_abc_impl.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/main_core/data_source_abc_impl.py):
 
-### Control Strategies
-1. `custom` - calls mapper's `mapping_db_query()` method
-2. `sql_template` - uses `mapping.config.sql` template with placeholders
-3. `none` - skips mapping entirely
+### Control strategies
+- `custom` — calls mapper's `mapping_db_query()` (full SQL control)
+- `sql_template` — uses `mapping.config.sql` template with `{mapping_table}`, `{enrichment_table}` placeholders
+- `none` — skips mapping entirely
 
-### Spatial Strategies (Registry-Backed)
-4. `nearest_neighbour` / `knn` / `nearest_station` - maps each base geometry to its nearest enrichment feature
-5. `within_distance` - maps base geometries to all enrichment features within max distance
-6. `intersection` - maps spatially intersecting features
-7. **NEW** `nearest_k` / `k_nearest` / `knn_multiple` - maps each base geometry to K nearest enrichment features
-8. **NEW** `aggregate_within_distance` / `buffer_aggregate` - aggregates all enrichment features within a buffer distance
+### Spatial strategies (auto-generate PostGIS SQL)
+- `knn` / `nearest_neighbour` — nearest road segment per feature
+- `within_distance` — all features within a buffer radius
+- `intersection` — spatially intersecting features
+- `nearest_k` / `knn_multiple` — K nearest road segments per feature
+- `aggregate_within_distance` / `buffer_aggregate` — aggregate features within buffer per road
 
-### Non-Spatial Strategies
-9. **NEW** `attribute_join` / `id_join` / `key_join` - joins based on shared attribute columns (non-spatial)
+### Non-spatial strategies
+- `attribute_join` / `id_join` — standard SQL JOIN on a shared column (no geometry)
 
-### Strategy Behavior
+### Strategy config examples
 
-1. **`custom`**: Calls mapper's `mapping_db_query()` - full SQL control in Python code
-2. **`sql_template`**: Reads `mapping.config.sql` string and formats placeholders like `{mapping_table}`, `{enrichment_table}`, etc.
-3. **`none`**: Completely skips the mapping step
-4. **Spatial strategies**: Auto-generate optimized PostGIS SQL based on `mapping.config` parameters
-5. **Attribute join**: Standard SQL JOIN on ID columns instead of geometry
-
-### New Strategy Configuration Examples
-
-#### Nearest K Strategy
 ```yaml
+# nearest_k — 5 nearest stations per road
 mapping:
-  enable: true
   strategy:
     type: nearest_k
-  config:
-    k: 5  # Find 5 nearest neighbors
+    k: 5
     base_geometry_column: geometry
     enrichment_geometry_column: point
-    order_by_sql: ST_Distance({base_geometry}::geography, {enrichment_geometry}::geography)
+    order_by_sql: "ST_Distance({base_geometry}::geography, {enrichment_geometry}::geography)"
 ```
 
-#### Aggregate Within Distance Strategy
 ```yaml
+# aggregate_within_distance — all trees within 50 m per road
 mapping:
-  enable: true
   strategy:
     type: aggregate_within_distance
-  config:
-    max_distance: 50  # meters
-    aggregation_type: jsonb_agg  # Options: jsonb_agg, array_agg, count, avg, sum, min, max
+    max_distance: 50
+    aggregation_type: jsonb_agg
     aggregation_column: tree_id
     aggregation_alias: nearby_trees
     base_geometry_column: geometry_25833
     enrichment_geometry_column: geometry_25833
 ```
 
-#### Attribute Join Strategy
 ```yaml
+# attribute_join — join on shared OSM id column
 mapping:
-  enable: true
   strategy:
     type: attribute_join
     link_on:
       base_column: osm_id
       mapping_column: external_osm_id
-  config:
-    join_type: INNER  # or LEFT, RIGHT
-    select_all_enrichment: true  # Include all enrichment columns
+    join_type: INNER
 ```
 
 ## Recommended order when writing a new mapper
@@ -447,10 +538,11 @@ sequenceDiagram
 
 ## Concrete examples already in the repo
 
-1. [data_mappers/weatherMapper.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/data_mappers/weatherMapper.py): overrides `source_filter()`
-2. [data_mappers/pleasantBicyclingMapper.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/data_mappers/pleasantBicyclingMapper.py): overrides `read_file_content()` and `mapping_db_query()`
-3. [data_mappers/elevationPythonMapper.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/data_mappers/elevationPythonMapper.py): overrides `pre_filter_processing()` and `post_database_processing()`
-4. [data_mappers/treeMapper.py](/Users/krutarthparwal/Documents/mdp/modular-data-pipeline/data_mappers/treeMapper.py): overrides `read_file_content()` and `mapping_db_query()`
+1. [data_mappers/weatherMapper.py](../data_mappers/weatherMapper.py) — overrides `source_filter()` to flatten per-station weather arrays
+2. [data_mappers/weatherStationMapper.py](../data_mappers/weatherStationMapper.py) — overrides `source_filter()` and `enrichment_db_query()` to build point geometry
+3. [data_mappers/airQualityDataMapper.py](../data_mappers/airQualityDataMapper.py) — overrides `read_file_content()` (gzip JSON) and `enrichment_db_query()` (CRS transform)
+4. [data_mappers/elevationMapper.py](../data_mappers/elevationMapper.py) — overrides `pre_filter_processing()` (raster sampling) and `post_database_processing()` (flush metrics)
+5. [data_mappers/treeMapper.py](../data_mappers/treeMapper.py) — overrides `read_file_content()`; uses `enrichment_operators` in YAML instead of `enrichment_db_query()`
 
 ## Practical notes
 
@@ -459,3 +551,90 @@ sequenceDiagram
 3. `process_file()` uses a thread pool by default.
 4. Mapping only runs if `mapping.enable` is `true`.
 5. Mapping is skipped when the mapping table row count already equals the base graph row count.
+
+---
+
+## Full ETL sequence diagram
+
+Shows the exact call order from `run()` to materialized view refresh, including multi-file branching and thread pool processing:
+
+```mermaid
+sequenceDiagram
+    participant S as Scheduler/Caller
+    participant D as DataSourceABCImpl.run()
+    participant M as metadata_service
+    participant H as HttpHandler/FileHandler
+    participant T as ThreadPool (process_file)
+    participant DB as Database
+    participant BG as BaseGraph/Mapping
+    participant MV as MaterializedViewManager
+
+    S->>D: run()
+    D->>D: start_execution()
+    D->>M: mark_run_started()
+
+    D->>D: execute_run_pipeline()
+    D->>D: extract()
+    D->>D: source()
+
+    alt SINGLE mode
+        D->>H: metadata check (remote vs saved)
+        alt changed
+            D->>H: download file
+        else unchanged
+            D->>H: resolve latest saved local file
+        end
+    else MULTI mode
+        loop each param/url variant
+            D->>H: metadata check
+            alt changed
+                D->>H: download variant file
+            else unchanged
+                D->>H: use latest saved variant file
+            end
+        end
+    end
+
+    D->>M: update_runtime_file_paths(paths)
+
+    alt no paths
+        D->>D: run_job_response("No files available")
+    else has paths
+        D->>DB: create_data_tables() + raw_staging clone
+        D->>T: run_threadpool_file_processing(paths)
+
+        par each file path
+            T->>D: process_file(path)
+            D->>D: transform(path)
+            D->>H: read_files()
+            D->>D: before/pre/source_filter/post/after hooks
+            alt transformed_data exists
+                D->>DB: bulk_insert(raw_staging, data)
+            else empty
+                D->>D: skip load
+            end
+        end
+
+        D->>DB: post_database_processing()
+        D->>DB: sync raw_staging → staging
+        D->>DB: create staging indexes (if deferred)
+        D->>DB: execute_on_staging() SQL hook
+        D->>DB: sync staging → enrichment
+        D->>DB: create enrichment indexes (if deferred)
+        D->>DB: execute_on_enrichment() SQL hook
+        D->>BG: map_to_base() / execute mapping strategy
+        D->>DB: create mapping indexes (if deferred)
+        D->>MV: trigger materialized views
+        D->>DB: clean_raw_staging_table(backup_if_sync_failed)
+
+        D->>D: run_job_response("Job finished Successfully !!!")
+    end
+
+    alt exception anywhere in run pipeline
+        D->>D: on_run_error()
+        D->>D: run_job_response("Job failed")
+    end
+
+    D->>M: mark_run_finished(success, message)
+    D->>D: run_end_cleanup(success/error)
+```

@@ -31,8 +31,12 @@ materialized_views:
 
 scheduler:
   name: APSScheduler
+  # When false: datasources run once at startup but are never re-scheduled.
+  # Set to true to enable periodic scheduling (cron / interval triggers).
   enable: false
   description: "This is a scheduler which helps to orchestrate the background task on either thread or process level"
+  # Timezone for all job fire times. Any tz name from the IANA database works
+  # (e.g. "America/New_York", "UTC", "Asia/Tokyo").
   timezone: "Europe/Berlin"
   scheduler_type: BackgroundScheduler   #https://apscheduler.readthedocs.io/en/3.x/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
   wait_before_shutdown: false # should executor wait before shutdown to let jobs finish execution
@@ -40,6 +44,9 @@ scheduler:
 data_folder: ./data_source_configs/
 
 env_variables:
+  # PostgreSQL schema where all ETL tables are created (staging, enrichment, mapping,
+  # materialized views). Change this to match your database schema — there is nothing
+  # special about the name "exp_null"; it is just the default used in development.
   base_schema: &db_schema exp_null
   base_table: &base_table_name ways_base
   # Cache/tmp paths: write them as `tmp/...` below. The leading `tmp` root is
@@ -88,7 +95,11 @@ mapping_defaults:
   table_schema: *db_schema
   incremental: false
   config:
-    # Berlin local CRS — base ways and most enrichment tables store geometry_25833.
+    # Default geometry column names used in spatial JOIN queries.
+    # geometry_25833 is EPSG:25833 (ETRS89 / UTM zone 33N) — the local projected CRS
+    # used for Berlin. If your ways_base and enrichment tables use a different CRS or
+    # column name (e.g. geometry_4326, geom), update both values here so all
+    # datasources inherit the correct defaults without per-datasource overrides.
     base_geometry_column: geometry_25833
     enrichment_geometry_column: geometry_25833
     base_id_column: id
@@ -159,7 +170,7 @@ communication:
       require_is_completed: true
 
 graph:
-  enable: false # TODO prepare main graph tables for nodes and links
+  enable: false
   tool: external_ingest # terminal or custom local tool either use osm2pgrouting with config.xml to create the initial tables or custom osmosis class with the help of handler
   schema: *db_schema  # table schema
   table_name: way_segment #links
@@ -191,12 +202,11 @@ graph:
         id: graphJob
   #      executor: process
         trigger:
-          # https://apscheduler.readthedocs.io/en/latest/userguide.html#choosing-the-right-scheduler-job-store-s-executor-s-and-trigger-s
           type:
             name: interval # interval , cron, date
             start_date: 2025-12-21T11:15:00
             config: # should be same key value pair to for job
-              days: 15
+              days: 1
 
         replace_existing: true
         coalesce: true

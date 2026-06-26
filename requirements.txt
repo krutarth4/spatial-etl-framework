@@ -1,6 +1,5 @@
 rasterio
 pandas
-celery
 ijson
 orjson
 pyproj

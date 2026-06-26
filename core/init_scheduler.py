@@ -66,7 +66,7 @@ class InitScheduler:
         # }
         if not hasattr(self, "scheduler"):
             self.scheduler = BackgroundScheduler(
-                timezone="Europe/Berlin",
+                timezone=self.conf_scheduler.timezone,
                 executors=self.executors,
                 job_defaults=self.job_defaults,
             )
