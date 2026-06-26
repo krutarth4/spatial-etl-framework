@@ -10,7 +10,7 @@ from database.db_configuration import DbConfiguration, DBConfigDTO
 import threading
 
 from database.db_repository import DBRepository
-from log_manager.logger_manager import PipelineLogger
+from utils.logger_manager import PipelineLogger
 
 # import all the tables from the mappers and already created static tables
 import custom_graph_base_tables

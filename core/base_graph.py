@@ -7,7 +7,7 @@ from custom_graph_base_tables import (
     WaysBaseChangesTable,
     WaysBaseTable,
 )
-from data_config_dtos.data_source_config_dto import BaseGraphDTO
+from utils.data_source_config_dto import BaseGraphDTO
 from database.db_instance import DbInstance
 
 

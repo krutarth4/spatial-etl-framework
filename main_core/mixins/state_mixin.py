@@ -15,9 +15,9 @@ from typing import Any
 from core.base_graph import BaseGraph
 from core.init_scheduler import InitScheduler
 from database.db_instance import DbInstance
-from log_manager.logger_manager import PipelineLogger
+from utils.logger_manager import PipelineLogger
 from main_core.safe_class import safe_class
-from data_config_dtos.data_source_config_dto import DataSourceDTO, SourceInputDTO
+from utils.data_source_config_dto import DataSourceDTO, SourceInputDTO
 
 
 @safe_class

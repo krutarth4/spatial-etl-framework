@@ -1,4 +1,4 @@
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 
 
 class ResponseHandler:

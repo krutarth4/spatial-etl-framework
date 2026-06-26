@@ -3,7 +3,7 @@ from datetime import datetime
 
 import requests
 
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 from main_core.core_config import CoreConfig
 
 from communication.comm_repository import CommRepository

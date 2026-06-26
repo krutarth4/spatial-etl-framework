@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import uvicorn
 
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 
 
 @dataclass

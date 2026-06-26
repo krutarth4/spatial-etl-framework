@@ -1,9 +1,9 @@
 
-from data_config_dtos.data_source_config_dto import GraphConfDTO
+from utils.data_source_config_dto import GraphConfDTO
 from graph.graph_loader import NodeRefCounter, LinkBuilderHandler
 from graph.osm_highway_type import OsmHighwayType
 from handlers.file_handler import FileHandler
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 from utils.execution_time import measure_time
 
 

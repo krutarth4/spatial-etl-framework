@@ -10,7 +10,7 @@ from starlette.middleware.cors import CORSMiddleware
 from communication.comm_service import CommService
 from core.application import Application
 from core.debug_mapper_service import DebugMapperService
-from log_manager.logger_manager import LoggerManager, setup_file_logging
+from utils.logger_manager import LoggerManager, setup_file_logging
 from main_core.core_config import CoreConfig
 from utils.execution_time import measure_time
 

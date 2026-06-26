@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path, PurePath, PosixPath
 from typing import Any, Optional, Callable
 
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 
 
 class FileHandler:

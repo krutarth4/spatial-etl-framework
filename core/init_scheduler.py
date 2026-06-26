@@ -8,7 +8,7 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 from main_core.core_config import CoreConfig
 
 

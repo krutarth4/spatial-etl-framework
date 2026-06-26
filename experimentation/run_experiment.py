@@ -92,7 +92,7 @@ import main_core.core_config as _cc
 _cc.CoreConfig.filepath = str(_CONFIG_DEST)
 print(f"[experiment] CoreConfig.filepath → {_CONFIG_DEST.name}")
 
-from log_manager.logger_manager import setup_file_logging
+from utils.logger_manager import setup_file_logging
 setup_file_logging(_cc.CoreConfig().get_config().get("logging") or {})
 log_banner()  # plain-text banner → pipeline.log (file handler now attached)
 

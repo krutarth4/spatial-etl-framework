@@ -13,7 +13,7 @@ from itertools import product
 from pathlib import Path
 from typing import Any, List
 
-from data_config_dtos.data_source_config_dto import (
+from utils.data_source_config_dto import (
     SourceDTO,
     SourceFetchModeEnum,
     SourceInputDTO,

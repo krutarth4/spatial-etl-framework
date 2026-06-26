@@ -1,7 +1,7 @@
 import importlib
 from typing import Any
 
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 from materialized_views.handlers import GenericMaterializedViewHandler
 
 

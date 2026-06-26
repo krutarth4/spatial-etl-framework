@@ -14,7 +14,7 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.dialects.postgresql import Insert
 
 from database.base import Base
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 from main_core.core_config import CoreConfig
 
 

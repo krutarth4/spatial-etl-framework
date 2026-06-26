@@ -11,9 +11,9 @@ from core.command_runner import CommandRunner
 from core.custom_graph_loader import CustomGraphLoader
 from core.init_scheduler import InitScheduler
 from communication.comm_service import CommService
-from data_config_dtos.data_source_config_dto import GraphConfDTO
+from utils.data_source_config_dto import GraphConfDTO
 from database.db_instance import DbInstance
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 from main_core.data_source_mapper import DataSourceMapper
 from main_core.safe_class import safe_class
 

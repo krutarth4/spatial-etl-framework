@@ -2,10 +2,10 @@ import importlib
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from data_config_dtos.data_source_config_dto import DataSourceDTO
+from utils.data_source_config_dto import DataSourceDTO
 from dacite import from_dict, Config
 
-from log_manager.logger_manager import LoggerManager, REPORT_LEVEL
+from utils.logger_manager import LoggerManager, REPORT_LEVEL
 from main_core.safe_class import safe_class
 from metadata.data_source_metadata_service import DataSourceMetadataService
 

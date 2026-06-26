@@ -11,7 +11,7 @@ from typing import Any
 
 from config_features.base import DatasourceFeature, FeatureIssue
 from config_features.registry import DatasourceFeatureRegistry
-from data_config_dtos.data_source_config_dto import (
+from utils.data_source_config_dto import (
     SourceMultiFetchDTO,
     SourceMultiFetchStrategy,
 )

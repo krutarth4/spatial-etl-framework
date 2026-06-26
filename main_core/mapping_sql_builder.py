@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from data_config_dtos.data_source_config_dto import MappingDTO
+    from utils.data_source_config_dto import MappingDTO
     from main_core.data_source_abc_impl import DataSourceABCImpl
 
 

@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 
 
 class CommandRunner:

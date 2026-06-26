@@ -16,7 +16,7 @@ from banner import print_banner, log_banner
 
 import uvicorn
 from core.application import Application
-from log_manager.logger_manager import LoggerManager, setup_file_logging
+from utils.logger_manager import LoggerManager, setup_file_logging
 from main_core.core_config import CoreConfig
 
 

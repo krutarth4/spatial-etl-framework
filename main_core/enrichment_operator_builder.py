@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from data_config_dtos.data_source_config_dto import (
+    from utils.data_source_config_dto import (
         EnrichmentOperatorDTO,
         EnrichmentOperatorsConfigDTO,
     )

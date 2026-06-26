@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, Dict
 
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 
 
 class MaxSpeedData:

@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 import yaml
 from dotenv import load_dotenv
 
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 
 load_dotenv()
 

@@ -4,7 +4,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 from main_core.core_config import CoreConfig
 
 

@@ -3,9 +3,9 @@ from copy import deepcopy
 from pathlib import Path
 
 from config_features.registry import DatasourceFeatureRegistry
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 from readers.yaml_reader import YamlReader
-from validators.job_trigger_validator import validate_all_job_triggers
+from utils.job_trigger_validator import validate_all_job_triggers
 
 def _split_csv_env(name):
     raw = os.getenv(name, "")

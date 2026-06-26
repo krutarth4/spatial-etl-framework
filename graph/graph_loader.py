@@ -15,7 +15,7 @@ from graph.osm_smoothness import OsmSmoothness
 from graph.osm_surface import OsmSurface
 from graph.osm_travel_modes import OsmTravelModes
 from graph.travel_mode_dot import TravelModesDot
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 from main_core.core_config import CoreConfig
 
 

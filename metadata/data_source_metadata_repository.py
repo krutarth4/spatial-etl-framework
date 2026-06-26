@@ -5,7 +5,7 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import make_transient
 
 from database.base import Base
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 
 
 class DataSourceMetadata(Base):

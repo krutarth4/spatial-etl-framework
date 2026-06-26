@@ -10,7 +10,7 @@ from requests.adapters import HTTPAdapter
 import logging
 
 from handlers.file_handler import FileHandler
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 from main_core.safe_class import safe_class
 
 

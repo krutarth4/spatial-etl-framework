@@ -19,13 +19,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select, update, insert, Column, BigInteger, text, func, Row, RowMapping, TIMESTAMP, Numeric, \
     Table, or_, MetaData, UniqueConstraint
 
-from data_config_dtos.data_source_config_dto import BaseGraphDTO
+from utils.data_source_config_dto import BaseGraphDTO
 from database.base import Base
 from database.db_configuration import DbConfiguration
 from sqlalchemy.dialects.postgresql import Insert, JSONB, ARRAY, UUID as PG_UUID
 from typing import Union, List, Any, Sequence
 
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 from sqlalchemy import (
     Integer, Float, String, Boolean, Date, DateTime, JSON
 )

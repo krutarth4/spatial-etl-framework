@@ -16,7 +16,7 @@ Pipeline stage overview:
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from data_config_dtos.data_source_config_dto import SourceDTO
+from utils.data_source_config_dto import SourceDTO
 
 
 class DataSourceABC(ABC):

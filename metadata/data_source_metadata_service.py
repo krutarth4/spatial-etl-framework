@@ -8,9 +8,9 @@ from pathlib import Path
 
 from dacite import from_dict
 
-from data_config_dtos.data_source_config_dto import MetadataConfDTO
+from utils.data_source_config_dto import MetadataConfDTO
 from database.db_instance import DbInstance
-from log_manager.logger_manager import LoggerManager
+from utils.logger_manager import LoggerManager
 from metadata.data_source_metadata_repository import DataSourceMetadataRepository
 
 
