@@ -2,7 +2,7 @@
 
 > A config-driven ETL pipeline for continuously enriching an OpenStreetMap / PostGIS road graph with real-world geospatial data.
 
-[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python)](requirements.txt)
 [![PostGIS](https://img.shields.io/badge/PostgreSQL-16%20%2B%20PostGIS-336791?logo=postgresql)](Dockerfile)
 
