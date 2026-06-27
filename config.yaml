@@ -182,7 +182,7 @@ graph:
       description: "gets weather station data with their location"
       enable: true # to use the data source or not
   #    check_before_update: false
-      class_name: graph
+      class_name: graphMapper
       debug:
         endpoint: osm-graph
       data_type: static # static / Dynamic
