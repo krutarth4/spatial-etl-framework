@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import dataclass
 from typing import Any
 
@@ -209,12 +210,61 @@ class GenericMaterializedViewHandler(BaseMaterializedViewHandler):
     or uses `definition.custom_sql.{create,refresh}` verbatim when provided.
     """
 
+    _COMMENT_PREFIX = "etl-sql-hash:"
+
+    def _select_sql_hash(self) -> str | None:
+        """SHA256 of the current YAML select_sql (None if not using select_sql path)."""
+        sql = self.conf.select_sql
+        if not sql or self.conf.create_sql:
+            return None
+        return hashlib.sha256(sql.encode()).hexdigest()
+
+    def _stored_sql_hash(self) -> str | None:
+        """Read the hash we stamped on the MV comment when we last created it."""
+        try:
+            rows = self.db.fetch_query(
+                "SELECT obj_description(oid, 'pg_class') "
+                "FROM pg_class "
+                "WHERE relname = :name AND relnamespace = "
+                "(SELECT oid FROM pg_namespace WHERE nspname = :schema)",
+                {"name": self.conf.name, "schema": self.conf.schema},
+            )
+            comment = rows[0][0] if rows else None
+            if comment and comment.startswith(self._COMMENT_PREFIX):
+                return comment[len(self._COMMENT_PREFIX):]
+        except Exception:
+            pass
+        return None
+
+    def _stamp_sql_hash(self, sql_hash: str):
+        self._exec(
+            f"COMMENT ON MATERIALIZED VIEW "
+            f'"{self.conf.schema}"."{self.conf.name}" '
+            f"IS '{self._COMMENT_PREFIX}{sql_hash}'"
+        )
+
+    def _drop_mv(self):
+        self._exec(
+            f'DROP MATERIALIZED VIEW IF EXISTS "{self.conf.schema}"."{self.conf.name}"'
+        )
+
     def ensure(self):
         if self.db is None:
             return
+
         if self.db.materialized_view_exists(self.conf.name, self.conf.schema):
-            self._ensure_indexes()
-            return
+            current_hash = self._select_sql_hash()
+            stored_hash = self._stored_sql_hash()
+            if current_hash and current_hash != stored_hash:
+                if self.logger:
+                    self.logger.warning(
+                        f"MV '{self.conf.identifier}' definition changed "
+                        f"(stored={stored_hash!r}, current={current_hash!r}) — recreating"
+                    )
+                self._drop_mv()
+            else:
+                self._ensure_indexes()
+                return
 
         sql = self.conf.create_sql
         if sql is None:
@@ -226,6 +276,9 @@ class GenericMaterializedViewHandler(BaseMaterializedViewHandler):
             sql = self._wrap_create(self.conf.select_sql.format(schema=self.conf.schema))
 
         self._exec(sql)
+        current_hash = self._select_sql_hash()
+        if current_hash:
+            self._stamp_sql_hash(current_hash)
         self._ensure_indexes()
 
     def refresh(self):
