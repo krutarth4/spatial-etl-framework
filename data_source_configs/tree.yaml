@@ -127,8 +127,6 @@ materialized_view:
   name: mv_tree
   description: "Per-way tree aggregation (JSONB) within 50 m of each base way"
   # tree_mapping has no unique id index → plain (non-concurrent) refresh.
-  refresh:
-    mode: normal
   depends_on:
     tables:
       - { name: ways_base }
@@ -141,9 +139,11 @@ materialized_view:
           w.from_node_id,
           w.to_node_id,
           w.way_link_index,
-          COALESCE(m.trees, '[]'::jsonb) AS trees
+          COALESCE(m.trees, '[]'::jsonb) AS trees,
+          COALESCE(jsonb_array_length(m.trees), 0) AS tree_count
       FROM {schema}.ways_base w
       LEFT JOIN {schema}.tree_mapping m
           ON m.way_id = w.id
   indexes:
+    - { name: idx_mv_tree_id, columns: [id], unique: true }
     - { name: idx_mv_tree_way_id, columns: [way_id] }

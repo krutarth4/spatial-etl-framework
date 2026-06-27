@@ -1,7 +1,7 @@
 # Air quality grid (DCAITI / TU Berlin). Paged JSON fetch via url_template.
 name: "air_quality_data_download"
 description: "Air quality data from the dcaiti Tu Berlin server"
-enable: true
+enable: false
 class_name: airQualityDataMapper
 debug:
   endpoint: air-quality

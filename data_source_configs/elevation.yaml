@@ -2,7 +2,7 @@
 # downsamples to a coarser averaged grid, then samples per-way ascent/descent.
 name: elevation
 description: " 1m elevation "
-enable: true
+enable: false
 class_name: elevationMapper
 depends_on: elevation_grids_links
 debug:

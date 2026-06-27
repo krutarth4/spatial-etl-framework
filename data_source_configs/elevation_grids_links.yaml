@@ -2,7 +2,7 @@
 # the `elevation` datasource consumes as its multi-fetch URL list.
 name: elevation_grids_links
 description: " 1m elevation Grid links "
-enable: true
+enable: false
 check_before_update: true
 class_name: elevationGridMapper
 debug:
