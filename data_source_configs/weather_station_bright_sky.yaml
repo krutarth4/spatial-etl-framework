@@ -4,7 +4,7 @@
 name: "weather_station_bright_sky"
 description: "gets weather station data with their location"
 enable: true
-class_name: weatherStation
+class_name: weatherStationMapper
 debug:
   endpoint: weather-station
 table_name: dwd_station_locations

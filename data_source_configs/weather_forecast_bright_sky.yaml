@@ -2,7 +2,7 @@
 name: "weather_forecast_bright_sky"
 description: "get weather forecast for the dwd_stations in params with hourly forecast "
 enable: true
-class_name: weather
+class_name: weatherMapper
 debug:
   endpoint: weather-forecast
 data_type: dynamic

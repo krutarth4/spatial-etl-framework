@@ -22,23 +22,19 @@ from metadata.data_source_metadata_service import DataSourceMetadataService
 
 def load_mapper(class_name: str):
     """
-    Instantiate the mapper identified by class_name (e.g. "weather", "tree").
-    Strips a trailing "Mapper" suffix if present, so both "weather" and "weatherMapper"
-    are accepted.
+    Instantiate the mapper identified by class_name (e.g. "weatherMapper", "treeMapper").
 
     Returns:
         (instance, dto, mapper_class, db_instance, base_conf, metadata_service)
 
     The instance has scheduler=None so execute() routes straight to run().
     """
-    normalised = _strip_mapper_suffix(class_name)
-
     conf = CoreConfig().get_config()
 
-    raw_dto = _find_datasource_dto(conf, normalised)
+    raw_dto = _find_datasource_dto(conf, class_name)
     if raw_dto is None:
         available = [
-            _strip_mapper_suffix(str(ds.get("class_name", "")))
+            str(ds.get("class_name", ""))
             for ds in conf.get("datasources", [])
             if ds.get("class_name")
         ]
@@ -58,30 +54,23 @@ def load_mapper(class_name: str):
     metadata_conf = conf.get("metadata-datasource")
     metadata_service = DataSourceMetadataService(db, metadata_conf)
 
-    mapper_class = _import_mapper_class(normalised)
+    mapper_class = _import_mapper_class(class_name)
     instance = mapper_class(dto, db, None, base_conf, metadata_service)
 
     return instance, dto, mapper_class, db, base_conf, metadata_service
 
 
-def _strip_mapper_suffix(name: str) -> str:
-    if name.endswith("Mapper"):
-        return name[:-6]
-    return name
-
-
-def _find_datasource_dto(conf: dict, normalised_class_name: str) -> dict | None:
+def _find_datasource_dto(conf: dict, class_name: str) -> dict | None:
     for entry in conf.get("datasources", []):
         if not isinstance(entry, dict):
             continue
-        raw_class = _strip_mapper_suffix(str(entry.get("class_name") or "").strip())
-        if raw_class == normalised_class_name:
+        if str(entry.get("class_name") or "").strip() == class_name:
             return entry
     return None
 
 
-def _import_mapper_class(normalised: str):
-    module_path = f"data_mappers.{normalised}Mapper"
+def _import_mapper_class(class_name: str):
+    module_path = f"data_mappers.{class_name}"
     module = importlib.import_module(module_path)
-    ctor_name = normalised[0].upper() + normalised[1:] + "Mapper"
+    ctor_name = class_name[0].upper() + class_name[1:]
     return getattr(module, ctor_name)

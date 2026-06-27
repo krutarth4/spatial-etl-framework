@@ -2,7 +2,7 @@
 name: pleasant_bicycling
 description: " Get the density of vehicles on the road "
 enable: true
-class_name: pleasantBicycling
+class_name: pleasantBicyclingMapper
 debug:
   endpoint: pleasant-bicycling
 data_type: dynamic

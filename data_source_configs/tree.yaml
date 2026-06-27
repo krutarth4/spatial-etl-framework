@@ -2,7 +2,7 @@
 name: tree
 description: " Get Trees on the side of the road within 50 m distance "
 enable: true
-class_name: tree
+class_name: treeMapper
 debug:
   endpoint: tree
 data_type: static

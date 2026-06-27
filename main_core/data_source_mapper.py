@@ -181,12 +181,10 @@ class DataSourceMapper:
     def _run_one_datasource(self, source):
         data = source
         class_name = (data.class_name or "").strip()
-        if class_name.endswith("Mapper"):
-            class_name = class_name[:-6]
         try:
-            module_path = f"{self._prefix_path}.{class_name}Mapper"
+            module_path = f"{self._prefix_path}.{class_name}"
             module = importlib.import_module(module_path)
-            mapper_class = getattr(module, f"{class_name[0].upper() + class_name[1:]}Mapper")
+            mapper_class = getattr(module, class_name[0].upper() + class_name[1:])
             instance_data_source = mapper_class(data, self.db_instance, self.scheduler_core, self.base_graph_conf, self.metadata_service)
             instance_data_source.peer_configs = self._peer_configs
             instance_data_source.execute()

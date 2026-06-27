@@ -2,7 +2,7 @@
 name: "air_quality_data_download"
 description: "Air quality data from the dcaiti Tu Berlin server"
 enable: true
-class_name: airQualityData
+class_name: airQualityDataMapper
 debug:
   endpoint: air-quality
 data_type: dynamic

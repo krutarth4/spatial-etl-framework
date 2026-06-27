@@ -3,7 +3,7 @@
 name: elevation
 description: " 1m elevation "
 enable: true
-class_name: elevation
+class_name: elevationMapper
 depends_on: elevation_grids_links
 debug:
   endpoint: elevation

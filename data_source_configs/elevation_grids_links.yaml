@@ -4,7 +4,7 @@ name: elevation_grids_links
 description: " 1m elevation Grid links "
 enable: true
 check_before_update: true
-class_name: elevationGrid
+class_name: elevationGridMapper
 debug:
   endpoint: elevation-grids
 data_type: dynamic

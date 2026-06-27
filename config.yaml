@@ -130,7 +130,7 @@ mv_defaults:
 # the OSM graph stage is just the first consumer. state_file is the JSON snapshot
 # both sides read/write; router also gets HTTP notifications at {router.base_url}.
 communication:
-  enable: false # set false to run standalone without comm/router waits
+  enable: true # set false to run standalone without comm/router waits
   state_file: tmp/comm_state.json # JSON snapshot; router reads/writes via HTTP endpoints below
   router:
     base_url: http://localhost:8082 # e.g. http://router:9000; when set, pipeline POSTs status changes to {base_url}/comm/tasks/{key}
@@ -170,7 +170,7 @@ communication:
       require_is_completed: true
 
 graph:
-  enable: false
+  enable: true
   tool: external_ingest # terminal or custom local tool either use osm2pgrouting with config.xml to create the initial tables or custom osmosis class with the help of handler
   schema: *db_schema  # table schema
   table_name: way_segment #links
