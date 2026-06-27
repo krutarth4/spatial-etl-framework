@@ -24,6 +24,49 @@ def _file_signature(path: Path) -> str | None:
         return None
 
 
+def _watch_signatures(config_path: Path) -> dict[str, str]:
+    """Return {filepath_str: sha256} for every file that should trigger a restart."""
+    sigs: dict[str, str] = {}
+    base_dir = config_path.parent
+    paths: list[Path] = [config_path]
+    for sub, pattern in [("data_source_configs", "*.yaml"), ("data_mappers", "*.py")]:
+        d = base_dir / sub
+        if d.is_dir():
+            paths.extend(sorted(d.glob(pattern)))
+    for p in paths:
+        try:
+            sigs[str(p)] = hashlib.sha256(p.read_bytes()).hexdigest()
+        except OSError:
+            pass
+    return sigs
+
+
+def _combined_signature(config_path: Path) -> str:
+    h = hashlib.sha256()
+    for key, sig in sorted(_watch_signatures(config_path).items()):
+        h.update(key.encode())
+        h.update(sig.encode())
+    return h.hexdigest()
+
+
+def _restart_argv(config_path: Path, changed: set[str]) -> list[str]:
+    """Build restart argv. Targeted (--only) when only datasource YAMLs changed."""
+    ds_config_dir = str(config_path.parent / "data_source_configs")
+    main_cfg_changed = str(config_path) in changed
+    mapper_changed = any(p.endswith(".py") for p in changed)
+    changed_ds_yamls = [
+        p for p in changed
+        if p.startswith(ds_config_dir) and p.endswith(".yaml")
+    ]
+    base = [a for i, a in enumerate(sys.argv)
+            if not (a == "--only" or a.startswith("--only=")
+                    or (i > 0 and sys.argv[i - 1] == "--only"))]
+    if not main_cfg_changed and not mapper_changed and changed_ds_yamls:
+        ds_names = [Path(p).stem for p in changed_ds_yamls]
+        return base + ["--only", ",".join(ds_names)]
+    return base
+
+
 class Application:
     logger = None
     _server = "server"
@@ -54,7 +97,7 @@ class Application:
         self.logger = LoggerManager(type(self).__name__).get_logger()
         self.core_conf = CoreConfig()
         try:
-            self._config_watch_signature = _file_signature(Path(self.core_conf.filepath))
+            self._config_watch_signature = _combined_signature(Path(self.core_conf.filepath))
         except Exception:
             self._config_watch_signature = None
 
@@ -179,13 +222,15 @@ class Application:
         poll_seconds = float(watch_conf.get("poll_seconds", 2))
         config_path = Path(self.core_conf.filepath)
         if watch_enabled and self._config_watch_signature is None:
-            self._config_watch_signature = _file_signature(config_path)
+            self._config_watch_signature = _combined_signature(config_path)
+
+        baseline_sigs: dict[str, str] = _watch_signatures(config_path) if watch_enabled else {}
 
         self.logger.info("Keep-alive active (no scheduler). Waiting for config changes or manual stop.")
         if watch_enabled:
             self.logger.info(
                 f"Config watch enabled: path={config_path.resolve()} poll_seconds={poll_seconds} "
-                f"signature={self._config_watch_signature}"
+                f"(+ data_source_configs/, data_mappers/)"
             )
         else:
             self.logger.info("Config watch disabled in keep-alive")
@@ -194,10 +239,18 @@ class Application:
                 time.sleep(poll_seconds if watch_enabled else 10)
                 if not watch_enabled:
                     continue
-                current_sig = _file_signature(config_path)
-                if current_sig != self._config_watch_signature:
-                    self.logger.warning(f"Detected config change in {config_path}. Restarting process...")
-                    os.execv(sys.executable, [sys.executable, *sys.argv])
+                current_sigs = _watch_signatures(config_path)
+                if current_sigs == baseline_sigs:
+                    continue
+                changed = {p for p, sig in current_sigs.items() if sig != baseline_sigs.get(p)}
+                changed |= set(current_sigs) - set(baseline_sigs)
+                argv = _restart_argv(config_path, changed)
+                targeted = "--only" in argv
+                self.logger.warning(
+                    f"Detected change in {changed} — "
+                    f"{'targeted' if targeted else 'full'} restart"
+                )
+                os.execv(sys.executable, [sys.executable, *argv])
         except (KeyboardInterrupt, SystemExit):
             self.logger.info("Keep-alive stopped")
 

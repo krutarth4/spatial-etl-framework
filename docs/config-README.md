@@ -55,8 +55,8 @@ Controls process behavior outside the ETL itself.
 
 | Key | Meaning | Current example | Other supported values |
 |---|---|---|---|
-| `config_watch.enable` | Watches `config.yaml` and restarts process when it changes | `true` | `true`, `false` |
-| `config_watch.poll_seconds` | Poll interval for config reload detection | `2` | Any positive number |
+| `config_watch.enable` | Watches `config.yaml`, all `data_source_configs/*.yaml`, and all `data_mappers/*.py`. Restarts with `--only <name>` when only a datasource YAML changed; full restart when `config.yaml` or a mapper `.py` changed. | `true` | `true`, `false` |
+| `config_watch.poll_seconds` | Poll interval (seconds) for change detection | `2` | Any positive number |
 
 ### `materialized_views`
 

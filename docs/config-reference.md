@@ -40,8 +40,8 @@ Used in `Application.keep_alive_forever()`.
 
 | Key | Type | Allowed values | What it is for |
 |---|---|---|---|
-| `config_watch.enable` | bool | `true` or `false` | Enables restart on config file change in keep-alive mode. |
-| `config_watch.poll_seconds` | number | `> 0` recommended | Poll interval to detect config changes. |
+| `config_watch.enable` | bool | `true` or `false` | Watches `config.yaml`, all `data_source_configs/*.yaml`, and all `data_mappers/*.py` for changes. On change: restarts with `--only <datasource>` when only a datasource YAML changed; full restart when `config.yaml` or a mapper `.py` changed. |
+| `config_watch.poll_seconds` | number | `> 0` recommended | Poll interval (seconds) to detect config changes. |
 
 ### `materialized_views`
 

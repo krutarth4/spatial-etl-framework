@@ -51,16 +51,76 @@ def _file_signature(path: Path) -> str | None:
         return None
 
 
+def _watch_signatures(config_path: Path) -> dict[str, str]:
+    """Return {filepath_str: sha256} for every file that should trigger a restart."""
+    sigs: dict[str, str] = {}
+    base_dir = config_path.parent
+    paths: list[Path] = [config_path]
+    for sub, pattern in [("data_source_configs", "*.yaml"), ("data_mappers", "*.py")]:
+        d = base_dir / sub
+        if d.is_dir():
+            paths.extend(sorted(d.glob(pattern)))
+    for p in paths:
+        try:
+            sigs[str(p)] = hashlib.sha256(p.read_bytes()).hexdigest()
+        except OSError:
+            pass
+    return sigs
+
+
+def _combined_signature(config_path: Path) -> str:
+    """Single hash across all watched files — used by the standalone keep-alive."""
+    h = hashlib.sha256()
+    for key, sig in sorted(_watch_signatures(config_path).items()):
+        h.update(key.encode())
+        h.update(sig.encode())
+    return h.hexdigest()
+
+
+def _restart_argv(changed_ds_names: list[str]) -> list[str]:
+    """Build the argv for a targeted restart, stripping any previous --only flag."""
+    base = [a for i, a in enumerate(sys.argv)
+            if not (a == "--only" or a.startswith("--only=")
+                    or (i > 0 and sys.argv[i - 1] == "--only"))]
+    if changed_ds_names:
+        base += ["--only", ",".join(changed_ds_names)]
+    return base
+
+
 def _watch_config_and_restart(config_path: Path, poll_seconds: float = 2.0):
-    baseline = _file_signature(config_path)
-    logger.info(f"Watching config for changes: {config_path.resolve()}")
+    baseline = _watch_signatures(config_path)
+    ds_config_dir = str(config_path.parent / "data_source_configs")
+    logger.info(
+        f"Watching config for changes: {config_path.resolve()} "
+        f"(+ data_source_configs/, data_mappers/)"
+    )
 
     while True:
         time.sleep(poll_seconds)
-        current = _file_signature(config_path)
-        if current != baseline:
-            logger.warning(f"Detected config change in {config_path}. Restarting process...")
+        current = _watch_signatures(config_path)
+        if current == baseline:
+            continue
+
+        changed = {p for p, sig in current.items() if sig != baseline.get(p)}
+        changed |= set(current) - set(baseline)   # newly added files
+
+        main_cfg_changed = str(config_path) in changed
+        mapper_changed = any(p.endswith(".py") for p in changed)
+        changed_ds_yamls = [
+            p for p in changed
+            if p.startswith(ds_config_dir) and p.endswith(".yaml")
+        ]
+
+        if main_cfg_changed or mapper_changed or not changed_ds_yamls:
+            logger.warning(f"Config change detected {changed} — full restart")
             os.execv(sys.executable, [sys.executable, *sys.argv])
+        else:
+            ds_names = [Path(p).stem for p in changed_ds_yamls]
+            logger.warning(
+                f"Datasource config(s) changed {ds_names} — targeted restart with --only"
+            )
+            argv = _restart_argv(ds_names)
+            os.execv(sys.executable, [sys.executable, *argv])
 
 
 def _start_config_watcher(runtime_conf: dict | None):

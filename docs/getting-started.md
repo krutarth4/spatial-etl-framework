@@ -183,7 +183,7 @@ Now that the pipeline is running, add your own data source:
 
 1. Create `data_source_configs/my_data.yaml` — declare the URL, schedule, and mapping strategy
 2. Optionally add `data_mappers/myDataMapper.py` — only needed for non-standard file formats or custom SQL
-3. Save the file — the pipeline hot-reloads `data_source_configs/` changes in ~2 s (no restart needed)
+3. Save the file — the watcher detects the change within `poll_seconds` and automatically restarts with `--only <your_datasource>` so only that datasource re-runs (not the whole pipeline). Adding or editing a mapper `.py` triggers a full restart instead.
 
 Full guide: [configure-data-source-step-by-step.md](configure-data-source-step-by-step.md)
 

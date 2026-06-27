@@ -79,6 +79,12 @@ materialized_view:
               date_trunc('hour', MAX("timestamp")) AS forecast_end
           FROM {schema}.weather_enrichment
       ),
+      current_slot AS (
+          SELECT GREATEST(0, (EXTRACT(EPOCH FROM (
+              date_trunc('hour', NOW() AT TIME ZONE 'Europe/Berlin')
+              - (SELECT forecast_start FROM bounds)
+          )) / 3600)::int) AS idx
+      ),
       slots AS (
           SELECT
               gs                                                       AS slot_ts,
@@ -95,7 +101,10 @@ materialized_view:
           (SELECT forecast_end   FROM bounds)    AS forecast_end,
           agg.wind_speed_hourly,
           agg.wind_direction_hourly,
-          agg.visibility_hourly
+          agg.visibility_hourly,
+          NULLIF(agg.wind_speed_hourly[1 + (SELECT idx FROM current_slot)],     -1) AS wind_speed,
+          NULLIF(agg.wind_direction_hourly[1 + (SELECT idx FROM current_slot)], -1) AS wind_direction,
+          NULLIF(agg.visibility_hourly[1 + (SELECT idx FROM current_slot)],     -1) AS visibility
       FROM {schema}.ways_base w
       LEFT JOIN {schema}.dwd_station_locations_mapping m
           ON m.way_id = w.id
