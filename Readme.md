@@ -126,6 +126,7 @@ spatial-etl-framework/
 | [Weather forecast mapper](docs/example-weather-forecast-mapper.md) | `source_filter` flattens nested JSON, dynamic date param, no mapping, per-way time-series MV |
 | [Weather station mapper](docs/example-weather-station-mapper.md) | `source_filter` filter, `enrichment_db_query` lat/lon → geometry, `::geography` distance, `bearing_degree` |
 | [Graph mapper](docs/example-graph-mapper.md) | Override `execute_run_pipeline()`, OSM file download, `CommService` inter-process signal |
+| [Fountain dataset — end to end](docs/example-fountain-end-to-end.md) | OSM PBF with osmium, lat/lon → EPSG:25833 in enrichment, count aggregation, MV, Java scorer + badge |
 | **Examples — configs** | |
 | [Tree config (YAML)](docs/example-tree-config.md) | WFS `multi_fetch`, `aggregate_within_distance`, `enrichment_operators`, inline MV |
 | [Air quality config](docs/example-air-quality-config.md) | `url_template` paged fetch, `idw` strategy, `enrichment_filter_sql`, forecast window CTE |
