@@ -125,6 +125,16 @@ class PipelineLogger(logging.LoggerAdapter):
         self.logger = logging.getLogger(new_name)
         self.extra["mapper"] = new_name
 
+    def set_datasource(self, datasource_name: str):
+        """Append the datasource config name to every log line from this logger.
+
+        After calling this, log lines read:  ClassName [datasource_name] | ...
+        Called from _reset_run_state() so the name is stamped on the correct
+        thread at the start of each run.
+        """
+        class_name = self.extra["mapper"].split(" [")[0]
+        self.extra["mapper"] = f"{class_name} [{datasource_name}]"
+
 
 # Backward-compatibility alias — every existing  LoggerManager(name)  call site
 # continues to work without any change.  The only behavioural difference is that

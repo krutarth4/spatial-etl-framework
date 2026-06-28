@@ -163,6 +163,13 @@ class InitGraph:
         timeout_seconds = float(timeout_seconds) if timeout_seconds is not None else None
         require_is_completed = bool(wait_conf.get("require_is_completed", True))
 
+        existing = self.comm_service.get_task_status(task_key)
+        if existing and existing.get("is_completed"):
+            self.logger.info(
+                f"Comm task '{task_key}' already completed — skipping wait (graph is already loaded)"
+            )
+            return
+
         try:
             self.comm_service.ensure_task("ways_base_table", owner="mdp", current_status="idle", is_completed=False)
             self.comm_service.update_status(

@@ -60,8 +60,7 @@ class FetchMixin:
             return None
 
         if source.mode == SourceFetchModeEnum.SINGLE.value:
-            if source.check_metadata.enable:
-                return self.fetch()
+            return self.fetch()
         elif source.mode == SourceFetchModeEnum.MULTI.value:
             return self.multi_fetch()
         return None
@@ -103,7 +102,8 @@ class FetchMixin:
                 paths.append(resolved_path or source.destination)
 
         elif source.fetch in FetchTypeEnum.LOCAL.value:
-            path = Path(source.file_path)
+            resolved = self.resolve_latest_saved_path(source.file_path)
+            path = Path(resolved or source.file_path)
             if source.check_metadata.enable:
                 self._last_fetch_performed_download = self.is_local_source_changed(path)
             else:

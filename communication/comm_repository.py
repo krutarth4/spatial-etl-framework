@@ -140,10 +140,12 @@ class CommRepository:
             _persist_to_disk(self.state_file, self._store)
             return dict(task)
 
-    def reset_all_task_completion_flags(self) -> int:
+    def reset_all_task_completion_flags(self, exclude_owners: set | None = None) -> int:
         with self._lock:
             count = 0
             for task in self._store.values():
+                if exclude_owners and task.get("owner") in exclude_owners:
+                    continue
                 if task.get("is_completed"):
                     count += 1
                 task["is_completed"] = False

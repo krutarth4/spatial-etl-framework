@@ -51,9 +51,8 @@ class StateMixin:
         self.job_configuration = data_source_conf.job
         self.scheduler = scheduler_core
 
-        # Stamp the mapper name onto the DB logger so DB errors identify their owner
-        if self.db is not None:
-            self.db.set_owner(type(self).__name__)
+        # set_owner() is called in _reset_run_state() instead, so it stamps on
+        # the correct thread at run time rather than the main init thread.
 
         # ── Per-run mutable state ──────────────────────────────────────────
         self.start_timer = None
@@ -71,6 +70,10 @@ class StateMixin:
 
     def _reset_run_state(self):
         """Reset all per-run instance state so consecutive runs are fully independent."""
+        if self.db is not None:
+            self.db.set_owner(type(self).__name__)
+        if hasattr(self, "logger") and hasattr(self.logger, "set_datasource"):
+            self.logger.set_datasource(self.data_source_name)
         self.raw_staging_table = None
         self.raw_staging_schema = None
         self._last_fetch_performed_download = None
@@ -238,7 +241,10 @@ class StateMixin:
             return []
 
         if source.fetch in ("local",):
-            return [source.file_path] if source.file_path else []
+            if not source.file_path:
+                return []
+            resolved = self.resolve_latest_saved_path(source.file_path)
+            return [resolved or source.file_path]
 
         # single http: verify the cached download if present
         resolved = self.resolve_latest_saved_path(source.destination)

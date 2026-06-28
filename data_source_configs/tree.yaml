@@ -1,7 +1,7 @@
 # Street/garden trees within 50 m of each way (Berlin WFS, GeoPackage).
 name: tree
 description: " Get Trees on the side of the road within 50 m distance "
-enable: true
+enable: false
 class_name: treeMapper
 debug:
   endpoint: tree

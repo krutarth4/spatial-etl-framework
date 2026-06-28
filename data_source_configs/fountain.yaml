@@ -1,0 +1,73 @@
+name: fountain
+description: "OSM fountains and drinking water taps within 150 m of each road segment"
+enable: true
+class_name: fountainMapper
+data_type: static
+
+debug:
+  endpoint: fountain
+
+source:
+  mode: single
+  fetch: local
+  # FileHandler globs tmp/osm_graph/ for the latest data_berlin.osm_<timestamp>.pbf
+  file_path: tmp/osm_graph/berlin.osm.pbf
+  response_type: pbf   # custom — handled entirely by FountainMapper.read_file_content
+  check_metadata:
+    enable: false
+
+job:
+  trigger:
+    type:
+      name: interval
+      config:
+        hours: 168   # weekly — OSM extract refreshes ~weekly
+
+storage:
+  persistent: true
+  staging:
+    table_class: FountainStaging
+  enrichment:
+    table_class: FountainEnrichmentTable
+
+mapping:
+  enable: true
+  table_name: fountain_mapping
+  table_class: FountainMappingTable
+  strategy:
+    type: aggregate_within_distance
+    max_distance: 150
+    aggregation_type: count
+    aggregation_alias: fountain_count
+  base_geometry_column: geometry_25833
+  enrichment_geometry_column: geometry_25833
+  base_table:
+    column_name: fountain_count
+    column_type: Integer
+
+materialized_view:
+  name: mv_fountain
+  description: "Per-way fountain count within 150 m of each base way"
+  refresh:
+    mode: normal   # fountain_mapping has no unique index on id yet
+  depends_on:
+    tables:
+      - { name: ways_base }
+      - { name: fountain_mapping }
+  definition:
+    select_sql: |
+      SELECT
+          w.id,
+          w.way_id,
+          w.from_node_id,
+          w.to_node_id,
+          w.way_link_index,
+          COALESCE(m.fountain_count, 0) AS fountain_count,
+          CASE WHEN COALESCE(m.fountain_count, 0) > 0 THEN true ELSE false END AS has_fountain_nearby
+      FROM {schema}.ways_base w
+      LEFT JOIN {schema}.fountain_mapping m
+          ON m.way_id = w.id
+  triggers:
+    only_on_data_change: false   # always refresh — staging data rarely changes for static OSM data
+  indexes:
+    - { name: idx_mv_fountain_way_id, columns: [way_id] }

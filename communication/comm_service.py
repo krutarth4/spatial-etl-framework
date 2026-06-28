@@ -115,11 +115,11 @@ class CommService:
         self.create_table()
         return self.repository.list_tasks()
 
-    def reset_all_task_completion_flags(self) -> int:
+    def reset_all_task_completion_flags(self, exclude_owners: set | None = None) -> int:
         if self.repository is None:
             return 0
         self.create_table()
-        count = self.repository.reset_all_task_completion_flags()
+        count = self.repository.reset_all_task_completion_flags(exclude_owners=exclude_owners)
         self.logger.info(f"Reset is_completed=false for {count} comm task(s)")
         return count
 

@@ -146,8 +146,10 @@ class Application:
             self.metadata_service.create_table()
         if self.comm_service is not None:
             self.comm_service.create_table()
-            # Reset completion flags on every app startup so comm-based checks re-run.
-            self.comm_service.reset_all_task_completion_flags()
+            # Reset pipeline-owned completion flags on startup so comm-based checks
+            # re-run. Router-owned tasks (e.g. main_ways_table) are excluded — the
+            # router manages its own state and won't re-notify unless it re-ingests.
+            self.comm_service.reset_all_task_completion_flags(exclude_owners={"router"})
         else:
             self.logger.info("Communication service disabled by communication.enable=false")
 
@@ -185,17 +187,24 @@ class Application:
 
         # check if the base graph is ready or not
         if self.graph is not None:
-            self.graph.update_graph_source()
-            self.graph.ingest_graph_data()
-            # ways_base must match the source graph before mapping. ingest_graph_data()
-            # is a no-op when the graph stage is disabled, so trigger the resync here
-            # rather than blocking forever on a count that nothing will change.
-            if not self.graph.is_base_graph_ready():
-                self.graph.sync_base_graph()
-            # Wait till the new ways_base_graph has been created
-            while not self.graph.is_base_graph_ready():
-                self.logger.warning("Base graph is not ready")
-                time.sleep(10)
+            is_targeted_restart = bool(CoreConfig._override_only)
+            if is_targeted_restart and self.graph.is_base_graph_ready():
+                # Datasource-only config change: graph already loaded, skip handshake.
+                # Full restarts always re-run because reset_all_task_completion_flags()
+                # already cleared comm state, and the router may need to re-ingest.
+                self.logger.info("Base graph already ready — skipping graph init and router handshake")
+            else:
+                self.graph.update_graph_source()
+                self.graph.ingest_graph_data()
+                # ways_base must match the source graph before mapping. ingest_graph_data()
+                # is a no-op when the graph stage is disabled, so trigger the resync here
+                # rather than blocking forever on a count that nothing will change.
+                if not self.graph.is_base_graph_ready():
+                    self.graph.sync_base_graph()
+                # Wait till the new ways_base_graph has been created
+                while not self.graph.is_base_graph_ready():
+                    self.logger.warning("Base graph is not ready")
+                    time.sleep(10)
 
         if sources is not None and self.graph is not None and self.graph.is_base_graph_ready():
             mappers = DataSourceMapper(sources, self.db_instance, self.scheduler_core, self.base_graph_conf,
