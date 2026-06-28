@@ -17,6 +17,7 @@ class CommService:
 
     @staticmethod
     def _load_router_config() -> tuple[str | None, float]:
+        import os
         try:
             config = CoreConfig().get_config() or {}
         except Exception:
@@ -25,7 +26,7 @@ class CommService:
         router_conf = comm_conf.get("router") or {} if isinstance(comm_conf, dict) else {}
         if not isinstance(router_conf, dict):
             return None, 5.0
-        base_url = router_conf.get("base_url")
+        base_url = os.getenv("ROUTER_BASE_URL") or router_conf.get("base_url")
         timeout = router_conf.get("timeout_seconds", 5.0)
         try:
             timeout_float = float(timeout)
